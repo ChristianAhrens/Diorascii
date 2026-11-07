@@ -5,7 +5,7 @@
 [![Windows](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml/badge.svg)](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml)
 
 Animated ASCII scenes for your terminal: an underwater aquarium, a forest with a
-river, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
+river, a desert with an oasis, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
@@ -51,17 +51,24 @@ actions (up, down, left, right, select, back), so any input device can use it.
 |---|---|---|
 | Aquarium | Feed the fish | a clump of eight twinkling flakes of food sinks from the surface (at most 30 at once); fish swim over and eat them, and the action's name flashes on screen so you can tell it worked |
 | Forest | Make it rain | it rains for about 18 seconds (pressing again keeps it going): drops streak down at a slant and splash on the bank and in the river, clouds roll in and the light dims, then it clears up again |
+| Desert | Sandstorm or tornado | a coin toss each time. A sandstorm blows grains across the whole screen for about 16 seconds while the sky turns ochre and the sun disappears. A tornado crosses the scene instead, weaving, whirling up sand and **throwing every animal in its path into the air**; they land dazed, and then walk on. Pressing again during a tornado brings the sandstorm on top of it. |
 | Moon | Meteor strike | a meteorite streaks down and hits the ground: it wrecks everything standing there, digs a crater and throws up debris and dust that drift back down slowly under the moon's low gravity. Dust then fills the crater gradually, shallow rim first, until the ground is smooth again. Rovers drive down into the crater and climb out as it fills. |
 
 New scenes define their own action in their `*.scene` file (see below).
 
 ### Day and night
 
-The aquarium and the forest have a day and night cycle (a full day takes four minutes).
+The aquarium, the forest and the desert have a day and night cycle (a full day takes four minutes).
 The sun crosses the sky by day and the moon by night, the sky and the water darken and
 turn blue at night with a red glow at sunrise and sunset, and stars come out. Creatures
 can belong to the day or the night: butterflies and birds by day, fireflies by night.
 Clouds from the forest's rain dim the day, too. The moon has no atmosphere and no cycle.
+
+At night **most animals sleep**: a share of every species (about 70% for most) disappears
+and stays frozen where it is, each at its own bedtime, so herds and schools thin out
+one after another over dusk and wake up one after another at dawn. Sleepers do not eat,
+hunt or get hunted. A few animals stay up, and some are nocturnal, like the desert's
+bats and the lion.
 
 `t` (or the menu) steps through *cycle, dawn, day, dusk, night*: the first runs the
 clock, the others freeze the time of day. `--hour` sets the start time. The time of day
@@ -104,7 +111,7 @@ directory and pass `--assets DIR` (or put it in `assets/` to ship it).
     depth: 3..16             # draw order, larger = further away
     tag: prey                # lets behaviors find it (prey, food, ...)
     behaviors: seek_food swim emit_bubbles
-    pool: warm               # color pool for mask digits 1-9
+    pool: warm               # color pool for mask digits 1-9: warm | cool | earth
     --- art
     <=={o>
     --- mask
@@ -128,13 +135,19 @@ Header keys:
 | `altitude: 8` | sky sprites hover within this many rows above the ground |
 | `active: day` or `night` | only shown by day or by night (needs a day and night cycle in the scene) |
 | `glow: yes` | not dimmed at night (fireflies, sun, moon) |
+| `sleeps: 0.7` | this share of the animals sleeps at night (frozen and hidden, each from its own sun height); needs a day and night cycle |
+| `herd: 4..7`, `herd-spacing` | spawned in herds of this size that move together; members that leave come back from the same side facing the same way. In a scene's population one unit means one herd |
+| `contrast: yes` | dark strokes where the background behind a cell is light (pale sand), the sprite's own color where it is dark (full style only) |
+| `feast-time`, `hunt-effect` | for hunters: how long they stay put after a kill, and the sprite shown at the kill |
+| `dust-rate` | puffs of dust kicked up per second by `emit_dust` |
+| `wind: yes` | a particle that is blown across the whole scene (sand), for a weather action |
 | `backing: 0.5` | darkens the background behind the sprite's glyphs by this share (full style only), so light sprites stay readable on bright and dark backdrops |
 | `hop-period`, `hop-height` | seconds per hop and hop height in rows, for the `hop` behavior |
 | `destructible: no` | survives meteor strikes (ground sprites are destructible by default) |
 | `solid: yes` | the sprite may paint solid color blocks (see mask rules) |
 
 Mask rules: `1`-`9` use the creature's randomized palette, letters are fixed
-colors (`W`hite `R`ed `G`reen `B`lue `C`yan `Y`ellow `M`agenta `O`range blac`K` `T`an `N`brown `P`ink `L`ight gray;
+colors (`W`hite `R`ed `G`reen `B`lue `C`yan `Y`ellow `M`agenta `O`range blac`K` `T`an `N`brown `P`ink `L`ight gray `S`and;
 lower case = darker), a space is the default color. A space in the art with
 mask `_` is opaque, with a color letter it is a solid block of that color. A color
 letter on a blank art cell is only allowed in sprites that declare `solid: yes`;
@@ -153,7 +166,10 @@ Behaviors:
 | `sink` | falls, then lies on the ground for a while (food) |
 | `emit_bubbles` | now and then releases a bubble |
 | `seek_food` | turns towards the closest food, swims to it and eats it |
-| `hunt` | eats every sprite tagged `prey` that its mouth touches |
+| `hunt` | eats every sprite tagged `prey` that its mouth touches; counts kills and can feast afterwards |
+| `chase` | runs down the closest `prey`: turns towards it, changes lane to line up and closes in; gives up after its first kill |
+| `emit_dust` | kicks up puffs of dust behind its feet |
+| `twister` | a tornado: weaves across the scene, whirls up sand and throws animals in its path into the air |
 | `ballistic` | thrown under the scene's gravity, gone when it lands (debris, dust) |
 | `meteorite` | streaks down and strikes the ground where its head arrives |
 | `wander` | drifts like `swim` with an organic wobble (butterflies, fireflies, birds) |
@@ -173,7 +189,7 @@ scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
     sky-fraction: 0.2               # share of the height above the surface (1 = all sky)
     ground-rows: 2
     stars: 23                       # one star per N sky cells
-    action: drop food               # what the f key does: drop | impact | weather <sprite>, or none
+    action: drop food               # what the f key does: drop | impact <sprite>, weather <sprite> [<funnel>], or none
     action-label: Feed the fish     # text of the menu button
     gravity: 2.5                    # cells/s^2 for falling debris
     dust-settle: 40                 # seconds for dust to fill one row of a crater
@@ -181,6 +197,7 @@ scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
     river-colors: #4aa0d8 #1f6aa5   # river colors from the bank down
     river-flow: 2.5                 # cells per second the ripples drift
     weather-duration: 18            # seconds a rain shower lasts
+    overcast-tint: #c98e4c 0.75     # color (and strength) the scene turns towards in heavy weather
     day-night: yes                  # sun, moon, stars and dimming light
     day-length: 240                 # seconds for one full day
     start-hour: 10                  # time of day at the start
@@ -256,11 +273,10 @@ other frontends (SDL window, tvOS) can be added without touching it.
 
 ## Status
 
-Three scenes (aquarium, forest, moon) with original sprites; feeding, predation, rain,
-meteor strikes with craters, a day and night cycle, scheduled events, three render styles
-and an ASCII menu work.
-Planned: more scenes (mountains, desert) with their own actions, and windowed and tvOS
-frontends.
+Four scenes (aquarium, forest, desert, moon) with original sprites; feeding, predation, rain,
+sandstorms and tornadoes, meteor strikes with craters, herds, a hunting lion, a day and night
+cycle with sleeping animals, scheduled events, three render styles and an ASCII menu work.
+Planned: a mountain scene with its own action, and windowed and tvOS frontends.
 
 ## License
 

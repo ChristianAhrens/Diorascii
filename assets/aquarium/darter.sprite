@@ -1,0 +1,13 @@
+name: darter
+kind: creature
+facing: right
+speed: 5..10
+depth: 3..16
+spawn-per-cells: 520
+behaviors: swim emit_bubbles
+bubble-rate: 0.03
+pool: warm
+--- art
+<=={o>
+--- mask
+2111W1

@@ -1,0 +1,11 @@
+name: bubble
+kind: effect
+fps: 2.5
+loop: no
+behaviors: rise
+--- art
+.
+--- art
+o
+--- art
+o

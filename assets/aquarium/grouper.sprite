@@ -1,0 +1,21 @@
+name: grouper
+kind: creature
+facing: right
+speed: 2..4
+depth: 17..20
+spawn-per-cells: 3200
+behaviors: swim emit_bubbles
+bubble-rate: 0.08
+pool: cool
+--- art
+     ,-""""-.
+ |\ /  _     `.
+ | X  ( o)     >
+ |/ \   `-,___.'
+     `-....-'
+--- mask
+     11111111
+ 22 2  1     11
+ 2 2  1 W1     1
+ 22 2   11111111
+     11111111

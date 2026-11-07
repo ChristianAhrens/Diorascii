@@ -1,0 +1,17 @@
+name: tang
+kind: creature
+facing: right
+speed: 3..7
+depth: 4..17
+spawn-per-cells: 750
+behaviors: swim emit_bubbles
+bubble-rate: 0.04
+pool: any
+--- art
+   .---.
+><=(  o )>
+   `---'
+--- mask
+   11111
+2221__W_11
+   11111

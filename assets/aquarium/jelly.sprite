@@ -1,0 +1,27 @@
+name: jelly
+kind: creature
+facing: right
+speed: 0.6..1.6
+depth: 6..14
+spawn-per-cells: 1500
+fps: 2.5
+behaviors: swim bob
+bob-amplitude: 2.5
+bob-frequency: 0.8
+pool: cool
+--- art
+  _.-._
+ (_____)
+  |/|\|
+--- mask
+  11111
+ 1111111
+  22222
+--- art
+  _.-._
+ (_____)
+  |\|/|
+--- mask
+  11111
+ 1111111
+  22222

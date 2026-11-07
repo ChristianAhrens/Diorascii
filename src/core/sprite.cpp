@@ -4,26 +4,14 @@
 #include "core/sprite.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdlib>
 
+#include "core/textutil.h"
 #include "core/utf8.h"
 
 namespace dio {
 
 namespace {
-
-std::string trim(std::string_view s) {
-  size_t a = 0, b = s.size();
-  while (a < b && (s[a] == ' ' || s[a] == '\t')) ++a;
-  while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r')) --b;
-  return std::string(s.substr(a, b - a));
-}
-
-std::string lower(std::string s) {
-  for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  return s;
-}
 
 /// Counterpart of a glyph when art is flipped left to right, or the glyph itself.
 char32_t mirrorChar(char32_t c) {
@@ -75,19 +63,14 @@ std::pair<double, double> Props::range(const std::string& key,
 }
 
 std::vector<std::string> Props::list(const std::string& key) const {
-  std::vector<std::string> out;
   auto it = kv_.find(key);
-  if (it == kv_.end()) return out;
-  std::string cur;
-  for (char c : it->second + " ") {
-    if (c == ' ' || c == '\t') {
-      if (!cur.empty()) out.push_back(std::move(cur));
-      cur.clear();
-    } else {
-      cur.push_back(c);
-    }
-  }
-  return out;
+  return it == kv_.end() ? std::vector<std::string>{} : splitWs(it->second);
+}
+
+Rgb Props::color(const std::string& key, Rgb def) const {
+  Rgb c;
+  auto it = kv_.find(key);
+  return (it != kv_.end() && parseHexColor(it->second, c)) ? c : def;
 }
 
 std::shared_ptr<const Sprite> Sprite::parse(std::string_view text, std::string& err) {

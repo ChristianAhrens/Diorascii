@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/color.h"
+
 namespace dio {
 
 /// Free-form `key: value` metadata from a sprite file header.
@@ -25,6 +27,7 @@ class Props {
   /// "6..14" -> {6,14}; a single number gives {n,n}.
   std::pair<double, double> range(const std::string& key, std::pair<double, double> def) const;
   std::vector<std::string> list(const std::string& key) const;  ///< whitespace separated
+  Rgb color(const std::string& key, Rgb def) const;             ///< "#rrggbb"
 
  private:
   /// Raw header values by lower-case key.

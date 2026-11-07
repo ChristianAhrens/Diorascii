@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "core/scene.h"
 #include "core/sprite.h"
 
 namespace dio {
@@ -27,28 +28,38 @@ extern const EmbeddedAsset kEmbeddedAssets[];
 /// Number of entries in kEmbeddedAssets.
 extern const size_t kEmbeddedAssetCount;
 
-/// All sprites known to the program. Later additions replace earlier ones with
+/// All sprites and scenes known to the program. Later additions replace earlier ones with
 /// the same name, so a user directory can override or extend the built-in set.
 class AssetPack {
  public:
   /// Loads everything that was compiled into the binary.
   static AssetPack embedded();
 
-  /// Parses and registers one sprite from text. sourceName is used in error messages.
+  /// Dispatches on the extension of `sourceName`: .sprite or .scene.
   void addText(const std::string& sourceName, const std::string& text);
-  /// Loads every *.sprite below `dir`. Returns the number of sprites added.
+  /// Loads every *.sprite and *.scene below `dir`. Returns the number of sprites added.
   size_t addDirectory(const std::filesystem::path& dir);
 
   /// All sprites by name.
   const std::map<std::string, std::shared_ptr<const Sprite>>& sprites() const { return sprites_; }
   /// Sprite by name, or nullptr.
   std::shared_ptr<const Sprite> find(const std::string& name) const;
+
+  /// Scene by name, or nullptr.
+  std::shared_ptr<const SceneDef> scene(const std::string& name) const;
+  /// Scenes sorted by (order, name).
+  std::vector<std::shared_ptr<const SceneDef>> scenes() const;
+
+  /// Reports scene references to sprites that do not exist. Call after loading.
+  void validate();
   /// Problems found while loading, one message each.
   const std::vector<std::string>& errors() const { return errors_; }
 
  private:
   /// Sprites by name.
   std::map<std::string, std::shared_ptr<const Sprite>> sprites_;
+  /// Scenes by name.
+  std::map<std::string, std::shared_ptr<const SceneDef>> scenes_;
   /// Load and validation problems.
   std::vector<std::string> errors_;
 };

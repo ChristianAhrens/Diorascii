@@ -1,4 +1,5 @@
-file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*.sprite")
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/assets/*.sprite" "${CMAKE_SOURCE_DIR}/assets/*.scene")
 list(SORT ASSET_FILES)
 string(REPLACE ";" "|" ASSET_ARG "${ASSET_FILES}")
 
@@ -17,6 +18,7 @@ add_library(diorascii_core STATIC
   core/utf8.cpp
   core/frame.cpp
   core/sprite.cpp
+  core/scene.cpp
   core/assets.cpp
   core/world.cpp
   "${EMBED_CPP}")

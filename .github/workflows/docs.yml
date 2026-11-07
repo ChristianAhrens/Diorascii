@@ -1,0 +1,47 @@
+name: Deploy Landing Page and Doxygen to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags, so the docs can show the latest version
+
+      - name: Install Doxygen and Graphviz
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Generate Doxygen documentation
+        run: |
+          export DIORASCII_VERSION="$(git describe --tags --abbrev=0 2>/dev/null || echo dev)"
+          doxygen Doxyfile
+
+      - name: Assemble GitHub Pages site
+        run: |
+          mkdir -p site/doxygen site/Resources
+          cp pages/index.html site/index.html
+          # The background clips are optional: the page falls back to a gradient without them.
+          cp Resources/*.mp4 site/Resources/ 2>/dev/null || true
+          cp -r docs/html/. site/doxygen/
+          touch site/.nojekyll
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          force_orphan: true

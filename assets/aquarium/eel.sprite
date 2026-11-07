@@ -4,6 +4,7 @@ habitat: medium
 speed: 3..6
 depth: 8..18
 fps: 4
+sleeps: 0.7
 behaviors: swim
 pool: any
 --- art

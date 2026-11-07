@@ -816,6 +816,96 @@ TEST(rain_clouds_dim_the_day_and_hide_the_sun) {
   CHECK(world.light().day > 0.99);
 }
 
+TEST(animals_go_to_sleep_at_night_one_after_another_and_wake_at_dawn) {
+  AssetPack pack = cyclePack("--- population\nsleeper count 40\n",
+                             {"name: sleeper\nhabitat: sky\nspeed: 0..0\nsleeps: 1\n--- art\nZ\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  int i = 0;
+  for (auto& e : world.entities()) {
+    e->x = 2 * i++;
+    e->y = 2;
+  }
+  Frame f;
+  auto shown = [&](double phase) {
+    world.setPhase(phase);
+    world.render(f);
+    return countChar(f, U'Z', 0, 30);
+  };
+  CHECK(shown(0.5) == 40);  // all awake at noon
+  CHECK(shown(0.0) == 0);   // all asleep at midnight
+  int previous = 41;
+  bool somewhere = false;
+  for (double phase = 0.32; phase >= 0.2199; phase -= 0.005) {  // dusk: the sun sinks, animals drop off
+    const int now = shown(phase);
+    CHECK(now <= previous);
+    somewhere |= now > 0 && now < 40;  // not all at the same moment
+    previous = now;
+  }
+  CHECK(somewhere);
+  CHECK(shown(0.5) == 40);  // and everyone is back at noon
+}
+
+TEST(only_the_sleepy_share_of_a_species_sleeps) {
+  AssetPack pack = cyclePack("--- population\nsleeper count 80\n",
+                             {"name: sleeper\nhabitat: sky\nspeed: 0..0\nsleeps: 0.5\n--- art\nZ\n"});
+  World world(pack, pack.scene("t"), 100, 30, 8);
+  world.setPhase(0.0);
+  int asleep = 0;
+  for (auto& e : world.entities()) asleep += world.isAsleep(*e);
+  CHECK(asleep > 20 && asleep < 60);  // about half of 80
+  world.setPhase(0.5);
+  for (auto& e : world.entities()) CHECK(!world.isAsleep(*e));
+}
+
+TEST(sleeping_animals_stay_put_are_not_hunted_and_scenes_without_a_cycle_ignore_it) {
+  AssetPack pack = cyclePack(
+      "--- population\nsleeper count 1\ncat count 1\n",
+      {"name: sleeper\nhabitat: ground\nspeed: 5..5\nsleeps: 1\ntag: prey\nbehaviors: walk\n--- art\nZ\n",
+       "name: cat\nhabitat: ground\nspeed: 0..0\nmouth-row: 0\nbehaviors: hunt\n--- art\nC\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  Entity* sleeper = nullptr;
+  Entity* cat = nullptr;
+  for (auto& e : world.entities()) (e->tag == "prey" ? sleeper : cat) = e.get();
+  CHECK(sleeper && cat);
+  world.setTimeMode(World::TimeMode::Night);
+  sleeper->x = 40;
+  sleeper->vx = 5;
+  sleeper->mirrored = false;
+  cat->x = 41;  // right next to it
+  cat->y = sleeper->y;
+  for (int i = 0; i < 20; ++i) world.step(0.05);
+  CHECK(sleeper->x == 40);             // frozen in its sleep
+  CHECK(world.eatenCount() == 0);      // and not caught by a hunter
+  world.setTimeMode(World::TimeMode::Day);
+  sleeper->x = 40;
+  for (int i = 0; i < 10; ++i) world.step(0.05);
+  CHECK(sleeper->x > 40 || world.eatenCount() > 0);  // awake: it walks (or is caught)
+
+  AssetPack flat = miniPack("medium: no\nsky-fraction: 1\n--- population\nsleeper count 10\n",
+                            {"name: sleeper\nhabitat: sky\nspeed: 0..0\nsleeps: 1\n--- art\nZ\n"});
+  World noCycle(flat, flat.scene("t"), 100, 30, 3);
+  for (auto& e : noCycle.entities()) CHECK(!noCycle.isAsleep(*e));  // no cycle, no night
+}
+
+TEST(most_aquarium_and_forest_animals_sleep_at_night_but_not_by_day) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"aquarium", "forest"}) {
+    World world(pack, pack.scene(name), 400, 36, 2);
+    auto species = [](const Entity& e) { return e.sprite->props().num("sleeps", 0) > 0; };
+    size_t total = 0;
+    for (auto& e : world.entities()) total += species(*e);
+    CHECK(total > 20);
+    world.setPhase(0.5);
+    size_t sleeping = 0;
+    for (auto& e : world.entities()) sleeping += (species(*e) && world.isAsleep(*e));
+    CHECK(sleeping == 0);  // everyone is up at noon
+    world.setPhase(0.0);
+    for (auto& e : world.entities()) sleeping += (species(*e) && world.isAsleep(*e));
+    CHECK(sleeping * 100 >= total * 50);   // most are asleep at midnight
+    CHECK(sleeping * 100 <= total * 90);   // but a few stay up
+  }
+}
+
 TEST(sky_creatures_with_an_altitude_hover_just_above_the_ground) {
   AssetPack pack = cyclePack("--- population\nmoth count 40\n",
                              {"name: moth\nhabitat: sky\naltitude: 3\nspeed: 0..0\n--- art\nm\nm\n"});

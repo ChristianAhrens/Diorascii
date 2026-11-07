@@ -7,6 +7,7 @@ backing: 0.4
 speed: 1.5..3
 hop-period: 1.1
 hop-height: 1.4
+sleeps: 0.7
 behaviors: hop
 --- art
    ,\

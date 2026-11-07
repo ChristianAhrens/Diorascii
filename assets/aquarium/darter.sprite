@@ -4,6 +4,7 @@ habitat: medium
 speed: 5..10
 depth: 3..16
 tag: prey
+sleeps: 0.7
 behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.03
 pool: warm

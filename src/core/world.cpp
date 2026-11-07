@@ -68,7 +68,9 @@ Rgb shade(Rgb c, const Light& l) {
 
 /// True if the entity is shown at the given light.
 bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
-  if (!hasCycle || e.active == Entity::Active::Always) return true;
+  if (!hasCycle) return true;
+  if (e.sleepBelow > 0 && l.sun < e.sleepBelow) return false;  // asleep
+  if (e.active == Entity::Active::Always) return true;
   return e.active == Entity::Active::Day ? l.sun > 0.35 : l.sun < 0.35;
 }
 
@@ -240,7 +242,7 @@ void hunt(Entity& e, World& w, double) {
   const double mx = e.movingRight() ? e.x + e.width() - 1 : e.x;
   const double my = e.y + e.mouthRow;
   for (auto& other : w.entities()) {
-    if (other->dead || other->tag != "prey") continue;
+    if (other->dead || other->tag != "prey" || w.isAsleep(*other)) continue;
     const bool inside = mx >= other->x - 1 && mx <= other->x + other->width() &&
                         my >= other->y - 0.5 && my <= other->y + other->height();
     if (!inside) continue;
@@ -429,6 +431,10 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     e->frame = rng_.rangeInt(0, static_cast<int>(sprite->frameCount()) - 1);
   }
 
+  // `sleeps: 0.7` = about 70% of these animals sleep at night, each from its own sun height.
+  const double sleeps = std::clamp(p.num("sleeps", 0.0), 0.0, 1.0);
+  if (sleeps > 0 && rng_.chance(sleeps)) e->sleepBelow = rng_.range(0.05, 0.9);
+
   if (!event) e->onDeath = [sprite](World& w) { w.spawnCreature(sprite, false); };
   spawn(std::move(e));
 }
@@ -573,6 +579,10 @@ void World::setTimeMode(TimeMode mode) {
   }
 }
 
+bool World::isAsleep(const Entity& e) const {
+  return e.sleepBelow > 0 && scene_->dayNight && light().sun < e.sleepBelow;
+}
+
 Light World::light() const {
   Light l;
   if (!scene_->dayNight) return l;
@@ -665,8 +675,10 @@ size_t World::countTag(const std::string& tag) const {
 Entity* World::nearest(const std::string& tag, double x, double y, double maxDist) {
   Entity* best = nullptr;
   double bestD = maxDist * maxDist;
+  const double sun = scene_->dayNight ? light().sun : 1.0;
   for (auto& e : entities_) {
     if (e->dead || e->tag != tag) continue;
+    if (e->sleepBelow > 0 && sun < e->sleepBelow) continue;  // a sleeping animal is out of sight
     const double cx = e->x + e->width() / 2.0 - x, cy = (e->y + e->height() / 2.0 - y) * 2.0;
     const double d = cx * cx + cy * cy;
     if (d < bestD) { bestD = d; best = e.get(); }
@@ -689,10 +701,12 @@ void World::step(double dt) {
   if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
   const double cloudTarget = rainLeft_ > 0 ? 1.0 : 0.0;
   overcast_ += std::clamp(cloudTarget - overcast_, -0.25 * dt, 0.4 * dt);
+  const double sun = scene_->dayNight ? light().sun : 1.0;
   bool eventAlive = false;
   for (auto& e : entities_) {
     if (e->dead) continue;
     eventAlive |= e->isEvent;
+    if (e->sleepBelow > 0 && sun < e->sleepBelow) continue;  // asleep: frozen where it is
     e->age += dt;
     animate(*e, dt);
     for (BehaviorFn b : e->behaviors) b(*e, *this, dt);

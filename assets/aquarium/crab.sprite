@@ -4,6 +4,7 @@ habitat: ground
 speed: 1.5..3
 depth: 19
 fps: 3
+sleeps: 0.7
 behaviors: walk
 pool: warm
 --- art

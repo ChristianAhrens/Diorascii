@@ -3,6 +3,7 @@ facing: right
 habitat: medium
 speed: 2..4
 depth: 5..18
+sleeps: 0.7
 behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.06
 mouth-row: 1

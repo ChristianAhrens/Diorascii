@@ -44,6 +44,9 @@ struct Entity {
   Active active = Active::Always;
   /// Emits its own light: not dimmed at night (fireflies, sun, moon).
   bool glow = false;
+  /// Sun height (0 to 1) below which the animal is asleep: frozen and not shown. 0 means it
+  /// never sleeps. Chosen per animal, so a herd goes to bed and wakes up one after another.
+  double sleepBelow = 0;
   /// Remove the entity once its non-looping animation has played.
   bool dieAfterAnim = false;
   /// Top-left position in cells (fractional between steps).
@@ -164,6 +167,9 @@ class World {
   double phase() const { return phase_; }
   /// True if the scene has a day and night cycle.
   bool hasDayNight() const { return scene_->dayNight; }
+  /// True if the entity is asleep right now: it sleeps (see Entity::sleepBelow), the scene has a day
+  /// and night cycle and the sun is low.
+  bool isAsleep(const Entity& e) const;
   /// Current light levels (everything at full day in scenes without a cycle).
   Light light() const;
   /// Time of day as hours and minutes, for example 14:30.

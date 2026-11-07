@@ -34,6 +34,7 @@ enum class Action {
   Menu,   ///< open / close the menu
   Style,  ///< cycle full -> terminal -> mono colors
   Time,   ///< cycle the time of day: cycle -> dawn -> day -> dusk -> night
+  Rare,   ///< summon the scene's rare event right now
 };
 
 }  // namespace dio

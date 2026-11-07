@@ -33,7 +33,7 @@ bool colors(const Props& p, const char* key, Rgb* out, size_t count) {
 std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::string& err) {
   auto sc = std::make_shared<SceneDef>();
   Props p;
-  enum class Sec { Header, Population, Decor, Events } sec = Sec::Header;
+  enum class Sec { Header, Population, Decor, Events, Rare } sec = Sec::Header;
 
   size_t pos = 0;
   int lineNo = 0;
@@ -50,6 +50,7 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
       if (kind == "population") sec = Sec::Population;
       else if (kind == "decor") sec = Sec::Decor;
       else if (kind == "events") sec = Sec::Events;
+      else if (kind == "rare") sec = Sec::Rare;
       else { err = at(lineNo, "unknown section '" + kind + "'"); return nullptr; }
       continue;
     }
@@ -94,7 +95,7 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
     } else {
       // <sprite> <weight>
       if (t.size() != 2) { err = at(lineNo, "expected '<sprite> <weight>'"); return nullptr; }
-      sc->events.push_back({t[0], std::atof(t[1].c_str())});
+      (sec == Sec::Rare ? sc->rare : sc->events).push_back({t[0], std::atof(t[1].c_str())});
     }
   }
 
@@ -146,6 +147,8 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->action.label = p.str("action-label", sc->action.kind == Action::Kind::None ? "No action" : "Action");
   sc->eventFirst = p.range("event-first", sc->eventFirst);
   sc->eventInterval = p.range("event-interval", sc->eventInterval);
+  sc->rareFirst = p.range("rare-first", sc->rareFirst);
+  sc->rareInterval = p.range("rare-interval", sc->rareInterval);
   if (p.has("ground-glyphs")) sc->groundGlyphs = decodeUtf8(p.str("ground-glyphs"));
   if (p.has("surface-glyphs")) {
     sc->surfaceGlyphs = decodeUtf8(p.str("surface-glyphs"));

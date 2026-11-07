@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <map>
 
+#include "core/textutil.h"
+
 namespace dio {
 
 namespace {
@@ -277,6 +279,27 @@ void emitDust(Entity& e, World& w, double dt) {
   w.spawnEffect("sandpuff", behind, e.y + e.height() - 1, e.z + 1, -e.vx * 0.15, -w.rng().range(0.5, 1.5));
 }
 
+/// A catastrophe: crosses the scene and, when it is the given way across, strikes once: it wipes
+/// out what its header names (`wipes:`), may light up the screen, bring rain and drop a bolt.
+void catastrophe(Entity& e, World& w, double dt) {
+  e.x += e.vx * dt;
+  if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  if (e.struck) return;
+  const double middle = e.x + e.width() / 2.0;
+  const double progress = e.vx > 0 ? middle / w.width() : 1.0 - middle / w.width();
+  if (progress < e.strikeAt) return;
+  e.struck = true;
+  if (e.stormTime > 0) w.startRain(e.stormTime);
+  if (!e.strikeSprite.empty()) {  // a bolt from the sky to the ground right below it
+    if (Entity* bolt = w.spawnEffect(e.strikeSprite, middle, 0, e.z - 1, 0, 0)) {
+      bolt->x = middle - bolt->width() / 2.0;
+      bolt->y = w.seabedY() - bolt->height();
+    }
+  }
+  w.wipeOut(e.wipes, e.strikeEffect, &e);
+  if (e.flashTime > 0) w.flash(e.flashTime);
+}
+
 /// Hunts the closest prey in sight: turns towards it, changes lane to line up with it and closes
 /// in. It gives up chasing after its first kill (see hunt).
 void chase(Entity& e, World& w, double dt) {
@@ -328,7 +351,8 @@ BehaviorFn findBehavior(const std::string& name) {
       {"sink", sink},   {"emit_bubbles", emitBubbles}, {"seek_food", seekFood}, {"hunt", hunt},
       {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite},
       {"wander", wander}, {"hop", hop},                {"rain", rain},
-      {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust}};
+      {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
+      {"catastrophe", catastrophe}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -369,6 +393,13 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.feastTime = p.num("feast-time", 0);
   e.dustRate = p.num("dust-rate", 3.0);
   e.contrast = p.str("contrast", "no") == "yes";
+  e.life = p.str("life", "no") == "yes";
+  e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
+  e.wipes = p.str("wipes", "life");
+  e.strikeEffect = p.str("strike-effect", "flash");
+  e.strikeSprite = p.str("strike-sprite");
+  e.flashTime = p.num("screen-flash", 0);
+  e.stormTime = p.num("storm-rain", 0);
   e.hopPeriod = std::max(p.num("hop-period", 1.2), 0.1);
   e.hopHeight = p.num("hop-height", 1.5);
   e.phase = rng.range(0, 6.28);
@@ -415,6 +446,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   }
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
+  rareTimer_ = sc.rare.empty() ? -1.0 : rng_.range(sc.rareFirst.first, sc.rareFirst.second);
   crater_.assign(static_cast<size_t>(w_), 0.0);
   phase_ = std::fmod(sc.startHour / 24.0, 1.0);
   populate();
@@ -460,6 +492,10 @@ void World::populate() {
 }
 
 double World::habitatY(const Props& p, int spriteHeight) {
+  if (p.has("row")) {  // pinned to a row; negative counts from the bottom
+    const double row = p.num("row", 0);
+    return row >= 0 ? row : h_ + row;
+  }
   const std::string habitat = p.str("habitat", "medium");
   if (habitat == "ground") return seabedY_ - spriteHeight;
   if (habitat == "river") return rng_.rangeInt(riverTopY_, std::max(h_ - spriteHeight, riverTopY_));
@@ -567,6 +603,7 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
   else e->y = habitatY(p, e->height());
   e->anchorY = e->y;
+  e->restock = [d](World& w) { w.spawnDecor(d); };  // planted again after a catastrophe
   spawn(std::move(e));
 }
 
@@ -637,6 +674,75 @@ void World::spawnEvent() {
     if (auto sprite = pack_->find(ev.sprite)) spawnCreature(sprite, false, true);
     return;
   }
+}
+
+void World::spawnRare() {
+  double total = 0;
+  for (const auto& ev : scene_->rare) total += ev.weight;
+  if (total <= 0) return;
+  double pick = rng_.range(0, total);
+  for (const auto& ev : scene_->rare) {
+    pick -= ev.weight;
+    if (pick > 0) continue;
+    if (auto sprite = pack_->find(ev.sprite)) {
+      spawnCreature(sprite, false, true);
+      if (!incoming_.empty()) incoming_.back()->isRare = true;
+    }
+    return;
+  }
+}
+
+bool World::triggerRare() {
+  if (scene_->rare.empty()) return false;
+  for (const auto& e : entities_) {
+    if (e->isRare && !e->dead) return false;
+  }
+  spawnRare();
+  flushIncoming();
+  return true;
+}
+
+void World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except) {
+  const bool all = wipes == "life";
+  const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(wipes);
+  auto take = [&](Entity& o) {
+    if (&o == except || o.isRare) return;
+    const bool victim = all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end();
+    if (!victim) return;
+    if (o.dead) {  // it just left the scene and would be replaced right away: make that replacement wait
+      if (o.onDeath) restock_.push_back({rng_.range(8.0, 45.0), std::move(o.onDeath)});
+      o.onDeath = nullptr;
+      return;
+    }
+    if (!effect.empty() && !isAsleep(o)) {  // a sleeper is gone without a sight
+      spawnEffect(effect, o.x + o.width() / 2.0 - 1, o.y + o.height() / 2.0 - 1, o.z - 1, 0, 0);
+    }
+    std::function<void(World&)> comeBack = o.restock ? o.restock : o.onDeath;
+    if (comeBack) restock_.push_back({rng_.range(8.0, 45.0), std::move(comeBack)});
+    o.onDeath = nullptr;
+    o.restock = nullptr;
+    o.dead = true;
+    ++killed_;
+  };
+  for (auto& other : entities_) take(*other);
+  // Entities spawned during this very step have not joined the world yet, but are just as dead.
+  // (spawnEffect above adds to the same list, and effects are never victims.)
+  for (size_t i = 0; i < incoming_.size(); ++i) take(*incoming_[i]);
+}
+
+void World::flash(double seconds) {
+  flashLen_ = seconds;
+  flashElapsed_ = 0;
+}
+
+bool World::flashing() const {
+  if (flashElapsed_ >= flashLen_) return false;
+  return flashElapsed_ < 0.12 || (flashElapsed_ > 0.22 && flashElapsed_ < 0.34);  // two quick flashes
+}
+
+void World::startRain(double seconds) {
+  if (scene_->action.kind != SceneDef::Action::Kind::Weather || !pack_->find(scene_->action.sprite)) return;
+  rainLeft_ = std::max(rainLeft_, seconds);
 }
 
 int World::interact() {
@@ -830,13 +936,16 @@ void World::step(double dt) {
     spawnWeather(dt);
   }
   if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
-  const double cloudTarget = (rainLeft_ > 0 || countTag("tornado") > 0) ? 1.0 : 0.0;
+  const double cloudTarget =
+      (rainLeft_ > 0 || countTag("tornado") > 0 || countTag("gloom") > 0) ? 1.0 : 0.0;
+  flashElapsed_ += dt;
   overcast_ += std::clamp(cloudTarget - overcast_, -0.25 * dt, 0.4 * dt);
   const double sun = scene_->dayNight ? light().sun : 1.0;
-  bool eventAlive = false;
+  bool eventAlive = false, rareAlive = false;
   for (auto& e : entities_) {
     if (e->dead) continue;
     eventAlive |= e->isEvent;
+    rareAlive |= e->isRare;
     if (e->sleepBelow > 0 && sun < e->sleepBelow) continue;  // asleep: frozen where it is
     if (e->flung) {  // thrown by a tornado: flies on an arc, lands dazed and walks on afterwards
       e->age += dt;
@@ -871,7 +980,22 @@ void World::step(double dt) {
     }
   }
 
+  if (!scene_->rare.empty() && !rareAlive) {
+    if (rareTimer_ < 0) rareTimer_ = rng_.range(scene_->rareInterval.first, scene_->rareInterval.second);
+    rareTimer_ -= dt;
+    if (rareTimer_ <= 0) {
+      spawnRare();
+      rareTimer_ = -1;
+    }
+  }
+
   std::vector<std::function<void(World&)>> callbacks;
+  for (auto& r : restock_) r.left -= dt;  // what a catastrophe wiped out comes back, one by one
+  for (size_t i = restock_.size(); i-- > 0;) {
+    if (restock_[i].left > 0) continue;
+    callbacks.push_back(std::move(restock_[i].fn));
+    restock_.erase(restock_.begin() + static_cast<std::ptrdiff_t>(i));
+  }
   for (auto& e : entities_) {
     if (e->dead && e->onDeath) callbacks.push_back(std::move(e->onDeath));
   }
@@ -977,6 +1101,19 @@ void World::render(Frame& out, Style style) const {
   std::stable_sort(order.begin(), order.end(),
                    [](const Entity* a, const Entity* b) { return a->z > b->z; });
   for (const Entity* e : order) blit(out, *e, style, l, h_);
+  if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
+    for (int y = 0; y < h_; ++y) {
+      for (int x = 0; x < w_; ++x) {
+        Cell& c = out.at(x, y);
+        if (style == Style::Full) {
+          c.fg = lerp(c.fg, Rgb{255, 255, 255}, 0.75);
+          c.bg = lerp(c.bg, Rgb{255, 255, 255}, 0.75);
+        } else {
+          c.reverse = !c.reverse;
+        }
+      }
+    }
+  }
 }
 
 }  // namespace dio

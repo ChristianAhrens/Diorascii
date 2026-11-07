@@ -1322,6 +1322,281 @@ TEST(horses_kick_up_dust_as_they_run) {
   CHECK(behind > 1);
 }
 
+// ------------------------------------------------------------- rare events ---
+
+// A scene with a catastrophe `beast` that wipes out all life halfway across, 30 static `fish`
+// (life), a `rock` that is not alive, and a `puff` shown on every victim.
+static AssetPack rarePack(const std::string& beastHeader = "", const std::string& sceneExtra = "",
+                          const std::vector<std::string>& moreSprites = {}) {
+  std::vector<std::string> sprites = {
+      "name: beast\nfacing: right\nhabitat: ground\nspeed: 12..12\ntag: beast\nstrike-effect: puff\n" + beastHeader +
+          "behaviors: catastrophe\n--- art\nBBB\nBBB\n",
+      "name: fish\nhabitat: ground\nspeed: 0..0\nlife: yes\n--- art\nf\n",
+      "name: puff\ntag: puff\nfps: 8\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n",
+      "name: rock\nhabitat: ground\n--- art\nR\n"};
+  sprites.insert(sprites.end(), moreSprites.begin(), moreSprites.end());
+  return miniPack("medium: no\nsky-fraction: 1\nground-rows: 6\nrare-first: 1000..1000\n" + sceneExtra +
+                      "--- population\nfish count 30\n--- decor\nrock left 5\n--- rare\nbeast 1\n",
+                  sprites);
+}
+
+static size_t countSprite(World& w, const std::string& name) {
+  size_t n = 0;
+  for (auto& e : w.entities()) n += (!e->dead && e->sprite->name() == name);
+  return n;
+}
+
+TEST(scene_parses_the_rare_section_and_timing) {
+  std::string err;
+  auto sc = SceneDef::parse("name: s\nrare-first: 100..200\nrare-interval: 300..400\n--- rare\nkraken 2\nworm 1\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->rare.size() == 2 && sc->rare[0].sprite == "kraken" && sc->rare[0].weight == 2);
+  CHECK(sc->rareFirst.first == 100 && sc->rareInterval.second == 400);
+  auto plain = SceneDef::parse("name: s\n", err);
+  CHECK(plain && plain->rare.empty());
+  CHECK(SceneDef::parse("name: s\n--- rare\nkraken\n", err) == nullptr);  // needs a weight
+  AssetPack pack;
+  pack.addText("a.scene", "name: s\n--- rare\nghost 1\n");
+  pack.validate();
+  CHECK(pack.errors().size() == 1);
+}
+
+TEST(rare_events_come_on_their_own_timer_one_at_a_time_and_apart_from_other_events) {
+  AssetPack pack = rarePack("", "rare-first: 1..2\nrare-interval: 1..2\nevent-first: 1..1\nevent-interval: 1..1\n"
+                                "--- events\nping 1\n",
+                            {"name: ping\nfacing: right\nhabitat: ground\nspeed: 3..3\ntag: ping\nbehaviors: swim\n--- art\nP\n"});
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  size_t maxBeasts = 0, beastsSeen = 0, pings = 0;
+  bool wasThere = false;
+  for (int i = 0; i < 1200; ++i) {  // a minute
+    world.step(0.05);
+    const size_t now = world.countTag("beast");
+    maxBeasts = std::max(maxBeasts, now);
+    beastsSeen += now > 0 && !wasThere;
+    wasThere = now > 0;
+    pings = std::max(pings, world.countTag("ping"));
+  }
+  CHECK(maxBeasts == 1);     // never two catastrophes at once
+  CHECK(beastsSeen >= 2);    // they keep coming on their own
+  CHECK(pings >= 1);         // and ordinary events carry on independently
+}
+
+TEST(a_rare_event_can_be_summoned_but_only_one_at_a_time) {
+  AssetPack pack = rarePack();
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  CHECK(world.countTag("beast") == 0);
+  CHECK(world.triggerRare());
+  CHECK(world.countTag("beast") == 1);
+  CHECK(!world.triggerRare());  // one is already under way
+  AssetPack none = miniPack("--- population\n", {});
+  World quiet(none, none.scene("t"), 60, 20, 1);
+  CHECK(!quiet.triggerRare());  // this scene has none
+}
+
+TEST(a_catastrophe_strikes_once_halfway_across_and_wipes_out_all_life_but_nothing_else) {
+  AssetPack pack = rarePack("life: yes\n");  // the attacker is itself a living thing, and still spares itself
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  CHECK(countSprite(world, "fish") == 30 && countSprite(world, "rock") == 1);
+  world.triggerRare();
+  // Look the attacker up each time instead of keeping a pointer: if it were wiped out too, it would be freed.
+  auto beastNow = [&]() -> Entity* {
+    for (auto& e : world.entities()) {
+      if (!e->dead && e->tag == "beast") return e.get();
+    }
+    return nullptr;
+  };
+  CHECK(beastNow() != nullptr);
+  bool struck = false;
+  for (int i = 0; i < 600 && !struck; ++i) {
+    CHECK(world.killedCount() == 0);  // nothing happens before the strike
+    world.step(0.05);
+    struck = world.killedCount() > 0;
+  }
+  CHECK(struck);
+  Entity* beast = beastNow();
+  CHECK(beast != nullptr);  // the attacker is spared
+  if (!beast) return;
+  CHECK(std::fabs(beast->x + beast->width() / 2.0 - 60) <= 1.5);  // right in the middle of the way across
+  CHECK(beast->struck);
+  CHECK(world.killedCount() == 30);                               // every fish, in one go, but not the attacker
+  CHECK(countSprite(world, "rock") == 1);                         // the rock is not alive
+  world.step(0.05);
+  CHECK(world.countTag("puff") == 30);                            // an effect on every victim
+  for (int i = 0; i < 400; ++i) world.step(0.05);                 // it leaves, and never strikes again
+  CHECK(world.killedCount() == 30);
+  CHECK(world.countTag("beast") == 0);
+}
+
+TEST(what_a_catastrophe_wiped_out_comes_back_gradually_from_off_screen) {
+  AssetPack pack = rarePack();
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  world.wipeOut("life", "puff", nullptr);
+  world.step(0.05);
+  CHECK(countSprite(world, "fish") == 0);
+  CHECK(world.restockPending() == 30);
+  auto back = [&] { return countSprite(world, "fish"); };
+  for (int i = 0; i < 100; ++i) world.step(0.05);  // 5 s: the first have not come back yet
+  const size_t early = back();
+  for (int i = 0; i < 400; ++i) world.step(0.05);  // 25 s
+  const size_t middle = back();
+  for (int i = 0; i < 700; ++i) world.step(0.05);  // 60 s
+  CHECK(early == 0);
+  CHECK(middle > 0 && middle < 30);                // a few at a time, not all at once
+  CHECK(back() == 30 && world.restockPending() == 0);
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "fish") CHECK(e->x < 0 || e->x >= world.width());  // they walk in from the edges
+  }
+}
+
+TEST(a_catastrophe_can_wipe_out_named_sprites_only_and_what_was_planted_is_planted_again) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\nrare-first: 1000..1000\n--- population\nrover count 1\nbug count 5\n"
+      "--- decor\nflag center 0\n--- rare\nalien 1\n",
+      {"name: alien\nfacing: right\nhabitat: ground\nspeed: 12..12\nwipes: rover flag\nstrike-effect: puff\n"
+       "behaviors: catastrophe\n--- art\nAA\nAA\n",
+       "name: rover\nhabitat: ground\nspeed: 0..0\n--- art\nrr\n",
+       "name: bug\nhabitat: ground\nspeed: 0..0\nlife: yes\n--- art\nb\n",
+       "name: flag\nhabitat: ground\n--- art\n|>\n|\n",
+       "name: puff\ntag: puff\nfps: 8\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 120, 30, 6);
+  CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1 && countSprite(world, "bug") == 5);
+  double flagX = 0;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "flag") flagX = e->x;
+  }
+  world.triggerRare();
+  for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
+  world.step(0.05);
+  CHECK(world.killedCount() == 2);
+  CHECK(countSprite(world, "rover") == 0 && countSprite(world, "flag") == 0);
+  CHECK(countSprite(world, "bug") == 5);  // life, but not named: spared
+  for (int i = 0; i < 1300; ++i) world.step(0.05);  // well over a minute later
+  CHECK(countSprite(world, "rover") == 1);          // a new rover has arrived
+  CHECK(countSprite(world, "flag") == 1);           // and the flag stands again, in the same place
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "flag") CHECK(e->x == flagX);
+  }
+}
+
+TEST(a_wipe_also_takes_what_was_spawned_in_the_same_step) {
+  AssetPack pack = rarePack();
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  world.spawnCreature(pack.find("fish"), true);  // waiting to join the world, like a respawn in the same step
+  world.wipeOut("life", "puff", nullptr);
+  world.step(0.05);
+  CHECK(countSprite(world, "fish") == 0);
+  CHECK(world.killedCount() == 31);
+  CHECK(world.restockPending() == 31);
+}
+
+TEST(an_animal_that_just_left_the_scene_is_not_replaced_at_once_during_a_wipe) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\n--- population\nrunner count 6\n",
+      {"name: runner\nfacing: right\nhabitat: ground\nspeed: 30..30\nlife: yes\nbehaviors: walk\n--- art\nR\n"});
+  World world(pack, pack.scene("t"), 60, 30, 2);
+  // Run until some runner has just left (dead, its replacement still pending), then wipe in that very step.
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    bool leaving = false;
+    for (auto& e : world.entities()) leaving |= e->x > 60 || e->x + 1 < 0;
+    if (leaving) break;
+  }
+  size_t before = 0;
+  for (auto& e : world.entities()) before += !e->dead;
+  world.wipeOut("life", "", nullptr);
+  world.step(0.05);
+  CHECK(countSprite(world, "runner") <= 1);  // at most the one that was spawned this step
+  CHECK(world.restockPending() + countSprite(world, "runner") >= before);
+}
+
+TEST(sleeping_animals_die_without_a_sight) {
+  AssetPack pack = cyclePack("--- population\nsleeper count 40\n",
+                             {"name: sleeper\nhabitat: ground\nspeed: 0..0\nlife: yes\nsleeps: 1\n--- art\nZ\n",
+                              "name: puff\ntag: puff\nfps: 8\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  world.setPhase(0.0);  // everyone is asleep
+  world.wipeOut("life", "puff", nullptr);
+  world.step(0.05);
+  CHECK(world.killedCount() == 40);        // they die all the same
+  CHECK(world.countTag("puff") == 0);      // but nobody sees it
+  CHECK(world.restockPending() == 40);     // and they come back later
+}
+
+TEST(a_strike_can_light_up_the_screen_with_two_quick_flashes) {
+  AssetPack pack = rarePack("screen-flash: 0.5\n");
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  CHECK(!world.flashing());
+  Frame calm;
+  world.render(calm, Style::Full);
+  world.triggerRare();
+  for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
+  CHECK(world.killedCount() == 30);
+  CHECK(world.flashing());  // the instant it strikes
+  Frame lit, terminal;
+  world.render(lit, Style::Full);
+  world.render(terminal, Style::Terminal);
+  CHECK(lit.at(110, 2).bg.r > calm.at(110, 2).bg.r + 100);  // bright white
+  CHECK(terminal.at(110, 2).reverse);                       // colors flipped in the terminal styles
+  std::string pattern;  // sample every 0.05 s for 0.5 s: on, off, on, off
+  for (int i = 0; i < 10; ++i) {
+    world.step(0.05);
+    pattern += world.flashing() ? 'X' : '.';
+  }
+  CHECK(pattern.find('X') != std::string::npos && pattern.find('.') != std::string::npos);
+  CHECK(pattern.find(".X") != std::string::npos);  // it flashes a second time
+  for (int i = 0; i < 20; ++i) world.step(0.05);
+  CHECK(!world.flashing());  // and is dark again
+}
+
+TEST(a_catastrophe_can_bring_rain_and_always_darkens_the_scene_while_it_is_there) {
+  AssetPack pack = rarePack("storm-rain: 6\ntag: gloom\n", "action: weather rain\n",
+                            {"name: rain\nfacing: right\ntag: rain\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  world.triggerRare();
+  CHECK(!world.raining());
+  for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
+  CHECK(world.raining());  // it rains from the strike on
+  for (int i = 0; i < 40; ++i) world.step(0.05);
+  CHECK(world.overcast() > 0.3);  // and the sky is dark
+  AssetPack dry = rarePack("tag: gloom\n");  // no weather action: no rain, but still dark
+  World dark(dry, dry.scene("t"), 120, 30, 4);
+  dark.triggerRare();
+  for (int i = 0; i < 100; ++i) dark.step(0.05);
+  CHECK(!dark.raining());
+  CHECK(dark.overcast() > 0.3);
+  for (int i = 0; i < 1000; ++i) dark.step(0.05);  // it has gone: the light comes back
+  CHECK(dark.overcast() < 0.01);
+}
+
+TEST(a_strike_can_drop_a_bolt_that_reaches_the_ground_under_the_attacker) {
+  AssetPack pack = rarePack("strike-sprite: bolt\n", "",
+                            {"name: bolt\ntag: bolt\nfps: 10\nloop: no\ndie-after-animation: yes\n--- art\n|\n|\n|\n|\n|\n--- art\n/\n/\n/\n/\n/\n"});
+  World world(pack, pack.scene("t"), 120, 30, 4);
+  world.triggerRare();
+  for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
+  world.step(0.05);
+  Entity* bolt = nullptr;
+  Entity* beast = nullptr;
+  for (auto& e : world.entities()) {
+    if (e->tag == "bolt") bolt = e.get();
+    if (e->tag == "beast") beast = e.get();
+  }
+  CHECK(bolt && beast);
+  CHECK(bolt->y + bolt->height() == world.seabedY());  // it hits the ground
+  CHECK(std::fabs((bolt->x + bolt->width() / 2.0) - (beast->x + beast->width() / 2.0)) <= 2);
+}
+
+TEST(a_sprite_can_be_pinned_to_a_row) {
+  AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 6\n--- population\ntop count 5\nlow count 5\n",
+                            {"name: top\nhabitat: sky\nspeed: 0..0\nrow: 2\n--- art\nT\n",
+                             "name: low\nhabitat: sky\nspeed: 0..0\nrow: -4\n--- art\nL\n"});
+  World world(pack, pack.scene("t"), 80, 30, 3);
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "top") CHECK(e->y == 2);
+    if (e->sprite->name() == "low") CHECK(e->y == 26);
+  }
+}
+
 // -------------------------------------------------------------------- impact ---
 
 static AssetPack impactPack(const std::string& extraSprites = "") {

@@ -120,6 +120,7 @@ std::vector<Action> Terminal::poll(int timeoutMs) {
       case L'm': case L'M': actions.push_back(Action::Menu); break;
       case L'c': case L'C': actions.push_back(Action::Style); break;
       case L't': case L'T': actions.push_back(Action::Time); break;
+      case L'x': case L'X': actions.push_back(Action::Rare); break;
       default: break;
     }
   }

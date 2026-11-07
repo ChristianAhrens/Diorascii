@@ -114,6 +114,11 @@ struct SceneDef {
   std::vector<Decor> decor;
   /// Visitors scheduled over time.
   std::vector<Event> events;
+  /// Rare catastrophes (a kraken, a thunderstorm...): one is picked now and then. They run on their
+  /// own, much slower timer than events and wipe out life when they strike.
+  std::vector<Event> rare;
+  /// Seconds until the first rare event, and the pause between later ones.
+  std::pair<double, double> rareFirst{150, 300}, rareInterval{300, 600};
 
   /// Parses the text scene format. Returns nullptr and sets err on failure.
   static std::shared_ptr<const SceneDef> parse(std::string_view text, std::string& err);

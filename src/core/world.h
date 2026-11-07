@@ -35,6 +35,27 @@ struct Entity {
   bool isEvent = false;
   bool grounded = false;      ///< habitat: ground
   bool destructible = true;   ///< can be wrecked by an impact
+  /// A living thing: catastrophes that wipe out life take it (animals have `life: yes`).
+  bool life = false;
+  /// A rare catastrophe (kraken, thunderstorm...): at most one exists at a time.
+  bool isRare = false;
+  /// For catastrophes: how far across the scene (0 to 1) it is when it strikes.
+  double strikeAt = 0.5;
+  /// For catastrophes: true once it has struck.
+  bool struck = false;
+  /// What a catastrophe wipes out when it strikes: "life", or a list of sprite names.
+  std::string wipes = "life";
+  /// Sprite shown on every victim of a strike.
+  std::string strikeEffect = "flash";
+  /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
+  std::string strikeSprite;
+  /// Seconds the whole screen flashes at the strike (0 = no flash).
+  double flashTime = 0;
+  /// Seconds of rain a catastrophe brings with it (0 = none).
+  double stormTime = 0;
+  /// Brings back this entity after a catastrophe wiped it out (a replacement walks in, a planted
+  /// thing is planted again).
+  std::function<void(World&)> restock;
   /// True while a tornado has thrown it into the air.
   bool flung = false;
   /// The walking speed it gets back once it lands after being flung.
@@ -177,6 +198,22 @@ class World {
   void setTimeMode(TimeMode mode);
   /// Current time mode.
   TimeMode timeMode() const { return timeMode_; }
+  /// Summons one of the scene's rare catastrophes now. Returns false if the scene has none or
+  /// one is already under way.
+  bool triggerRare();
+  /// Wipes out entities: all life (kills == "life") or the sprites named in kills. Each victim
+  /// shows `effect`, and is brought back some seconds later. The attacker itself is spared.
+  void wipeOut(const std::string& kills, const std::string& effect, const Entity* except);
+  /// How many entities catastrophes have wiped out so far.
+  size_t killedCount() const { return killed_; }
+  /// How many wiped-out entities are still waiting to be brought back.
+  size_t restockPending() const { return restock_.size(); }
+  /// Starts a screen flash of the given length (lightning).
+  void flash(double seconds);
+  /// True while the screen is lit up by a flash (two quick flashes, then dark again).
+  bool flashing() const;
+  /// Makes it rain for this many seconds, if the scene's action is a weather action.
+  void startRain(double seconds);
   /// Sets the time of day as a fraction of a day: 0 is midnight, 0.25 sunrise,
   /// 0.5 noon and 0.75 sunset.
   void setPhase(double phase);
@@ -248,6 +285,8 @@ class World {
   void spawnSeaweed();
   /// Sends one weighted-random scene event.
   void spawnEvent();
+  /// Sends one weighted-random rare catastrophe.
+  void spawnRare();
   /// Number of cells in a habitat, used for per-cells populations.
   double areaFor(const std::string& habitat) const;
   /// Picks a starting row for a sprite of the given height in its habitat.
@@ -275,6 +314,19 @@ class World {
   int surfaceY_ = 0, seabedY_ = 0;
   /// River band: first row and number of rows (rows is 0 without a river).
   int riverTopY_ = 0, riverRows_ = 0;
+  /// Seconds until the next rare event; negative means none is scheduled yet.
+  double rareTimer_ = 0;
+  /// A wiped-out entity waiting to be brought back.
+  struct Restock {
+    double left = 0;                  ///< seconds until it comes back
+    std::function<void(World&)> fn;   ///< brings it back
+  };
+  /// Everything that is waiting to come back.
+  std::vector<Restock> restock_;
+  /// Length of the current screen flash and the time since it began.
+  double flashLen_ = 0, flashElapsed_ = 0;
+  /// How many entities catastrophes have wiped out.
+  size_t killed_ = 0;
   /// Seconds of rain or sandstorm left; 0 when it is calm.
   double rainLeft_ = 0;
   /// Direction a sandstorm blows: 1 = towards the right, -1 = towards the left.

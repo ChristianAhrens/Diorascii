@@ -35,6 +35,21 @@ struct Entity {
   bool isEvent = false;
   bool grounded = false;      ///< habitat: ground
   bool destructible = true;   ///< can be wrecked by an impact
+  /// True while a tornado has thrown it into the air.
+  bool flung = false;
+  /// The walking speed it gets back once it lands after being flung.
+  double flungVx = 0;
+  /// How many prey it has caught. A hunter stops chasing after its first kill.
+  int kills = 0;
+  /// Seconds it still has to stay put (eating after a kill, dazed after a landing).
+  double pauseLeft = 0;
+  /// How long it stays put after a kill (a feast).
+  double feastTime = 0;
+  /// Sprite shown where it makes a kill.
+  std::string huntEffect = "splat";
+  /// Picks its stroke color per cell from the background behind it (full style only): dark
+  /// strokes on light backgrounds such as pale sand, the sprite's own color on dark ones.
+  bool contrast = false;
   /// Darkens the background behind its glyphs by this share, 0 to 1 (full style only), so
   /// light sprites stay readable against both bright sky and dark trees.
   double backing = 0;
@@ -71,6 +86,8 @@ struct Entity {
   double bubbleRate = 0, bobAmp = 0, bobFreq = 1;
   /// Sprite row where it eats or bites.
   int mouthRow = 0;
+  /// Puffs of dust kicked up behind its feet per second (emit_dust).
+  double dustRate = 0;
   /// Tuning for the hop behavior: seconds per hop cycle, and hop height in rows.
   double hopPeriod = 1.2, hopHeight = 1.5;
   /// Marked for removal at the end of the step.
@@ -94,6 +111,8 @@ struct Light {
   double sun = 1;    ///< how far the sun is up, ignoring clouds
   double glow = 0;   ///< strength of the red horizon glow at sunrise and sunset
   double stars = 1;  ///< how visible the stars are
+  double haze = 0;   ///< how far things are tinted towards hazeColor (a sandstorm), 0 to 1
+  Rgb hazeColor{0, 0, 0};  ///< color of the haze
 };
 
 /// The simulation: owns entities, advances them in fixed-size steps and renders
@@ -196,11 +215,21 @@ class World {
 
   /// Spawning is deferred to the end of the step so behaviors can call it freely.
   void spawn(std::unique_ptr<Entity> e) { incoming_.push_back(std::move(e)); }
+  /// Where and how a creature starts, for members of a herd.
+  struct Placement {
+    int dir = 0;           ///< 1 = moves right, -1 = moves left, 0 = random
+    bool hasX = false;     ///< true if x is given; otherwise it starts anywhere or just off screen
+    double x = 0;          ///< starting column
+    double speedMul = 1;   ///< multiplies the speed picked from the sprite header
+  };
+
   /// Spawns an entity from a sprite according to its header (speed, depth,
   /// habitat, behaviors).
   /// @param initial true while populating: place it anywhere instead of just off screen
   /// @param event true if it is a scheduled visitor
-  void spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event = false);
+  /// @param where start position and direction, for members of a herd (nullptr = random)
+  void spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event = false,
+                     const Placement* where = nullptr);
   /// Spawns an entity at an exact position with an exact velocity (bubbles,
   /// debris, food...).
   /// @return the new entity (valid until the end of the step), or nullptr if the sprite is unknown
@@ -225,8 +254,10 @@ class World {
   double habitatY(const Props& p, int spriteHeight);
   /// Half the width of a crater in columns.
   int craterHalfWidth() const;
-  /// Lets drops fall for this step while it rains.
-  void spawnRain(double dt);
+  /// Starts a herd: several members that move together in one direction.
+  void spawnHerd(const std::shared_ptr<const Sprite>& sprite);
+  /// Lets rain drops fall, or wind carry sand across the scene, for this step.
+  void spawnWeather(double dt);
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
@@ -244,8 +275,10 @@ class World {
   int surfaceY_ = 0, seabedY_ = 0;
   /// River band: first row and number of rows (rows is 0 without a river).
   int riverTopY_ = 0, riverRows_ = 0;
-  /// Seconds of rain left; 0 when it is dry.
+  /// Seconds of rain or sandstorm left; 0 when it is calm.
   double rainLeft_ = 0;
+  /// Direction a sandstorm blows: 1 = towards the right, -1 = towards the left.
+  int stormDir_ = 1;
   /// Cloud cover from 0 to 1; follows the rain with a delay.
   double overcast_ = 0;
   /// Time of day as a fraction of a day.

@@ -47,7 +47,8 @@ struct SceneDef {
   /// What the F key does in this scene.
   ///   drop   <sprite>  items fall from the surface (food for the fish)
   ///   impact <sprite>  a meteorite strikes the ground and digs a crater
-  ///   weather <sprite> it rains for a while (the sprite is the raindrop)
+  ///   weather <sprite> [<funnel>]  rain or a sandstorm for a while (the sprite is the drop or grain);
+  ///                    with a funnel sprite, half of the time a tornado crosses the scene instead
   struct Action {
     /// Which action the scene offers.
     enum class Kind { None, Drop, Impact, Weather };
@@ -55,6 +56,7 @@ struct SceneDef {
     Kind kind = Kind::None;
     /// Sprite that is dropped or hurled, depending on kind.
     std::string sprite;
+    std::string extra;  ///< optional second sprite: the funnel of a tornado that sometimes replaces the storm
     std::string label = "No action";  ///< shown on the menu button
   };
 
@@ -94,6 +96,10 @@ struct SceneDef {
   Rgb riverTop{74, 160, 216}, riverDeep{31, 106, 165};
   double riverFlow = 2.5;         ///< cells per second the ripples drift to the right
   double weatherDuration = 20;    ///< seconds a weather action lasts
+  /// Color the scene turns towards under heavy weather (ochre for a sandstorm), and how strongly.
+  Rgb overcastTint{0, 0, 0};
+  /// How strongly the scene turns towards overcastTint at full cloud cover, 0 to 1 (0 = no tint).
+  double overcastTintAmount = 0;
   /// True if the scene has a day and night cycle (sun, moon, stars, dimming light).
   bool dayNight = false;
   double dayLength = 180;  ///< seconds one full day takes

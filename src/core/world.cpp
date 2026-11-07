@@ -21,8 +21,13 @@ constexpr Rgb kWarm[] = {{255, 140, 40}, {255, 200, 60}, {240, 90, 70},
 constexpr Rgb kCool[] = {{70, 200, 230}, {90, 140, 250}, {80, 220, 170},
                          {170, 120, 240}, {120, 230, 120}};
 
-/// Random color from the named pool ("warm", "cool" or any other name for both).
+/// Color pool for earth-toned creatures (horses, camels): creams, tans, greys and browns.
+constexpr Rgb kEarth[] = {{240, 205, 150}, {228, 231, 238}, {205, 160, 110},
+                          {190, 140, 90},  {235, 220, 190}};
+
+/// Random color from the named pool ("warm", "earth", "cool" or any other name for warm and cool).
 Rgb pickFromPool(const std::string& pool, Rng& rng) {
+  if (pool == "earth") return kEarth[rng.rangeInt(0, 4)];
   const bool warm = pool == "warm" || (pool != "cool" && rng.chance(0.5));
   const auto& set = warm ? kWarm : kCool;
   return set[rng.rangeInt(0, 4)];
@@ -47,23 +52,30 @@ Rgb maskColor(char32_t m, const Entity& e) {
     case U'n': base = {140, 92, 52}; break;
     case U'p': base = {245, 150, 175}; break;
     case U'l': base = {228, 231, 238}; break;
+    case U's': base = {214, 176, 112}; break;
     default: return e.fg;
   }
   return (m >= U'a' && m <= U'z') ? scale(base, 0.6) : base;
 }
 
-/// Backdrop color at the given light: fades towards a dark blue at night.
+/// Backdrop color at the given light: fades towards a dark blue at night and towards the haze
+/// color in a sandstorm.
 Rgb backdrop(Rgb c, const Light& l) {
-  if (l.day >= 1.0) return c;
-  return lerp(lerp(c, {6, 9, 30}, 0.82), c, l.day);
+  Rgb out = c;
+  if (l.day < 1.0) out = lerp(lerp(c, {6, 9, 30}, 0.82), c, l.day);
+  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze) : out;
 }
 
-/// Color of a thing in the world at the given light: darker and bluer at night.
+/// Color of a thing in the world at the given light: darker and bluer at night, dusty in a
+/// sandstorm (less so than the backdrop, so animals stay visible).
 Rgb shade(Rgb c, const Light& l) {
-  if (l.day >= 1.0) return c;
-  const Rgb night{static_cast<uint8_t>(c.r * 0.72), static_cast<uint8_t>(c.g * 0.78),
-                  static_cast<uint8_t>(c.b * 0.95)};
-  return lerp(night, c, l.day);
+  Rgb out = c;
+  if (l.day < 1.0) {
+    const Rgb night{static_cast<uint8_t>(c.r * 0.72), static_cast<uint8_t>(c.g * 0.78),
+                    static_cast<uint8_t>(c.b * 0.95)};
+    out = lerp(night, c, l.day);
+  }
+  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze * 0.6) : out;
 }
 
 /// True if the entity is shown at the given light.
@@ -101,6 +113,10 @@ void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) 
         cell.fg = colorOf(m);
         cell.defaultFg = style == Style::Mono;
         if (e.backing > 0 && style == Style::Full) cell.bg = scale(cell.bg, 1 - e.backing);
+        if (e.contrast && style == Style::Full) {  // dark strokes on light backgrounds
+          const double lum = (0.2126 * cell.bg.r + 0.7152 * cell.bg.g + 0.0722 * cell.bg.b) / 255.0;
+          if (lum > 0.5) cell.fg = scale(cell.fg, 0.32);
+        }
       }
     }
   }
@@ -248,7 +264,60 @@ void hunt(Entity& e, World& w, double) {
     if (!inside) continue;
     other->dead = true;
     w.noteEaten();
-    w.spawnEffect("splat", mx - 1, my - 1, e.z - 1, 0, 0);
+    w.spawnEffect(e.huntEffect, mx - 1, my - 1, e.z - 1, 0, 0);
+    ++e.kills;
+    e.pauseLeft = e.feastTime;  // stays put for a while to eat
+  }
+}
+
+/// Kicks up a puff of dust behind its feet now and then (galloping horses).
+void emitDust(Entity& e, World& w, double dt) {
+  if (!w.rng().chance(e.dustRate * dt)) return;
+  const double behind = e.movingRight() ? e.x - 1 : e.x + e.width();
+  w.spawnEffect("sandpuff", behind, e.y + e.height() - 1, e.z + 1, -e.vx * 0.15, -w.rng().range(0.5, 1.5));
+}
+
+/// Hunts the closest prey in sight: turns towards it, changes lane to line up with it and closes
+/// in. It gives up chasing after its first kill (see hunt).
+void chase(Entity& e, World& w, double dt) {
+  if (e.kills > 0) return;
+  Entity* prey = w.nearest("prey", e.x + e.width() / 2.0, e.y + e.height() / 2.0, 70);
+  if (!prey) return;
+  const double dx = (prey->x + prey->width() / 2.0) - (e.x + e.width() / 2.0);
+  if (std::fabs(dx) > 2 && (dx > 0) != e.movingRight() && e.vx != 0) {  // turn round
+    e.vx = -e.vx;
+    e.mirrored = !e.mirrored;
+  }
+  const double lane = prey->anchorY + prey->height() - e.height();  // feet on the prey's row
+  e.anchorY += std::clamp(lane - e.anchorY, -3.0 * dt, 3.0 * dt);
+}
+
+/// A tornado: crosses the scene weaving a little, whirls sand up from its foot and throws every
+/// animal it meets into the air. Scenery that does not move and sleeping animals are left alone.
+void twister(Entity& e, World& w, double dt) {
+  e.x += (e.vx + 1.8 * std::sin(e.age * 1.3 + e.phase)) * dt;
+  if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  for (auto& other : w.entities()) {
+    Entity& o = *other;
+    if (&o == &e || o.dead || o.flung || !o.grounded || o.vx == 0 || o.tag == "tornado") continue;
+    if (w.isAsleep(o)) continue;
+    const double overlap = std::min(o.x + o.width(), e.x + e.width() - 1.0) - std::max(o.x, e.x + 1.0);
+    if (overlap <= 0 || o.y + o.height() <= e.y) continue;  // not in the funnel's path
+    // Up and away: the rise is a random height up to most of the sky, the sideways kick spins it out.
+    const double rise = w.rng().range(5.0, std::max(6.0, std::min(16.0, w.height() * 0.6)));
+    o.flungVx = o.vx;
+    o.vx = w.rng().range(-9, 9);
+    o.vy = -std::sqrt(2 * w.gravity() * rise);
+    o.flung = true;
+    for (int i = 0; i < 4; ++i) {
+      w.spawnEffect("sandspray", o.x + w.rng().range(0, o.width()), o.y + o.height() - 1, o.z - 1,
+                    w.rng().range(-5, 5), -w.rng().range(2, 6));
+    }
+  }
+  if (w.rng().chance(16 * dt)) {
+    const double foot = e.x + e.width() / 2.0 + w.rng().range(-2, 2);
+    w.spawnEffect("sandspray", foot, e.y + e.height() - 1, e.z - 1, w.rng().range(-7, 7),
+                  -w.rng().range(3, 9));
   }
 }
 
@@ -258,7 +327,8 @@ BehaviorFn findBehavior(const std::string& name) {
       {"swim", swim},   {"fly", fly},           {"bob", bob},       {"rise", rise},
       {"sink", sink},   {"emit_bubbles", emitBubbles}, {"seek_food", seekFood}, {"hunt", hunt},
       {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite},
-      {"wander", wander}, {"hop", hop},                {"rain", rain}};
+      {"wander", wander}, {"hop", hop},                {"rain", rain},
+      {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -295,6 +365,10 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.glow = p.str("glow", "no") == "yes";
   const std::string active = p.str("active", "always");
   e.active = active == "day" ? Entity::Active::Day : active == "night" ? Entity::Active::Night : Entity::Active::Always;
+  e.huntEffect = p.str("hunt-effect", "splat");
+  e.feastTime = p.num("feast-time", 0);
+  e.dustRate = p.num("dust-rate", 3.0);
+  e.contrast = p.str("contrast", "no") == "yes";
   e.hopPeriod = std::max(p.num("hop-period", 1.2), 0.1);
   e.hopHeight = p.num("hop-height", 1.5);
   e.phase = rng.range(0, 6.28);
@@ -374,7 +448,12 @@ void World::populate() {
     want = perCells ? areaFor(habitat) / pop.n : perCols ? w_ / pop.n : pop.n;
     int n = static_cast<int>(want);
     if (pop.kind != SceneDef::Population::Kind::Count && rng_.chance(want - n)) ++n;
-    for (int i = 0; i < n; ++i) spawnCreature(sprite, true);
+    // A `herd` sprite is spawned in groups (n counts groups, not animals).
+    const bool herded = sprite->props().has("herd");
+    for (int i = 0; i < n; ++i) {
+      if (herded) spawnHerd(sprite);
+      else spawnCreature(sprite, true);
+    }
   }
   for (const auto& d : scene_->decor) spawnDecor(d);
   flushIncoming();
@@ -395,7 +474,24 @@ double World::habitatY(const Props& p, int spriteHeight) {
   return rng_.rangeInt(lo, std::max(seabedY_ - spriteHeight, lo));
 }
 
-void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event) {
+void World::spawnHerd(const std::shared_ptr<const Sprite>& sprite) {
+  const Props& p = sprite->props();
+  const auto [lo, hi] = p.range("herd", {2, 4});
+  const int members = rng_.rangeInt(static_cast<int>(lo), static_cast<int>(hi));
+  const double spacing = p.num("herd-spacing", 4.0);
+  const double leader = rng_.range(-sprite->width(), w_);
+  Placement where;
+  where.dir = rng_.chance(0.5) ? 1 : -1;
+  where.hasX = true;
+  for (int i = 0; i < members; ++i) {
+    where.x = leader - where.dir * i * spacing + rng_.range(-1.5, 1.5);  // strung out behind the leader
+    where.speedMul = rng_.range(0.92, 1.08);
+    spawnCreature(sprite, true, false, &where);
+  }
+}
+
+void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event,
+                          const Placement* where) {
   const Props& p = sprite->props();
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
@@ -403,8 +499,9 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
   e->isEvent = event;
 
   const auto [vmin, vmax] = p.range("speed", {4, 8});
-  const double speed = rng_.range(vmin, vmax);
-  const bool right = rng_.chance(0.5);
+  const double speed = rng_.range(vmin, vmax) * (where ? where->speedMul : 1.0);
+  const bool coin = rng_.chance(0.5);
+  const bool right = (where && where->dir != 0) ? where->dir > 0 : coin;
   e->vx = right ? speed : -speed;
   e->vy = std::fabs(e->vx) * p.num("slope", 0);  // diagonal flyers move downwards
   e->mirrored = right != e->facesRight;
@@ -425,7 +522,11 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     if (usable > 1) e->z = static_cast<int>(zmax) - lane * static_cast<int>(zmax - zmin) / (usable - 1);
   }
 
-  e->x = initial ? rng_.range(-e->width(), w_) : (right ? -e->width() : w_);
+  // Members of a herd that left come back from the same side, a little apart, still facing the same way.
+  const double rejoin = (where && !initial) ? rng_.range(0, 12) : 0.0;
+  e->x = (where && where->hasX) ? where->x
+         : initial              ? rng_.range(-e->width(), w_)
+                                : (right ? -e->width() - rejoin : w_ + rejoin);
   if (e->vy > 0 && !initial) e->y = e->anchorY = -e->height() + rng_.range(0, h_ / 3.0);
   if (sprite->frameCount() > 1 && e->fps > 0) {
     e->frame = rng_.rangeInt(0, static_cast<int>(sprite->frameCount()) - 1);
@@ -435,7 +536,16 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
   const double sleeps = std::clamp(p.num("sleeps", 0.0), 0.0, 1.0);
   if (sleeps > 0 && rng_.chance(sleeps)) e->sleepBelow = rng_.range(0.05, 0.9);
 
-  if (!event) e->onDeath = [sprite](World& w) { w.spawnCreature(sprite, false); };
+  if (!event) {
+    const bool herded = p.has("herd");
+    const int dir = right ? 1 : -1;
+    e->onDeath = [sprite, herded, dir](World& w) {
+      Placement again;
+      again.dir = dir;
+      if (herded) w.spawnCreature(sprite, false, false, &again);
+      else w.spawnCreature(sprite, false);
+    };
+  }
   spawn(std::move(e));
 }
 
@@ -557,7 +667,17 @@ int World::interact() {
   }
   if (a.kind == SceneDef::Action::Kind::Weather) {
     if (!pack_->find(a.sprite)) return 0;
-    rainLeft_ = scene_->weatherDuration;  // pressing again while it rains keeps it going
+    stormDir_ = rng_.chance(0.5) ? 1 : -1;
+    auto funnel = a.extra.empty() ? nullptr : pack_->find(a.extra);
+    if (funnel && countTag("tornado") == 0 && rng_.chance(0.5)) {  // a tornado instead of the plain storm
+      const auto [vmin, vmax] = funnel->props().range("speed", {3, 5});
+      const double speed = rng_.range(vmin, vmax);
+      spawnEffect(a.extra, stormDir_ > 0 ? -funnel->width() : w_, seabedY_ - funnel->height(), 6,
+                  stormDir_ * speed, 0);
+      flushIncoming();
+      return 1;
+    }
+    rainLeft_ = scene_->weatherDuration;  // pressing again while it lasts keeps it going
     return 1;
   }
   return 0;
@@ -585,6 +705,8 @@ bool World::isAsleep(const Entity& e) const {
 
 Light World::light() const {
   Light l;
+  l.haze = scene_->overcastTintAmount * overcast_;
+  l.hazeColor = scene_->overcastTint;
   if (!scene_->dayNight) return l;
   constexpr double kTwoPi = 6.283185307179586;
   const double height = -std::cos(kTwoPi * phase_);  // sun height: -1 at midnight, +1 at noon
@@ -603,13 +725,22 @@ std::string World::clockText() const {
   return buf;
 }
 
-void World::spawnRain(double dt) {
-  const std::string& drop = scene_->action.sprite;
-  const double want = 0.45 * w_ * dt;
+void World::spawnWeather(double dt) {
+  const std::string& particle = scene_->action.sprite;
+  auto sprite = pack_->find(particle);
+  if (!sprite) return;
+  const bool wind = sprite->props().str("wind", "no") == "yes";  // sand blown across, not falling
+  const double want = (wind ? 0.012 * w_ * h_ : 0.45 * w_) * dt;
   int n = static_cast<int>(want);
   if (rng_.chance(want - n)) ++n;
   for (int i = 0; i < n; ++i) {
-    Entity* e = spawnEffect(drop, rng_.range(-4, w_), -1, 1, 3.0, 14 + rng_.range(-2, 3));
+    if (wind) {  // grains enter at the upwind edge and sweep across the whole scene
+      const auto [vmin, vmax] = sprite->props().range("speed", {22, 38});
+      spawnEffect(particle, stormDir_ > 0 ? -1 : w_, rng_.range(0, h_), 1, stormDir_ * rng_.range(vmin, vmax),
+                  rng_.range(-1.5, 1.5));
+      continue;
+    }
+    Entity* e = spawnEffect(particle, rng_.range(-4, w_), -1, 1, 3.0, 14 + rng_.range(-2, 3));
     // Drops land at random depths on the ground, so the rain reaches the bank and the river.
     if (e) e->anchorY = rng_.rangeInt(std::min(seabedY_, h_ - 1), h_ - 1);
   }
@@ -696,10 +827,10 @@ void World::step(double dt) {
   for (double& c : crater_) c = std::max(0.0, c - dt / scene_->dustSettle);  // dust fills craters
   if (rainLeft_ > 0) {
     rainLeft_ = std::max(0.0, rainLeft_ - dt);
-    spawnRain(dt);
+    spawnWeather(dt);
   }
   if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
-  const double cloudTarget = rainLeft_ > 0 ? 1.0 : 0.0;
+  const double cloudTarget = (rainLeft_ > 0 || countTag("tornado") > 0) ? 1.0 : 0.0;
   overcast_ += std::clamp(cloudTarget - overcast_, -0.25 * dt, 0.4 * dt);
   const double sun = scene_->dayNight ? light().sun : 1.0;
   bool eventAlive = false;
@@ -707,7 +838,25 @@ void World::step(double dt) {
     if (e->dead) continue;
     eventAlive |= e->isEvent;
     if (e->sleepBelow > 0 && sun < e->sleepBelow) continue;  // asleep: frozen where it is
+    if (e->flung) {  // thrown by a tornado: flies on an arc, lands dazed and walks on afterwards
+      e->age += dt;
+      e->vy += scene_->gravity * dt;
+      e->x += e->vx * dt;
+      e->y += e->vy * dt;
+      if (e->vy > 0 && e->y >= e->anchorY) {
+        e->y = e->anchorY;
+        e->vy = 0;
+        e->vx = e->flungVx;
+        e->flung = false;
+        e->pauseLeft = 1.5;
+      }
+      continue;
+    }
     e->age += dt;
+    if (e->pauseLeft > 0) {  // busy (eating): stays frozen where it is
+      e->pauseLeft = std::max(0.0, e->pauseLeft - dt);
+      continue;
+    }
     animate(*e, dt);
     for (BehaviorFn b : e->behaviors) b(*e, *this, dt);
     if (e->ttl > 0 && e->age > e->ttl) e->dead = true;

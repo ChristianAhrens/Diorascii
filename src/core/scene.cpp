@@ -114,6 +114,14 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->riverRows = std::max(static_cast<int>(p.num("river-rows", 0)), 0);
   sc->riverFlow = p.num("river-flow", sc->riverFlow);
   sc->weatherDuration = std::max(p.num("weather-duration", sc->weatherDuration), 1.0);
+  if (p.has("overcast-tint")) {
+    const auto t = p.list("overcast-tint");
+    if (t.size() != 2 || !parseHexColor(t[0], sc->overcastTint)) {
+      err = "'overcast-tint' needs a '#rrggbb' color and a strength from 0 to 1";
+      return nullptr;
+    }
+    sc->overcastTintAmount = std::clamp(std::atof(t[1].c_str()), 0.0, 1.0);
+  }
   sc->dayNight = p.str("day-night", "no") == "yes";
   sc->dayLength = std::max(p.num("day-length", sc->dayLength), 1.0);
   sc->startHour = std::clamp(p.num("start-hour", sc->startHour), 0.0, 24.0);
@@ -123,13 +131,15 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
     const auto t = p.list("action");
     if (t.size() == 1 && t[0] == "none") {
       sc->action.kind = Action::Kind::None;
-    } else if (t.size() == 2 && (t[0] == "drop" || t[0] == "impact" || t[0] == "weather")) {
+    } else if ((t.size() == 2 && (t[0] == "drop" || t[0] == "impact" || t[0] == "weather")) ||
+               (t.size() == 3 && t[0] == "weather")) {
       sc->action.kind = t[0] == "drop"     ? Action::Kind::Drop
                         : t[0] == "impact" ? Action::Kind::Impact
                                            : Action::Kind::Weather;
       sc->action.sprite = t[1];
+      if (t.size() == 3) sc->action.extra = t[2];
     } else {
-      err = "'action' must be 'none', 'drop <sprite>', 'impact <sprite>' or 'weather <sprite>'";
+      err = "'action' must be 'none', 'drop <sprite>', 'impact <sprite>' or 'weather <sprite> [<funnel>]'";
       return nullptr;
     }
   }

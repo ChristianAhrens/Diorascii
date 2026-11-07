@@ -969,6 +969,327 @@ TEST(backing_darkens_the_background_behind_glyphs_in_full_style_only) {
   CHECK(f.at(10, 3).defaultBg);  // the terminal styles keep the user's own background
 }
 
+// ------------------------------------------------------------ herds and storms ---
+
+TEST(scene_parses_storm_actions_and_tint) {
+  std::string err;
+  auto sc = SceneDef::parse("name: s\naction: weather grain funnel\novercast-tint: #c8a060 0.6\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->action.kind == SceneDef::Action::Kind::Weather);
+  CHECK(sc->action.sprite == "grain" && sc->action.extra == "funnel");
+  CHECK(sc->overcastTint == (Rgb{200, 160, 96}) && sc->overcastTintAmount == 0.6);
+  auto plain = SceneDef::parse("name: s\naction: weather rain\n", err);
+  CHECK(plain && plain->action.extra.empty());
+  CHECK(SceneDef::parse("name: s\naction: weather a b c\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\naction: drop a b\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\novercast-tint: #123456\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\novercast-tint: nope 0.5\n", err) == nullptr);
+  AssetPack pack;
+  pack.addText("g.sprite", "name: grain\n--- art\n.\n");
+  pack.addText("a.scene", "name: s\naction: weather grain funnel\n");
+  pack.validate();
+  CHECK(pack.errors().size() == 1);  // the funnel sprite does not exist
+}
+
+TEST(herds_start_together_and_stay_a_herd) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\n--- population\nhorse count 5\n",
+      {"name: horse\nfacing: right\nhabitat: ground\nspeed: 8..8\nherd: 4..4\nherd-spacing: 5\n"
+       "lanes: 3\nbehaviors: walk\n--- art\nH\n"});
+  World world(pack, pack.scene("t"), 300, 30, 4);
+  auto& all = world.entities();
+  CHECK(all.size() == 20);  // five herds of four
+  int right = 0;
+  for (size_t g = 0; g < 5; ++g) {
+    const bool dir = all[g * 4]->vx > 0;
+    double lo = 1e9, hi = -1e9;
+    for (size_t k = 0; k < 4; ++k) {
+      CHECK((all[g * 4 + k]->vx > 0) == dir);  // one direction per herd
+      lo = std::min(lo, all[g * 4 + k]->x);
+      hi = std::max(hi, all[g * 4 + k]->x);
+    }
+    CHECK(hi - lo > 8 && hi - lo < 24);  // strung out, not on top of each other
+    right += dir ? 4 : 0;
+  }
+  for (int i = 0; i < 4000; ++i) world.step(0.05);  // a few laps around the world
+  CHECK(world.entityCount() == 20);
+  int rightLater = 0;
+  for (auto& e : world.entities()) rightLater += e->vx > 0;
+  CHECK(rightLater == right);  // members that leave come back facing the same way
+}
+
+TEST(hunters_chase_catch_feast_and_then_stop_hunting) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 8\n--- population\nlion count 1\ngazelle count 1\n",
+      {"name: lion\nfacing: right\nhabitat: ground\nspeed: 6..6\nmouth-row: 0\nfeast-time: 1\nhunt-effect: puff\n"
+       "tag: lion\nbehaviors: chase hunt walk\n--- art\nLL\nLL\n",
+       "name: gazelle\nhabitat: ground\nspeed: 0..0\ntag: prey\nbehaviors: walk\n--- art\ng\ng\n",
+       "name: puff\ntag: puff\nfps: 5\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 120, 30, 3);
+  Entity* lion = nullptr;
+  Entity* prey = nullptr;
+  for (auto& e : world.entities()) {
+    if (e->tag == "lion") lion = e.get();
+    if (e->tag == "prey") prey = e.get();
+  }
+  CHECK(lion && prey);
+  lion->x = 10;
+  lion->vx = -6;
+  lion->mirrored = true;  // running away from the prey...
+  prey->x = 70;
+  prey->anchorY = lion->anchorY + 2;  // ...in another lane
+  prey->y = prey->anchorY;
+  for (int i = 0; i < 25; ++i) world.step(0.05);
+  CHECK(lion->vx > 0);                                // turned round towards the prey
+  CHECK(std::fabs(lion->anchorY - prey->anchorY) < 0.01);  // and changed lane to line up with it
+
+  bool caught = false;
+  for (int i = 0; i < 400 && !caught; ++i) {
+    world.step(0.05);
+    caught = world.eatenCount() > 0;
+  }
+  CHECK(caught);
+  CHECK(lion->kills == 1);
+  CHECK(world.countTag("puff") > 0);  // the effect named in the hunter's header
+
+  const double at = lion->x;
+  for (int i = 0; i < 15; ++i) world.step(0.05);  // 0.75 s of a one second feast
+  CHECK(lion->x == at);
+  for (int i = 0; i < 15; ++i) world.step(0.05);
+  CHECK(lion->x > at);  // it carries on afterwards
+
+  for (auto& e : world.entities()) {
+    if (e->tag == "prey") { e->x = lion->x - 25; e->anchorY = e->y = lion->y; }  // fresh prey behind it
+  }
+  const double before = lion->x;
+  for (int i = 0; i < 40; ++i) world.step(0.05);
+  CHECK(lion->vx > 0 && lion->x > before);  // a satisfied lion does not turn back to hunt
+  CHECK(lion->kills == 1);
+}
+
+static AssetPack stormPack(const std::string& extra = "") {
+  return miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\nweather-duration: 4\naction: weather grain funnel\n"
+      "overcast-tint: #c8a060 0.8\nsky: #3050a0 #3050a0\n" + extra,
+      {"name: grain\nwind: yes\nspeed: 20..30\ntag: grain\nbehaviors: fly\n--- art\n.\n",
+       "name: funnel\nhabitat: ground\ntag: tornado\nspeed: 4..4\nbehaviors: twister\n--- art\nVVV\nVVV\n VV\n",
+       "name: sandspray\ntag: spray\nbehaviors: ballistic\n--- art\n'\n"});
+}
+
+TEST(the_storm_action_brings_a_sandstorm_or_a_tornado_and_never_two_tornadoes) {
+  AssetPack pack = stormPack();
+  int tornadoes = 0, storms = 0;
+  for (uint64_t seed = 1; seed <= 40; ++seed) {
+    World world(pack, pack.scene("t"), 80, 30, seed);
+    CHECK(world.interact() == 1);
+    if (world.countTag("tornado") == 1) ++tornadoes;
+    else if (world.raining()) ++storms;
+  }
+  CHECK(tornadoes + storms == 40);
+  CHECK(tornadoes >= 8 && storms >= 8);  // a coin toss each time
+
+  for (uint64_t seed = 1; seed <= 40; ++seed) {  // pressing again during a tornado gives the storm
+    World world(pack, pack.scene("t"), 80, 30, seed);
+    world.interact();
+    if (world.countTag("tornado") == 0) continue;
+    world.interact();
+    CHECK(world.countTag("tornado") == 1);
+    CHECK(world.raining());
+    break;
+  }
+}
+
+TEST(a_sandstorm_blows_one_way_across_the_whole_scene_and_tints_the_light) {
+  AssetPack pack = stormPack();
+  uint64_t seed = 0;
+  for (uint64_t s = 1; s <= 200 && seed == 0; ++s) {  // find a run where the coin toss gives a plain sandstorm
+    World probe(pack, pack.scene("t"), 80, 30, s);
+    probe.interact();
+    if (probe.raining()) seed = s;
+  }
+  CHECK(seed != 0);
+  if (seed == 0) return;
+  World world(pack, pack.scene("t"), 80, 30, seed);
+  Frame f;
+  world.render(f);
+  const Rgb calm = f.at(5, 0).bg;
+  world.interact();
+  for (int i = 0; i < 40; ++i) world.step(0.05);
+  CHECK(world.countTag("grain") > 30);
+  bool anyRight = false, anyLeft = false;
+  for (auto& e : world.entities()) {
+    if (e->tag != "grain") continue;
+    anyRight |= e->vx > 0;
+    anyLeft |= e->vx < 0;
+  }
+  CHECK(anyRight != anyLeft);  // all grains blow the same way
+  for (int i = 0; i < 40; ++i) world.step(0.05);  // 4 s in: the sky has turned ochre
+  CHECK(world.light().haze > 0.5);
+  world.render(f);
+  const Rgb dusty = f.at(5, 0).bg;
+  auto dist = [](Rgb a, Rgb b) { return std::abs(a.r - b.r) + std::abs(a.g - b.g) + std::abs(a.b - b.b); };
+  CHECK(dist(dusty, Rgb{200, 160, 96}) < dist(calm, Rgb{200, 160, 96}) - 100);
+  for (int i = 0; i < 400; ++i) world.step(0.05);  // it blows over
+  CHECK(world.countTag("grain") == 0);
+  CHECK(world.light().haze < 0.01);
+}
+
+TEST(a_tornado_crosses_the_scene_whirls_up_sand_and_darkens_the_sky) {
+  AssetPack pack = stormPack();
+  uint64_t seed = 0;
+  for (uint64_t s = 1; s <= 200 && seed == 0; ++s) {  // find a run where the coin toss gives a tornado
+    World probe(pack, pack.scene("t"), 80, 30, s);
+    probe.interact();
+    if (probe.countTag("tornado") == 1) seed = s;
+  }
+  CHECK(seed != 0);
+  if (seed == 0) return;
+  World world(pack, pack.scene("t"), 80, 30, seed);
+  CHECK(world.interact() == 1);
+  size_t spray = 0;
+  Entity* funnel = nullptr;
+  for (int i = 0; i < 60; ++i) {
+    world.step(0.05);
+    spray = std::max(spray, world.countTag("spray"));
+    for (auto& e : world.entities()) {
+      if (e->tag == "tornado") funnel = e.get();
+    }
+  }
+  CHECK(funnel != nullptr);
+  CHECK(funnel->y + funnel->height() == world.seabedY());  // standing on the ground
+  CHECK(spray > 3);                                         // whirling sand up
+  CHECK(world.overcast() > 0.5);                            // the sky darkens while it is there
+  CHECK(world.light().haze > 0.3);
+  for (int i = 0; i < 700 && world.countTag("tornado") > 0; ++i) world.step(0.05);
+  CHECK(world.countTag("tornado") == 0);                    // it moves on and leaves
+  for (int i = 0; i < 400; ++i) world.step(0.05);
+  CHECK(world.overcast() < 0.01);
+}
+
+TEST(a_tornado_throws_animals_into_the_air_and_they_land_dazed_and_walk_on) {
+  AssetPack withAnimals = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\nweather-duration: 4\naction: weather grain funnel\n"
+      "--- population\nwalker count 2\nrock count 1\n",
+      {"name: grain\nwind: yes\ntag: grain\nbehaviors: fly\n--- art\n.\n",
+       "name: funnel\nhabitat: ground\ntag: tornado\nspeed: 4..4\nbehaviors: twister\n--- art\nVVV\nVVV\n VV\n",
+       "name: sandspray\ntag: spray\nbehaviors: ballistic\n--- art\n'\n",
+       "name: walker\nhabitat: ground\ntag: walker\nspeed: 4..4\nbehaviors: walk\n--- art\nW\nW\n",
+       "name: rock\nhabitat: ground\ntag: rock\nspeed: 0..0\n--- art\nR\n"});
+  uint64_t seed = 0;
+  for (uint64_t s = 1; s <= 200 && seed == 0; ++s) {
+    World probe(withAnimals, withAnimals.scene("t"), 100, 30, s);
+    probe.interact();
+    if (probe.countTag("tornado") == 1) seed = s;
+  }
+  CHECK(seed != 0);
+  if (seed == 0) return;
+  World world(withAnimals, withAnimals.scene("t"), 100, 30, seed);
+  world.interact();
+  Entity *funnel = nullptr, *hit = nullptr, *far = nullptr, *rock = nullptr;
+  for (auto& e : world.entities()) {
+    if (e->tag == "tornado") funnel = e.get();
+    else if (e->tag == "rock") rock = e.get();
+    else if (e->tag == "walker") (hit ? far : hit) = e.get();
+  }
+  CHECK(funnel && hit && far && rock);
+  funnel->x = 40;
+  funnel->vx = 0;  // hold the funnel still so the test is exact
+  hit->x = 40;     // straight under it
+  hit->vx = 4;
+  far->x = 90;     // well out of its way
+  rock->x = 41;    // scenery under it, too
+  const double ground = hit->anchorY;
+
+  world.step(0.05);
+  CHECK(hit->flung);
+  CHECK(!far->flung && !rock->flung);  // only the animal in the path is thrown, not the rock or the far one
+
+  double highest = ground;
+  int airborne = 0;
+  while (hit->flung && airborne < 600) {
+    world.step(0.05);
+    highest = std::min(highest, hit->y);
+    ++airborne;
+  }
+  CHECK(!hit->flung);                       // it comes down again
+  CHECK(highest < ground - 4);              // after a real flight into the air
+  CHECK(airborne > 10);
+  CHECK(hit->y == ground);                  // landed on its lane
+  CHECK(hit->vx == 4);                      // with its own walking speed restored
+  CHECK(hit->pauseLeft > 0);                // dazed for a moment
+  const double landed = hit->x;
+  funnel->x = 95;                           // the tornado has moved on
+  for (int i = 0; i < 20; ++i) world.step(0.05);  // 1 s: still dazed
+  CHECK(hit->x == landed);
+  for (int i = 0; i < 20; ++i) world.step(0.05);
+  CHECK(hit->x != landed);                  // and then it walks on
+}
+
+TEST(earth_tones_and_sand_are_available_to_sprites) {
+  AssetPack pack = miniPack("--- population\nhorse count 1\ngrain count 1\n",
+                            {"name: horse\npool: earth\nhabitat: sky\nspeed: 0..0\n--- art\n1\n",
+                             "name: grain\nhabitat: sky\nspeed: 0..0\n--- art\nX\n--- mask\nS\n"});
+  World world(pack, pack.scene("t"), 40, 20, 5);
+  const Rgb earth[] = {{240, 205, 150}, {228, 231, 238}, {205, 160, 110}, {190, 140, 90}, {235, 220, 190}};
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "horse") continue;
+    for (const Rgb& c : e->pal) {
+      bool known = false;
+      for (const Rgb& k : earth) known |= c == k;
+      CHECK(known);
+    }
+  }
+  for (auto& e : world.entities()) {
+    e->x = e->sprite->name() == "horse" ? 3 : 7;
+    e->y = 2;
+  }
+  Frame f;
+  world.render(f, Style::Full);
+  CHECK(f.at(7, 2).ch == U'X' && f.at(7, 2).fg == (Rgb{214, 176, 112}));  // the grain is sand colored
+}
+
+TEST(contrast_sprites_draw_dark_strokes_on_light_backgrounds_only) {
+  auto fgAt = [&](const std::string& sky, Style style) {
+    AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\nsky: " + sky + " " + sky +
+                                  "\n--- population\nmark count 1\n",
+                              {"name: mark\nhabitat: sky\nspeed: 0..0\ncontrast: yes\ncolor: #f0c880\n--- art\nM\n"});
+    World world(pack, pack.scene("t"), 40, 20, 1);
+    Entity* e = world.entities()[0].get();
+    e->x = 10;
+    e->y = 3;
+    Frame f;
+    world.render(f, style);
+    return f.at(10, 3).fg;
+  };
+  const Rgb onLight = fgAt("#f4dfb0", Style::Full), onDark = fgAt("#101830", Style::Full);
+  CHECK(onDark == (Rgb{0xf0, 0xc8, 0x80}));        // its own color on a dark background
+  CHECK(onLight.r < 90 && onLight.g < 90);          // dark brown on pale sand
+  CHECK(fgAt("#f4dfb0", Style::Terminal) == (Rgb{0xf0, 0xc8, 0x80}));  // the terminal styles leave it alone
+}
+
+TEST(horses_kick_up_dust_as_they_run) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\n--- population\nhorse count 1\n",
+      {"name: horse\nfacing: right\nhabitat: ground\nspeed: 10..10\ndust-rate: 8\nbehaviors: walk emit_dust\n--- art\nH\nH\n",
+       "name: sandpuff\ntag: puff\nfps: 6\nloop: no\ndie-after-animation: yes\n--- art\n.\n--- art\n:\n"});
+  World world(pack, pack.scene("t"), 200, 30, 2);
+  Entity* horse = world.entities()[0].get();
+  horse->x = 50;
+  horse->vx = 10;
+  horse->mirrored = false;
+  size_t most = 0;
+  double behind = 0;
+  for (int i = 0; i < 60; ++i) {
+    world.step(0.05);
+    most = std::max(most, world.countTag("puff"));
+    for (auto& e : world.entities()) {
+      if (e->tag == "puff") behind = std::max(behind, horse->x - e->x);  // puffs are left behind
+    }
+  }
+  CHECK(most >= 2);
+  CHECK(behind > 1);
+}
+
 // -------------------------------------------------------------------- impact ---
 
 static AssetPack impactPack(const std::string& extraSprites = "") {

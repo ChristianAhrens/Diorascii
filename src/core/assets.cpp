@@ -86,6 +86,7 @@ void AssetPack::validate() {
     for (const auto& d : sc->decor) check(*sc, "decor", d.sprite);
     for (const auto& e : sc->events) check(*sc, "events", e.sprite);
     check(*sc, "action", sc->action.sprite);
+    check(*sc, "action", sc->action.extra);
     check(*sc, "sun-sprite", sc->sunSprite);
     check(*sc, "moon-sprite", sc->moonSprite);
   }

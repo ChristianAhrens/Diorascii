@@ -1,0 +1,29 @@
+name: deer
+facing: right
+habitat: ground
+depth: 4..9
+lanes: 4
+backing: 0.4
+speed: 1.2..2.5
+fps: 3
+behaviors: walk
+--- art
+       \|/
+ .-----(o>
+ |/  \|
+ ||  ||
+--- mask
+       TTT
+ TTTTTTTWT
+ TT  TT
+ TT  TT
+--- art
+       \|/
+ .-----(o>
+ |/  \|
+  /|  |\
+--- mask
+       TTT
+ TTTTTTTWT
+ TT  TT
+  TT  TT

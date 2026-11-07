@@ -1,0 +1,13 @@
+name: bush
+facing: right
+habitat: ground
+solid: yes
+speed: 0..0
+lanes: 4
+depth: 10..18
+--- art
+ ,- -.
+(     )
+--- mask
+ GGgGG
+GgggggG

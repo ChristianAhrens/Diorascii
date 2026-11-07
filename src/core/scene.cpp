@@ -111,15 +111,20 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->starDensity = static_cast<int>(p.num("stars", 0));
   sc->gravity = p.num("gravity", sc->gravity);
   sc->dustSettle = std::max(p.num("dust-settle", sc->dustSettle), 1.0);
+  sc->riverRows = std::max(static_cast<int>(p.num("river-rows", 0)), 0);
+  sc->riverFlow = p.num("river-flow", sc->riverFlow);
+  sc->weatherDuration = std::max(p.num("weather-duration", sc->weatherDuration), 1.0);
   if (p.has("action")) {
     const auto t = p.list("action");
     if (t.size() == 1 && t[0] == "none") {
       sc->action.kind = Action::Kind::None;
-    } else if (t.size() == 2 && (t[0] == "drop" || t[0] == "impact")) {
-      sc->action.kind = t[0] == "drop" ? Action::Kind::Drop : Action::Kind::Impact;
+    } else if (t.size() == 2 && (t[0] == "drop" || t[0] == "impact" || t[0] == "weather")) {
+      sc->action.kind = t[0] == "drop"     ? Action::Kind::Drop
+                        : t[0] == "impact" ? Action::Kind::Impact
+                                           : Action::Kind::Weather;
       sc->action.sprite = t[1];
     } else {
-      err = "'action' must be 'none', 'drop <sprite>' or 'impact <sprite>'";
+      err = "'action' must be 'none', 'drop <sprite>', 'impact <sprite>' or 'weather <sprite>'";
       return nullptr;
     }
   }
@@ -136,16 +141,19 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   }
 
   Rgb sky[2] = {sc->skyTop, sc->skyLow}, med[2] = {sc->mediumTop, sc->mediumDeep},
-      gnd[2] = {sc->groundA, sc->groundB}, sur[1] = {sc->surfaceFg};
+      gnd[2] = {sc->groundA, sc->groundB}, sur[1] = {sc->surfaceFg},
+      riv[2] = {sc->riverTop, sc->riverDeep};
   if (!colors(p, "sky", sky, 2) || !colors(p, "medium-colors", med, 2) ||
-      !colors(p, "ground-colors", gnd, 2) || !colors(p, "surface-color", sur, 1)) {
-    err = "color headers need '#rrggbb' values (sky, medium-colors, ground-colors: two; surface-color: one)";
+      !colors(p, "ground-colors", gnd, 2) || !colors(p, "surface-color", sur, 1) ||
+      !colors(p, "river-colors", riv, 2)) {
+    err = "color headers need '#rrggbb' values (sky, medium-colors, ground-colors, river-colors: two; surface-color: one)";
     return nullptr;
   }
   sc->skyTop = sky[0]; sc->skyLow = sky[1];
   sc->mediumTop = med[0]; sc->mediumDeep = med[1];
   sc->groundA = gnd[0]; sc->groundB = gnd[1];
   sc->surfaceFg = sur[0];
+  sc->riverTop = riv[0]; sc->riverDeep = riv[1];
   return sc;
 }
 

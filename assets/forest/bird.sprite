@@ -1,0 +1,19 @@
+name: bird
+facing: right
+habitat: sky
+speed: 6..10
+depth: 20..26
+fps: 5
+random-frame: yes
+bob-amplitude: 1.2
+bob-frequency: 1.1
+color: #33363f
+behaviors: wander
+--- art
+\v/
+--- art
+_v_
+--- art
+/v\
+--- art
+_v_

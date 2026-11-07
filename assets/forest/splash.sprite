@@ -1,0 +1,11 @@
+name: splash
+fps: 10
+loop: no
+die-after-animation: yes
+color: #b9d8f2
+--- art
+.
+--- art
+o
+--- art
+'

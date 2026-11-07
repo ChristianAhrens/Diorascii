@@ -47,9 +47,10 @@ struct SceneDef {
   /// What the F key does in this scene.
   ///   drop   <sprite>  items fall from the surface (food for the fish)
   ///   impact <sprite>  a meteorite strikes the ground and digs a crater
+  ///   weather <sprite> it rains for a while (the sprite is the raindrop)
   struct Action {
     /// Which action the scene offers.
-    enum class Kind { None, Drop, Impact };
+    enum class Kind { None, Drop, Impact, Weather };
     /// What the action key does.
     Kind kind = Kind::None;
     /// Sprite that is dropped or hurled, depending on kind.
@@ -87,6 +88,12 @@ struct SceneDef {
   Action action;
   double gravity = 6;      ///< cells/s^2 for falling debris
   double dustSettle = 40;  ///< seconds for dust to fill one row of a crater
+  /// Rows at the bottom of the ground that are a flowing river (0 = no river).
+  int riverRows = 0;
+  /// River colors from the bank down to the deepest row.
+  Rgb riverTop{74, 160, 216}, riverDeep{31, 106, 165};
+  double riverFlow = 2.5;         ///< cells per second the ripples drift to the right
+  double weatherDuration = 20;    ///< seconds a weather action lasts
   std::pair<double, double> eventFirst{3, 8}, eventInterval{15, 40};  ///< seconds
 
   /// Sprites the scene starts with.

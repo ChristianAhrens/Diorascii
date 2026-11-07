@@ -1,5 +1,6 @@
 // Dependency-free test runner: each TEST registers itself, main() runs them all.
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -144,6 +145,7 @@ TEST(scene_rejects_bad_input) {
   CHECK(SceneDef::parse("name: s\n--- nonsense\n", err) == nullptr);
   CHECK(SceneDef::parse("name: s\naction: explode\n", err) == nullptr);
   CHECK(SceneDef::parse("name: s\naction: drop\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\nriver-colors: #123456\n", err) == nullptr);
 }
 
 TEST(pack_reports_unknown_sprite_references) {
@@ -161,7 +163,9 @@ TEST(embedded_assets_all_load) {
   for (const char* n : {"darter", "guppy", "tang", "angel", "puffer", "eel", "grouper", "jelly",
                         "crab", "shark", "ship", "whale", "castle", "coral", "bubble", "food",
                         "splat", "earth", "lander", "rover", "meteor", "meteorite", "flash", "debris",
-                        "dust", "flag", "rock"})
+                        "dust", "flag", "rock", "pine_big", "pine_small", "oak", "bush", "cloud_big",
+                        "cloud_small", "flower", "reeds", "bird", "deer", "rabbit", "duck", "eagle",
+                        "raindrop", "splash"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -419,6 +423,179 @@ TEST(solid_blocks_keep_their_color_in_terminal_style_but_not_in_mono) {
   CHECK(mono.at(0, 1).defaultBg);
 }
 
+
+// -------------------------------------------------------------------- forest ---
+
+static std::string forestScene(const std::string& extra = "") {
+  return "medium: no\nsky-fraction: 1\nground-rows: 8\nriver-rows: 3\nweather-duration: 5\n"
+         "action: weather raindrop\n" + extra;
+}
+
+TEST(scene_parses_river_and_weather) {
+  std::string err;
+  auto sc = SceneDef::parse(
+      "name: s\nriver-rows: 3\nriver-colors: #102030 #405060\nriver-flow: 4\n"
+      "action: weather rain\nweather-duration: 12\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->riverRows == 3 && sc->riverFlow == 4 && sc->weatherDuration == 12);
+  CHECK(sc->riverTop == (Rgb{16, 32, 48}) && sc->riverDeep == (Rgb{64, 80, 96}));
+  CHECK(sc->action.kind == SceneDef::Action::Kind::Weather && sc->action.sprite == "rain");
+}
+
+TEST(river_takes_the_bottom_of_the_ground_and_never_more_than_half) {
+  AssetPack pack = miniPack(forestScene(), {"name: raindrop\nbehaviors: rain\n--- art\n\\\n"});
+  World tall(pack, pack.scene("t"), 60, 30, 1);
+  CHECK(tall.riverRows() == 3 && tall.riverTop() == 27);
+  CHECK(tall.seabedY() == 30 - 7);  // eight ground rows are capped to a quarter of the height
+  World squat(pack, pack.scene("t"), 60, 12, 1);
+  CHECK(squat.riverRows() <= (12 - squat.seabedY()) / 2);
+  World tiny(pack, pack.scene("t"), 5, 3, 1);
+  CHECK(tiny.riverRows() == 0 && tiny.riverTop() == 3);
+  Frame f;
+  tall.render(f);
+  CHECK(f.at(10, 28).bg != f.at(10, 20).bg);  // river rows look different from the bank
+}
+
+TEST(river_creatures_stay_inside_the_river) {
+  AssetPack pack = miniPack(forestScene("--- population\nduck count 40\n"),
+                            {"name: duck\nhabitat: river\nspeed: 1..2\nbehaviors: swim\n--- art\n_o>\n`-'\n",
+                             "name: raindrop\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 80, 30, 2);
+  CHECK(world.countTag("") >= 40);
+  for (auto& e : world.entities()) {
+    CHECK(e->y >= world.riverTop());
+    CHECK(e->y + e->height() <= world.height());
+  }
+  AssetPack none = miniPack("--- population\nduck count 5\n", {"name: duck\nhabitat: river\n--- art\nd\n"});
+  World dry(none, none.scene("t"), 40, 20, 2);
+  CHECK(dry.entityCount() == 0);  // no river, so no river creatures
+}
+
+TEST(lanes_spread_ground_sprites_over_the_bank_and_order_them_by_depth) {
+  AssetPack pack = miniPack(forestScene("--- population\ntree count 60\n"),
+                            {"name: tree\nhabitat: ground\nspeed: 0..0\nlanes: 4\ndepth: 10..18\ntag: tree\n--- art\nT\nT\n",
+                             "name: raindrop\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 80, 30, 6);
+  bool seen[4] = {false, false, false, false};
+  for (auto& e : world.entities()) {
+    const int lane = static_cast<int>(e->y) - (world.seabedY() - e->height());
+    CHECK(lane >= 0 && lane <= 3);
+    CHECK(e->y + e->height() <= world.riverTop() + 3);  // never into the river
+    CHECK(e->z == 18 - lane * 8 / 3);                    // front lanes have smaller z, drawn later
+    seen[lane] = true;
+  }
+  CHECK(seen[0] && seen[1] && seen[2] && seen[3]);
+}
+
+TEST(lanes_shrink_on_a_narrow_bank) {
+  AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 2\n--- population\ntree count 20\n",
+                            {"name: tree\nhabitat: ground\nspeed: 0..0\nlanes: 4\ntag: tree\n--- art\nT\n"});
+  World world(pack, pack.scene("t"), 40, 12, 3);
+  for (auto& e : world.entities()) CHECK(e->y >= world.seabedY() - 1 && e->y <= world.seabedY() + 1);
+}
+
+TEST(rain_falls_for_a_while_splashes_and_stops) {
+  AssetPack pack = miniPack(
+      forestScene(),
+      {"name: raindrop\nfacing: right\ntag: rain\nbehaviors: rain\n--- art\n\\\n",
+       "name: splash\ntag: splash\nfps: 10\nloop: no\ndie-after-animation: yes\n--- art\n.\n--- art\no\n"});
+  World world(pack, pack.scene("t"), 80, 30, 7);
+  CHECK(!world.raining());
+  CHECK(world.countTag("rain") == 0);
+  CHECK(world.interact() == 1);
+  CHECK(world.raining());
+  size_t drops = 0, splashes = 0;
+  for (int i = 0; i < 60; ++i) {
+    world.step(0.05);
+    drops = std::max(drops, world.countTag("rain"));
+    splashes = std::max(splashes, world.countTag("splash"));
+  }
+  CHECK(drops > 10);
+  CHECK(splashes > 0);
+  for (int i = 0; i < 200; ++i) world.step(0.05);  // 5 s of rain have passed, drops need time to land
+  CHECK(!world.raining());
+  for (int i = 0; i < 80; ++i) world.step(0.05);
+  CHECK(world.countTag("rain") == 0);
+  CHECK(world.interact() == 1);  // and it can rain again
+  CHECK(world.raining());
+}
+
+TEST(rain_drops_land_on_the_ground_or_in_the_river) {
+  AssetPack pack = miniPack(forestScene(), {"name: raindrop\ntag: rain\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 80, 30, 8);
+  world.interact();
+  for (int i = 0; i < 40; ++i) world.step(0.05);
+  for (auto& e : world.entities()) {
+    if (e->tag != "rain") continue;
+    CHECK(e->anchorY >= world.seabedY() && e->anchorY <= world.height() - 1);
+  }
+}
+
+TEST(pressing_the_action_again_keeps_the_rain_going) {
+  AssetPack pack = miniPack(forestScene(), {"name: raindrop\ntag: rain\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 80, 30, 8);
+  world.interact();
+  for (int i = 0; i < 80; ++i) world.step(0.05);  // 4 of 5 seconds
+  world.interact();
+  for (int i = 0; i < 80; ++i) world.step(0.05);  // would be over without the second press
+  CHECK(world.raining());
+}
+
+TEST(hopping_animals_jump_in_arcs_and_travel_at_their_average_speed) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 4\n--- population\nbunny count 1\n",
+      {"name: bunny\nfacing: right\nhabitat: ground\nspeed: 2..2\nhop-period: 1\nhop-height: 2\ntag: bunny\n"
+       "behaviors: hop\n--- art\nb\n"});
+  World world(pack, pack.scene("t"), 400, 24, 5);
+  Entity* b = world.entities()[0].get();
+  b->x = 100;
+  b->vx = 2;
+  b->age = 0;
+  b->phase = 0;
+  const double start = b->x;
+  double lowest = 0, highest = 0;
+  for (int i = 0; i < 400; ++i) {  // 20 s
+    world.step(0.05);
+    lowest = std::min(lowest, b->y - b->anchorY);
+    highest = std::max(highest, b->y - b->anchorY);
+  }
+  CHECK(highest <= 1e-9);                 // it only ever goes up from the ground
+  CHECK(lowest < -1.9 && lowest >= -2.0 - 1e-9);
+  CHECK(std::fabs((b->x - start) - 40) < 3);  // about 2 cells per second on average
+}
+
+TEST(wandering_creatures_wobble_around_their_row) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 4\n--- population\nfly count 1\n",
+      {"name: fly\nfacing: right\nhabitat: sky\nspeed: 1..1\nbob-amplitude: 1\nbob-frequency: 1\n"
+       "behaviors: wander\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 200, 24, 5);
+  Entity* f = world.entities()[0].get();
+  double far = 0;
+  for (int i = 0; i < 200; ++i) {
+    world.step(0.05);
+    far = std::max(far, std::fabs(f->y - f->anchorY));
+  }
+  CHECK(far > 0.3);          // it does wobble
+  CHECK(far <= 1.0 + 0.6 + 1e-9);  // ...but stays near its row
+}
+
+TEST(backing_darkens_the_background_behind_glyphs_in_full_style_only) {
+  AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\nsky: #c8c8c8 #c8c8c8\n--- population\nmark count 1\n",
+                            {"name: mark\nhabitat: sky\nspeed: 0..0\nbacking: 0.5\ncolor: #ffffff\n--- art\nM M\n"});
+  World world(pack, pack.scene("t"), 40, 20, 1);
+  Entity* e = world.entities()[0].get();
+  e->x = 10;
+  e->y = 3;
+  Frame f;
+  world.render(f, Style::Full);
+  const Rgb sky = f.at(5, 3).bg;  // untouched background
+  CHECK(f.at(10, 3).bg.r < sky.r && f.at(10, 3).bg.r >= sky.r / 2 - 2);  // about half as bright
+  CHECK(f.at(12, 3).bg == f.at(10, 3).bg);                                 // behind every glyph
+  CHECK(f.at(11, 3).bg == sky);                                            // but not in the gap between them
+  world.render(f, Style::Terminal);
+  CHECK(f.at(10, 3).defaultBg);  // the terminal styles keep the user's own background
+}
 
 // -------------------------------------------------------------------- impact ---
 

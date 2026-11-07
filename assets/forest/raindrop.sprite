@@ -1,0 +1,7 @@
+name: raindrop
+facing: right
+tag: rain
+color: #8fb4e0
+behaviors: rain
+--- art
+\

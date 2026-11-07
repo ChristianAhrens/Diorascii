@@ -42,6 +42,10 @@ Rgb maskColor(char32_t m, const Entity& e) {
     case U'y': base = {240, 215, 80}; break;
     case U'm': base = {205, 100, 205}; break;
     case U'o': base = {245, 155, 60}; break;
+    case U't': base = {240, 205, 150}; break;
+    case U'n': base = {140, 92, 52}; break;
+    case U'p': base = {245, 150, 175}; break;
+    case U'l': base = {228, 231, 238}; break;
     default: return e.fg;
   }
   return (m >= U'a' && m <= U'z') ? scale(base, 0.6) : base;
@@ -118,6 +122,38 @@ void meteorite(Entity& e, World& w, double dt) {
   }
 }
 
+/// Drifts like swim, with an organic wobble on top (butterflies, fireflies, birds).
+void wander(Entity& e, World& w, double dt) {
+  e.x += 2.0 * std::sin(e.age * 1.7 + e.phase) * dt;
+  swim(e, w, dt);
+  e.y = e.anchorY + e.bobAmp * std::sin(e.age * e.bobFreq + e.phase) + 0.6 * std::sin(e.age * 2.9 + e.phase * 2);
+}
+
+/// Moves in hops: it rests, then jumps forward in an arc, and repeats.
+void hop(Entity& e, World& w, double dt) {
+  constexpr double kAirborne = 0.4;  // share of the cycle spent in the air
+  const double cycle = std::fmod(e.age + e.phase, e.hopPeriod) / e.hopPeriod;
+  double lift = 0;
+  if (cycle < kAirborne) {
+    e.x += e.vx * dt / kAirborne;  // all the travel happens in the air, so the average speed is vx
+    lift = e.hopHeight * std::sin(3.14159265358979 * cycle / kAirborne);
+  }
+  if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  e.y = e.anchorY + w.craterRows(static_cast<int>(std::floor(e.x + e.width() / 2.0))) - lift;
+}
+
+/// A raindrop: falls to the row chosen for it, makes a splash there and is gone.
+void rain(Entity& e, World& w, double dt) {
+  e.x += e.vx * dt;
+  e.y += e.vy * dt;
+  if (e.y >= e.anchorY) {
+    e.dead = true;
+    w.spawnEffect("splash", e.x, e.anchorY, 1, 0, 0);
+  } else if (e.x < -3 || e.x > w.width() + 3) {
+    e.dead = true;
+  }
+}
+
 /// Now and then releases a bubble from the mouth.
 void emitBubbles(Entity& e, World& w, double dt) {
   if (!w.rng().chance(e.bubbleRate * dt)) return;
@@ -166,7 +202,8 @@ BehaviorFn findBehavior(const std::string& name) {
   static const std::map<std::string, BehaviorFn> table = {
       {"swim", swim},   {"fly", fly},           {"bob", bob},       {"rise", rise},
       {"sink", sink},   {"emit_bubbles", emitBubbles}, {"seek_food", seekFood}, {"hunt", hunt},
-      {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite}};
+      {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite},
+      {"wander", wander}, {"hop", hop},                {"rain", rain}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -200,9 +237,12 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.bobAmp = p.num("bob-amplitude", 1.5);
   e.bobFreq = p.num("bob-frequency", 1.0);
   e.mouthRow = static_cast<int>(p.num("mouth-row", e.height() / 2));
+  e.hopPeriod = std::max(p.num("hop-period", 1.2), 0.1);
+  e.hopHeight = p.num("hop-height", 1.5);
   e.phase = rng.range(0, 6.28);
   e.grounded = p.str("habitat", "medium") == "ground";
   e.destructible = p.str("destructible", "yes") != "no";
+  e.backing = std::clamp(p.num("backing", 0.0), 0.0, 1.0);
   if (p.has("ttl")) {
     const auto r = p.range("ttl", {0, 0});
     e.ttl = rng.range(r.first, r.second);
@@ -230,8 +270,11 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
       seed_(seed),
       rng_(seed) {
   const SceneDef& sc = *scene_;
-  const int groundRows = std::clamp(sc.groundRows, 1, std::max(h_ / 6, 1));
+  const int groundRows = std::clamp(sc.groundRows, 1, std::max(h_ / 4, 1));
   seabedY_ = std::max(h_ - groundRows, 1);
+  // The river takes at most half of the ground, so there is always some bank left.
+  riverRows_ = std::clamp(sc.riverRows, 0, groundRows / 2);
+  riverTopY_ = h_ - riverRows_;
   if (!sc.hasMedium || sc.skyFraction >= 1.0) {
     surfaceY_ = seabedY_;
   } else {
@@ -246,7 +289,8 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
 
 double World::areaFor(const std::string& habitat) const {
   if (habitat == "sky") return static_cast<double>(w_) * surfaceY_;
-  if (habitat == "ground") return static_cast<double>(w_) * std::max(h_ - seabedY_, 1);
+  if (habitat == "ground") return static_cast<double>(w_) * std::max(riverTopY_ - seabedY_, 1);
+  if (habitat == "river") return static_cast<double>(w_) * riverRows_;
   if (habitat == "surface") return w_;
   return static_cast<double>(w_) * std::max(seabedY_ - surfaceY_ - 1, 0);  // medium
 }
@@ -267,7 +311,7 @@ void World::populate() {
     auto sprite = pack_->find(pop.sprite);
     if (!sprite) continue;
     const std::string habitat = sprite->props().str("habitat", "medium");
-    if (habitat == "medium" && !hasMedium_) continue;
+    if ((habitat == "medium" && !hasMedium_) || (habitat == "river" && riverRows_ == 0)) continue;
     want = perCells ? areaFor(habitat) / pop.n : perCols ? w_ / pop.n : pop.n;
     int n = static_cast<int>(want);
     if (pop.kind != SceneDef::Population::Kind::Count && rng_.chance(want - n)) ++n;
@@ -280,6 +324,7 @@ void World::populate() {
 double World::habitatY(const Props& p, int spriteHeight) {
   const std::string habitat = p.str("habitat", "medium");
   if (habitat == "ground") return seabedY_ - spriteHeight;
+  if (habitat == "river") return rng_.rangeInt(riverTopY_, std::max(h_ - spriteHeight, riverTopY_));
   if (habitat == "surface") return surfaceY_ - p.num("anchor-row", spriteHeight - 1);
   if (habitat == "sky") return rng_.rangeInt(0, std::max(surfaceY_ - spriteHeight, 0));
   const int lo = surfaceY_ + 2;
@@ -303,6 +348,18 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
   const auto [zmin, zmax] = p.range("depth", {5, 15});
   e->z = rng_.rangeInt(static_cast<int>(zmin), static_cast<int>(zmax));
   e->y = e->anchorY = habitatY(p, e->height());
+
+  // Ground sprites with `lanes: N` stand N rows deep on the bank; lanes further
+  // forward are drawn in front, so crowds of trees and animals get some depth.
+  const int lanes = static_cast<int>(p.num("lanes", 1));
+  if (lanes > 1 && p.str("habitat", "medium") == "ground") {
+    const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
+    const int usable = std::min(lanes, std::max(bank, 1));
+    const int lane = rng_.rangeInt(0, usable - 1);
+    e->y += lane;
+    e->anchorY = e->y;
+    if (usable > 1) e->z = static_cast<int>(zmax) - lane * static_cast<int>(zmax - zmin) / (usable - 1);
+  }
 
   e->x = initial ? rng_.range(-e->width(), w_) : (right ? -e->width() : w_);
   if (e->vy > 0 && !initial) e->y = e->anchorY = -e->height() + rng_.range(0, h_ / 3.0);
@@ -335,10 +392,10 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   spawn(std::move(e));
 }
 
-void World::spawnEffect(const std::string& spriteName, double x, double y, int z, double vx,
-                        double vy) {
+Entity* World::spawnEffect(const std::string& spriteName, double x, double y, int z, double vx,
+                           double vy) {
   auto sprite = pack_->find(spriteName);
-  if (!sprite) return;
+  if (!sprite) return nullptr;
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, sprite->props(), rng_);
@@ -348,7 +405,9 @@ void World::spawnEffect(const std::string& spriteName, double x, double y, int z
   e->vx = vx;
   e->vy = vy;
   if (vx != 0) e->mirrored = (vx > 0) != e->facesRight;
+  Entity* raw = e.get();
   spawn(std::move(e));
+  return raw;
 }
 
 void World::spawnSeaweed() {
@@ -428,7 +487,24 @@ int World::interact() {
     flushIncoming();
     return 1;
   }
+  if (a.kind == SceneDef::Action::Kind::Weather) {
+    if (!pack_->find(a.sprite)) return 0;
+    rainLeft_ = scene_->weatherDuration;  // pressing again while it rains keeps it going
+    return 1;
+  }
   return 0;
+}
+
+void World::spawnRain(double dt) {
+  const std::string& drop = scene_->action.sprite;
+  const double want = 0.45 * w_ * dt;
+  int n = static_cast<int>(want);
+  if (rng_.chance(want - n)) ++n;
+  for (int i = 0; i < n; ++i) {
+    Entity* e = spawnEffect(drop, rng_.range(-4, w_), -1, 1, 3.0, 14 + rng_.range(-2, 3));
+    // Drops land at random depths on the ground, so the rain reaches the bank and the river.
+    if (e) e->anchorY = rng_.rangeInt(std::min(seabedY_, h_ - 1), h_ - 1);
+  }
 }
 
 int World::craterHalfWidth() const { return std::clamp(w_ / 6, 2, 7); }
@@ -447,7 +523,8 @@ double World::deepestCrater() const {
 void World::impactAt(double cx) {
   const int c = static_cast<int>(std::lround(cx));
   const int hw = craterHalfWidth();
-  const int maxDepth = std::clamp(h_ - seabedY_ - 1, 1, 3);  // always leave some ground
+  const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
+  const int maxDepth = std::clamp(bank - 1, 1, 3);  // always leave some ground
 
   for (int dx = -hw; dx <= hw; ++dx) {
     const int x = c + dx;
@@ -507,6 +584,10 @@ void World::flushIncoming() {
 void World::step(double dt) {
   time_ += dt;
   for (double& c : crater_) c = std::max(0.0, c - dt / scene_->dustSettle);  // dust fills craters
+  if (rainLeft_ > 0) {
+    rainLeft_ = std::max(0.0, rainLeft_ - dt);
+    spawnRain(dt);
+  }
   bool eventAlive = false;
   for (auto& e : entities_) {
     if (e->dead) continue;
@@ -550,6 +631,13 @@ void World::renderBackground(Frame& out, Style style) const {
           c.ch = bright ? U'*' : U'.';
           c.fg = bright ? Rgb{250, 250, 220} : Rgb{150, 150, 170};
         }
+      } else if (riverRows_ > 0 && y >= riverTopY_) {  // river: flowing ripples
+        const double t = riverRows_ > 1 ? double(y - riverTopY_) / (riverRows_ - 1) : 0.0;
+        c.bg = lerp(sc.riverTop, sc.riverDeep, t);
+        const double flow = time_ * sc.riverFlow;
+        const double v = std::sin(x * 0.6 - flow + y * 1.7) + 0.5 * std::sin(x * 0.23 - flow * 0.6);
+        c.ch = v > 0.8 ? U'~' : v > 0.2 ? U'-' : (h % 9 == 0 ? U'.' : U' ');
+        c.fg = scale(c.bg, 1.9);
       } else if (y >= seabedY_) {
         const int row = y - seabedY_;
         const int dug = craterRows(x);
@@ -616,6 +704,7 @@ void World::render(Frame& out, Style style) const {
           cell.ch = ch;
           cell.fg = maskColor(m, *e);
           cell.defaultFg = style == Style::Mono;
+          if (e->backing > 0 && style == Style::Full) cell.bg = scale(cell.bg, 1 - e->backing);
         }
       }
     }

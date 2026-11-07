@@ -35,6 +35,9 @@ struct Entity {
   bool isEvent = false;
   bool grounded = false;      ///< habitat: ground
   bool destructible = true;   ///< can be wrecked by an impact
+  /// Darkens the background behind its glyphs by this share, 0 to 1 (full style only), so
+  /// light sprites stay readable against both bright sky and dark trees.
+  double backing = 0;
   /// Remove the entity once its non-looping animation has played.
   bool dieAfterAnim = false;
   /// Top-left position in cells (fractional between steps).
@@ -59,6 +62,8 @@ struct Entity {
   double bubbleRate = 0, bobAmp = 0, bobFreq = 1;
   /// Sprite row where it eats or bites.
   int mouthRow = 0;
+  /// Tuning for the hop behavior: seconds per hop cycle, and hop height in rows.
+  double hopPeriod = 1.2, hopHeight = 1.5;
   /// Marked for removal at the end of the step.
   bool dead = false;
   /// Behaviors, run in order every step.
@@ -123,6 +128,12 @@ class World {
   size_t foodEatenCount() const { return foodEaten_; }  // food flakes eaten by fish
   /// Ground objects wrecked by impacts so far.
   size_t destroyedCount() const { return destroyed_; } // ground objects wrecked by impacts
+  /// First row of the river (equals height() when the scene has no river).
+  int riverTop() const { return riverTopY_; }
+  /// Number of river rows at the bottom of the ground (0 = no river).
+  int riverRows() const { return riverRows_; }
+  /// True while a rain shower is going on.
+  bool raining() const { return rainLeft_ > 0; }
   /// Gravity of the scene in cells per second squared.
   double gravity() const { return scene_->gravity; }
   /// Rows of ground missing at column x (0 = intact).
@@ -150,7 +161,8 @@ class World {
   void spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event = false);
   /// Spawns an entity at an exact position with an exact velocity (bubbles,
   /// debris, food...).
-  void spawnEffect(const std::string& spriteName, double x, double y, int z, double vx, double vy);
+  /// @return the new entity (valid until the end of the step), or nullptr if the sprite is unknown
+  Entity* spawnEffect(const std::string& spriteName, double x, double y, int z, double vx, double vy);
   /// Counts a catch. Called by predator behaviors.
   void noteEaten() { ++eaten_; }
   /// Counts an eaten food flake. Called by feeding behaviors.
@@ -171,6 +183,8 @@ class World {
   double habitatY(const Props& p, int spriteHeight);
   /// Half the width of a crater in columns.
   int craterHalfWidth() const;
+  /// Lets drops fall for this step while it rains.
+  void spawnRain(double dt);
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
@@ -184,6 +198,10 @@ class World {
   int w_, h_;
   /// Layout rows: the surface line and the first ground row.
   int surfaceY_ = 0, seabedY_ = 0;
+  /// River band: first row and number of rows (rows is 0 without a river).
+  int riverTopY_ = 0, riverRows_ = 0;
+  /// Seconds of rain left; 0 when it is dry.
+  double rainLeft_ = 0;
   /// True if the scene has a medium and there is room for it.
   bool hasMedium_ = true;
   /// Seed the world was built with.

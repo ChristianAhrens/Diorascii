@@ -1,0 +1,38 @@
+# Doxygen configuration for Diorascii.
+# Build locally with:  doxygen Doxyfile   (or: cmake --build <dir> --target docs)
+# The README is the main page; HTML ends up in docs/html.
+
+PROJECT_NAME           = "Diorascii"
+PROJECT_BRIEF          = "Animated ASCII scenes for your terminal"
+PROJECT_NUMBER         = $(DIORASCII_VERSION)
+OUTPUT_DIRECTORY       = docs
+
+INPUT                  = README.md src
+FILE_PATTERNS          = *.h *.cpp *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */build/* */docs/*
+USE_MDFILE_AS_MAINPAGE = README.md
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+BUILTIN_STL_SUPPORT    = YES
+SOURCE_BROWSER         = YES
+GENERATE_TREEVIEW      = YES
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = NO
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = NO
+DOT_IMAGE_FORMAT       = svg
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO

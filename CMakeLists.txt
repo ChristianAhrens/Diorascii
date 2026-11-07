@@ -55,6 +55,16 @@ if(DIORASCII_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
 
+# `cmake --build <dir> --target docs` renders the API documentation when Doxygen is installed.
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+  add_custom_target(docs
+    COMMAND ${CMAKE_COMMAND} -E env DIORASCII_VERSION=${DIORASCII_VERSION} ${DOXYGEN_EXECUTABLE} Doxyfile
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Generating API documentation with Doxygen"
+    VERBATIM)
+endif()
+
 install(TARGETS diorascii RUNTIME DESTINATION bin)
 install(FILES LICENSE README.md DESTINATION share/doc/diorascii)
 

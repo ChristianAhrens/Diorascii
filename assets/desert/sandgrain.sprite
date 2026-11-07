@@ -1,0 +1,13 @@
+name: sandgrain
+wind: yes
+speed: 22..38
+tag: grain
+random-frame: yes
+color: #f3dfb2
+behaviors: fly
+--- art
+.
+--- art
+,
+--- art
+'

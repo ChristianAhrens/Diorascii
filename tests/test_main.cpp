@@ -166,7 +166,11 @@ TEST(embedded_assets_all_load) {
                         "splat", "earth", "lander", "rover", "meteor", "meteorite", "flash", "debris",
                         "dust", "flag", "rock", "pine_big", "pine_small", "oak", "bush", "cloud_big",
                         "cloud_small", "flower", "reeds", "bird", "deer", "rabbit", "duck", "eagle",
-                        "raindrop", "splash", "sun_big", "moon_big", "firefly", "butterfly"})
+                        "raindrop", "splash", "sun_big", "moon_big", "firefly", "butterfly", "dune_big",
+                        "dune_small", "pyramid_big", "pyramid_small", "oasis", "funnel", "sandgrain",
+                        "sandspray", "sandpuff", "dustburst", "palm_big", "palm_small", "cactus_big",
+                        "cactus_small", "boulder", "tent", "campfire", "camel", "horse", "gazelle",
+                        "lion", "vulture", "bat", "tumbleweed"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -889,8 +893,8 @@ TEST(sleeping_animals_stay_put_are_not_hunted_and_scenes_without_a_cycle_ignore_
 
 TEST(most_aquarium_and_forest_animals_sleep_at_night_but_not_by_day) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest"}) {
-    World world(pack, pack.scene(name), 400, 36, 2);
+  for (const char* name : {"aquarium", "forest", "desert"}) {
+    World world(pack, pack.scene(name), 600, 36, 2);
     auto species = [](const Entity& e) { return e.sprite->props().num("sleeps", 0) > 0; };
     size_t total = 0;
     for (auto& e : world.entities()) total += species(*e);
@@ -1223,6 +1227,34 @@ TEST(a_tornado_throws_animals_into_the_air_and_they_land_dazed_and_walk_on) {
   CHECK(hit->x == landed);
   for (int i = 0; i < 20; ++i) world.step(0.05);
   CHECK(hit->x != landed);                  // and then it walks on
+}
+
+TEST(the_desert_has_herds_a_lion_that_hunts_and_a_storm_on_f) {
+  AssetPack pack = AssetPack::embedded();
+  auto desert = pack.scene("desert");
+  CHECK(desert != nullptr);
+  CHECK(desert->action.kind == SceneDef::Action::Kind::Weather && !desert->action.extra.empty());
+  CHECK(desert->dayNight && !desert->events.empty());
+
+  World world(pack, desert, 400, 32, 3);  // wide enough for several herds of each kind
+  size_t horses = 0, camels = 0, gazelles = 0;
+  for (auto& e : world.entities()) {
+    horses += e->sprite->name() == "horse";
+    camels += e->sprite->name() == "camel";
+    gazelles += e->sprite->name() == "gazelle";
+  }
+  CHECK(horses >= 4 && camels >= 2 && gazelles >= 2);  // whole herds, not single animals
+
+  bool lionSeen = false;
+  for (uint64_t seed = 1; seed <= 4 && world.eatenCount() == 0; ++seed) {
+    World w(pack, desert, 120, 32, seed);
+    for (int i = 0; i < 3000 && w.eatenCount() == 0; ++i) {
+      w.step(0.05);
+      for (auto& e : w.entities()) lionSeen |= e->sprite->name() == "lion";
+    }
+    if (w.eatenCount() > 0) CHECK(lionSeen);  // only the lion hunts here
+  }
+  CHECK(lionSeen);
 }
 
 TEST(earth_tones_and_sand_are_available_to_sprites) {

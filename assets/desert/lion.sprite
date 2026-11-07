@@ -1,0 +1,33 @@
+name: lion
+facing: right
+habitat: ground
+speed: 10..14
+depth: 4..9
+lanes: 7
+fps: 8
+mouth-row: 1
+feast-time: 3.5
+hunt-effect: dustburst
+contrast: yes
+dust-rate: 5
+behaviors: chase hunt walk emit_dust
+--- art
+       ,#.
+  ,__.'oo >
+ (_____.-~)~
+  /\   /\
+--- mask
+       ooo
+  OOOOOOW O
+ OOOOOOOOOOO
+  OO   OO
+--- art
+       ,#.
+  ,__.'oo >
+ (_____.-~)~
+   \/ \/
+--- mask
+       ooo
+  OOOOOOW O
+ OOOOOOOOOOO
+   OO OO

@@ -1,0 +1,15 @@
+name: cactus_big
+facing: right
+habitat: ground
+speed: 0..0
+depth: 10..18
+lanes: 7
+color: #6fcf6a
+--- art
+  _
+ | |
+_| |_
+| | |
+|_| |_
+  | |
+  |_|

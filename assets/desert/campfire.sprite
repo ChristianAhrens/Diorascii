@@ -1,0 +1,20 @@
+name: campfire
+habitat: ground
+depth: 8
+glow: yes
+active: night
+fps: 5
+color: #ffb347
+random-frame: yes
+--- art
+ )(
+(^^)
+ \/
+--- art
+ ()
+(^ )
+ \/
+--- art
+ (
+(^^)
+ /\

@@ -1,0 +1,59 @@
+# Desert: dunes and pyramids, an oasis with palms, camel caravans, herds of wild horses,
+# bouncing gazelle and the lion that hunts them. F brings a sandstorm or a tornado.
+name: desert
+title: Desert
+order: 17
+
+medium: no
+sky-fraction: 1
+sky: #4f9ee0 #f4dfb0
+ground-colors: #dbb56b #c29852
+ground-glyphs: .   ,    '  :       .   `    
+ground-rows: 7
+stars: 16
+gravity: 5
+day-night: yes
+day-length: 240
+start-hour: 10
+sun-sprite: sun_big
+moon-sprite: moon_big
+action: weather sandgrain funnel
+action-label: Sandstorm or tornado
+weather-duration: 16
+overcast-tint: #c98e4c 0.75
+event-first: 10..20
+event-interval: 30..70
+
+--- population
+# sprite       mode       amount (herds count as one)
+dune_big       per-cols   60
+dune_small     per-cols   38
+palm_small     per-cols   50
+cactus_big     per-cols   45
+cactus_small   per-cols   40
+boulder        per-cols   60
+camel          per-cols   170
+horse          per-cols   210
+gazelle        per-cols   120
+tumbleweed     per-cols   80
+vulture        per-cols   90
+cloud_small    per-cols   150
+bat            per-cols   70
+
+--- decor
+# sprite       align      margin
+pyramid_big    left       6
+pyramid_small  left       30
+pyramid_small  right      34
+oasis          center     0     y -5
+palm_big       center     -13
+palm_big       center     12
+palm_small     center     -17
+palm_small     center     16
+reeds          center     -9    y -8
+reeds          center     8     y -8
+tent           right      10
+campfire       right      22
+
+--- events
+lion           1

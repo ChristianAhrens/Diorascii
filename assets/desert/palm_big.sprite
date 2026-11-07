@@ -1,0 +1,26 @@
+name: palm_big
+facing: right
+habitat: ground
+speed: 0..0
+depth: 12..18
+lanes: 1
+--- art
+    \ | /
+ ,-.-\|/-.-,
+'  .-\|/-.  `
+      |
+      )
+      |
+      (
+      |
+      |
+--- mask
+    G G G
+ GGGGGGGGGGG
+G  GGGGGGG  G
+      N
+      N
+      N
+      N
+      N
+      N

@@ -1,0 +1,16 @@
+name: pyramid_small
+habitat: ground
+solid: yes
+depth: 31
+--- art
+    ^
+   / \
+  /   \
+ /     \
+/       \
+--- mask
+    S
+   SsS
+  SsssS
+ SsssssS
+SsssssssS

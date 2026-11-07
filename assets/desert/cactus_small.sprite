@@ -1,0 +1,12 @@
+name: cactus_small
+facing: right
+habitat: ground
+speed: 0..0
+depth: 8..16
+lanes: 7
+color: #7ad675
+--- art
+ _
+| |_
+|_  |
+  |_|

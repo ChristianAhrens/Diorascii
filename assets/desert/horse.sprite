@@ -1,0 +1,44 @@
+name: horse
+facing: right
+habitat: ground
+speed: 9..13
+depth: 4..9
+lanes: 7
+herd: 4..7
+herd-spacing: 5
+fps: 9
+pool: earth
+contrast: yes
+dust-rate: 4
+sleeps: 0.7
+behaviors: walk emit_dust
+--- art
+     ,/|
+ ___/ o>
+(   \_)
+ / /  \ \
+--- mask
+     111
+ 1111 W1
+1   111
+ 1 1  1 1
+--- art
+     ,/|
+ ___/ o>
+(   \_)
+ | |  | |
+--- mask
+     111
+ 1111 W1
+1   111
+ 1 1  1 1
+--- art
+     ,/|
+ ___/ o>
+(   \_)
+ \ \  / /
+--- mask
+     111
+ 1111 W1
+1   111
+ 1 1  1 1

@@ -1,0 +1,15 @@
+name: dune_small
+facing: right
+habitat: ground
+solid: yes
+speed: 0..0
+lanes: 1
+depth: 22..26
+--- art
+     .------.
+  /            \
+/                \
+--- mask
+     SSSSSSSS
+  SSSSSSSSSSSSSS
+SSSSSSSSSSSSSSSSSS

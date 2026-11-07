@@ -1,0 +1,20 @@
+name: tumbleweed
+facing: right
+habitat: ground
+speed: 4..9
+depth: 4..9
+lanes: 7
+fps: 8
+hop-period: 0.8
+hop-height: 0.9
+color: #e9d29c
+contrast: yes
+behaviors: hop
+--- art
+(@)
+--- art
+(&)
+--- art
+(%)
+--- art
+(#)

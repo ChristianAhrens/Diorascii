@@ -1,0 +1,14 @@
+name: sandspray
+tag: spray
+random-frame: yes
+ttl: 1.2..2.4
+color: #e8cd96
+behaviors: ballistic
+--- art
+.
+--- art
+,
+--- art
+*
+--- art
+'

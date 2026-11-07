@@ -1,0 +1,12 @@
+name: boulder
+facing: right
+habitat: ground
+speed: 0..0
+depth: 10..18
+lanes: 7
+color: #c2a074
+contrast: yes
+--- art
+  _.--._
+ /      \
+(________)

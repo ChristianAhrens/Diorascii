@@ -1,0 +1,10 @@
+name: tent
+habitat: ground
+depth: 12
+color: #d9b88a
+--- art
+    /\
+   /  \
+  / /\ \
+ / /  \ \
+/_/____\_\

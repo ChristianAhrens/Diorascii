@@ -1,0 +1,17 @@
+name: dune_big
+facing: right
+habitat: ground
+solid: yes
+speed: 0..0
+lanes: 1
+depth: 28..30
+--- art
+         .----------.
+      /                \
+   /                      \
+/                            \
+--- mask
+         TTTTTTTTTTTT
+      TTTTTTTTTTTTTTTTTT
+   TTTTTTTTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT

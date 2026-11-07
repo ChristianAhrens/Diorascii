@@ -1,0 +1,17 @@
+name: bat
+facing: right
+habitat: sky
+altitude: 10
+speed: 4..8
+depth: 10..18
+active: night
+fps: 6
+random-frame: yes
+bob-amplitude: 2
+bob-frequency: 2.2
+color: #cfc6e8
+behaviors: wander
+--- art
+^o^
+--- art
+vov

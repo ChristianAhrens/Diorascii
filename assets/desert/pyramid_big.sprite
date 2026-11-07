@@ -1,0 +1,22 @@
+name: pyramid_big
+habitat: ground
+solid: yes
+depth: 31
+--- art
+       ^
+      / \
+     /   \
+    /     \
+   /       \
+  /         \
+ /           \
+/             \
+--- mask
+       S
+      SsS
+     SsssS
+    SsssssS
+   SsssssssS
+  SsssssssssS
+ SsssssssssssS
+SsssssssssssssS

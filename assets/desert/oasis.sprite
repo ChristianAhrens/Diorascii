@@ -1,0 +1,53 @@
+name: oasis
+habitat: ground
+solid: yes
+depth: 16
+fps: 2
+--- art
+
+
+
+--- mask
+CCCCCcccccccccCCCCCccccc
+CCCcccccccccCCCCCccccccc
+CcccccccccCCCCCccccccccc
+--- art
+
+
+
+--- mask
+CCCcccccccccCCCCCccccccc
+CcccccccccCCCCCccccccccc
+ccccccccCCCCCcccccccccCC
+--- art
+
+
+
+--- mask
+CcccccccccCCCCCccccccccc
+ccccccccCCCCCcccccccccCC
+ccccccCCCCCcccccccccCCCC
+--- art
+
+
+
+--- mask
+ccccccccCCCCCcccccccccCC
+ccccccCCCCCcccccccccCCCC
+ccccCCCCCcccccccccCCCCCc
+--- art
+
+
+
+--- mask
+ccccccCCCCCcccccccccCCCC
+ccccCCCCCcccccccccCCCCCc
+ccCCCCCcccccccccCCCCCccc
+--- art
+
+
+
+--- mask
+ccccCCCCCcccccccccCCCCCc
+ccCCCCCcccccccccCCCCCccc
+CCCCCcccccccccCCCCCccccc

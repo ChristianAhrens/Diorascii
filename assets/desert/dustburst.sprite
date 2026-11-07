@@ -1,0 +1,17 @@
+name: dustburst
+fps: 7
+loop: no
+die-after-animation: yes
+color: #f0d9a0
+--- art
+ :
+:*:
+ :
+--- art
+. : .
+ :*:
+. : .
+--- art
+ . '
+.   .
+ ' .

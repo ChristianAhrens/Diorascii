@@ -1,0 +1,13 @@
+name: sandpuff
+tag: puff
+fps: 6
+loop: no
+die-after-animation: yes
+color: #efd9a8
+behaviors: ballistic
+--- art
+.
+--- art
+:
+--- art
+'

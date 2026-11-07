@@ -19,6 +19,7 @@ start-hour: 11
 sun-sprite: sun_big
 moon-sprite: moon_big
 action: drop food
+overcast-tint: #24103e 0.6
 action-label: Feed the fish
 event-first: 8..16
 event-interval: 40..90
@@ -47,3 +48,6 @@ coral        random      0
 shark        3
 ship         2
 whale        2
+
+--- rare
+kraken         1

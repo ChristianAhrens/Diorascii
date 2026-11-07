@@ -1,0 +1,16 @@
+name: spark
+glow: yes
+fps: 9
+loop: no
+die-after-animation: yes
+color: #fff3a0
+--- art
+ *
+--- art
+\|/
+-*-
+/|\
+--- art
+ . '
+.   .
+ ' .

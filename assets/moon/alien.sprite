@@ -1,0 +1,35 @@
+name: alien
+facing: right
+habitat: ground
+speed: 5..7
+depth: 3
+fps: 3
+wipes: rover flag
+strike-effect: flash
+screen-flash: 0.3
+strike-at: 0.5
+behaviors: catastrophe
+--- art
+ \  |  /
+  (@  @)
+   \__/
+  /|  |\
+   /  \
+--- mask
+ G  G  G
+  GG  GG
+   GGGG
+  GG  GG
+   G  G
+--- art
+ \  |  /
+  (@  @)
+   \__/
+  /|  |\
+   |  |
+--- mask
+ G  G  G
+  GG  GG
+   GGGG
+  GG  GG
+   G  G

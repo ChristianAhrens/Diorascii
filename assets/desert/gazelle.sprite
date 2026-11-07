@@ -13,6 +13,7 @@ pool: earth
 contrast: yes
 dust-rate: 0.8
 sleeps: 0.7
+life: yes
 behaviors: hop emit_dust
 --- art
   ,\

@@ -11,6 +11,7 @@ random-frame: yes
 bob-amplitude: 1.5
 bob-frequency: 0.9
 color: #d8f060
+life: yes
 behaviors: wander
 --- art
 *

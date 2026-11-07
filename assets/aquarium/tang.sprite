@@ -5,6 +5,7 @@ speed: 3..7
 depth: 4..17
 tag: prey
 sleeps: 0.7
+life: yes
 behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.04
 pool: any

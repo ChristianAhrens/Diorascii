@@ -5,6 +5,7 @@ speed: 1.5..3
 depth: 19
 fps: 3
 sleeps: 0.7
+life: yes
 behaviors: walk
 pool: warm
 --- art

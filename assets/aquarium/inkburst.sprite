@@ -1,0 +1,15 @@
+name: inkburst
+fps: 7
+loop: no
+die-after-animation: yes
+color: #8a3fb8
+--- art
+ @
+--- art
+ ##
+####
+ ##
+--- art
+ .  .
+.      .
+ .  .

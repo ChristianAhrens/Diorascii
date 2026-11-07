@@ -5,6 +5,7 @@ anchor-row: 4
 speed: 3..5
 depth: 6
 fps: 3
+life: yes
 behaviors: swim
 color: #6f87a8
 --- art

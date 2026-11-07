@@ -4,6 +4,7 @@ habitat: medium
 speed: 2..4
 depth: 17..20
 sleeps: 0.7
+life: yes
 behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.08
 mouth-row: 2

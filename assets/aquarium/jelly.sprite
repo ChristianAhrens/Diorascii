@@ -5,6 +5,7 @@ speed: 0.6..1.6
 depth: 6..14
 fps: 2.5
 sleeps: 0.5
+life: yes
 behaviors: swim bob
 bob-amplitude: 2.5
 bob-frequency: 0.8

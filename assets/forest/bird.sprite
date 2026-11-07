@@ -9,6 +9,7 @@ bob-amplitude: 1.2
 bob-frequency: 1.1
 color: #33363f
 active: day
+life: yes
 behaviors: wander
 --- art
 \v/

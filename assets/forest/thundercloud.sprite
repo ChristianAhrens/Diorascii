@@ -1,0 +1,44 @@
+name: thundercloud
+facing: right
+habitat: sky
+row: 1
+solid: yes
+speed: 7..9
+depth: 2
+fps: 6
+tag: gloom
+wipes: life
+strike-effect: spark
+strike-sprite: lightning
+screen-flash: 0.5
+storm-rain: 7
+strike-at: 0.5
+behaviors: catastrophe
+--- art
+          ___________________
+     (                           )
+ (                                   )
+(
+  (                                 )
+        (                     )
+--- mask
+          KKKKKKKKKKKKKKKKKKK
+     KkkkkkkkkkkkkkkkkkkkkkkkkkkkK
+ KkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkK
+Kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+  KkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkK
+        KkkkkkkkkkkkkkkkkkkkkkK
+--- art
+          ___________________
+     (                           )
+ (                                   )
+(
+  (                                 )
+        (                     )
+--- mask
+          KKKKKKKKKKKKKKKKKKK
+     KkkkkkkkkkkkkkkkkkkkkkkkkkkkK
+ KkkkkkkkkkkkkkkwkkkkkkwkkkkkkkkkkkkkK
+Kkkkkkkkkkkkkkkkwwkkkkkkwkkkkkkkkkkkkk
+  KkkkkkkkkkkkkkkwkkkkkkkkkkkkkkkkkkK
+        KkkkkkkkkkkkkkkkkkkkkkK

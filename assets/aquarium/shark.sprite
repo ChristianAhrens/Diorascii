@@ -3,6 +3,7 @@ facing: right
 habitat: medium
 speed: 14..20
 depth: 2
+life: yes
 behaviors: swim hunt
 mouth-row: 4
 color: #8fa6bd

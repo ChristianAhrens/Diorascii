@@ -10,6 +10,7 @@ feast-time: 3.5
 hunt-effect: dustburst
 contrast: yes
 dust-rate: 5
+life: yes
 behaviors: chase hunt walk emit_dust
 --- art
        ,#.

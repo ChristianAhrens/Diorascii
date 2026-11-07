@@ -11,6 +11,7 @@ pool: earth
 contrast: yes
 dust-rate: 4
 sleeps: 0.7
+life: yes
 behaviors: walk emit_dust
 --- art
      ,/|

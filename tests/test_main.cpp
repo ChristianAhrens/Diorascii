@@ -170,7 +170,8 @@ TEST(embedded_assets_all_load) {
                         "dune_small", "pyramid_big", "pyramid_small", "oasis", "funnel", "sandgrain",
                         "sandspray", "sandpuff", "dustburst", "palm_big", "palm_small", "cactus_big",
                         "cactus_small", "boulder", "tent", "campfire", "camel", "horse", "gazelle",
-                        "lion", "vulture", "bat", "tumbleweed"})
+                        "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
+                        "lightning", "spark", "sandworm", "alien"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -1476,6 +1477,57 @@ TEST(a_catastrophe_can_wipe_out_named_sprites_only_and_what_was_planted_is_plant
   for (auto& e : world.entities()) {
     if (e->sprite->name() == "flag") CHECK(e->x == flagX);
   }
+}
+
+TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
+  AssetPack pack = AssetPack::embedded();
+  struct Case { const char* scene; const char* attacker; };
+  for (const Case& c : {Case{"aquarium", "kraken"}, Case{"forest", "thundercloud"}, Case{"desert", "sandworm"},
+                        Case{"moon", "alien"}}) {
+    auto scene = pack.scene(c.scene);
+    CHECK(scene && scene->rare.size() == 1 && scene->rare[0].sprite == c.attacker);
+    World world(pack, scene, 160, 36, 3);
+    const bool animals = std::string(c.scene) != "moon";
+    size_t lifeBefore = 0;
+    for (auto& e : world.entities()) lifeBefore += e->life;
+    CHECK(!animals || lifeBefore > 10);
+    CHECK(world.triggerRare());
+    bool struck = false;
+    for (int i = 0; i < 3000 && !struck; ++i) {
+      world.step(0.05);
+      struck = world.killedCount() > 0;
+    }
+    CHECK(struck);
+    if (!struck) continue;
+    if (animals) {
+      size_t aliveLife = 0;
+      for (auto& e : world.entities()) aliveLife += (e->life && !e->dead);
+      CHECK(aliveLife == 0);                      // everything alive is gone, in a single moment
+      CHECK(world.killedCount() > 0);
+      CHECK(world.restockPending() >= lifeBefore);  // and every one of them comes back later, one by one
+    } else {
+      CHECK(countSprite(world, "rover") == 0 && countSprite(world, "flag") == 0);  // the alien's targets
+      CHECK(world.killedCount() == 2 + 0 || world.killedCount() >= 1);
+      CHECK(countSprite(world, "alien") == 1);
+    }
+    if (std::string(c.scene) == "forest") {
+      CHECK(world.flashing());                    // lightning
+      CHECK(world.raining());                     // and a downpour
+    }
+  }
+}
+
+TEST(the_moon_alien_only_destroys_the_rover_and_the_flag_and_both_are_replaced_later) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("moon"), 120, 30, 5);
+  size_t rocks = countSprite(world, "rock"), landers = countSprite(world, "lander");
+  CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
+  world.triggerRare();
+  for (int i = 0; i < 3000 && world.killedCount() == 0; ++i) world.step(0.05);
+  CHECK(world.killedCount() == 2);
+  CHECK(countSprite(world, "rock") == rocks && countSprite(world, "lander") == landers);  // nothing else
+  for (int i = 0; i < 1500; ++i) world.step(0.05);  // well over a minute later
+  CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
 }
 
 TEST(a_wipe_also_takes_what_was_spawned_in_the_same_step) {

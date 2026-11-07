@@ -1,0 +1,120 @@
+name: kraken
+facing: right
+habitat: ground
+solid: yes
+speed: 5..7
+depth: 1
+fps: 3
+tag: gloom
+wipes: life
+strike-effect: inkburst
+strike-at: 0.5
+behaviors: catastrophe
+--- art
+             _____________________
+          /                         \
+       /                               \
+      /                                 \
+     /                                   \
+    /                                     \
+    /                                     \
+
+
+
+
+
+
+
+
+
+
+--- mask
+             MMMMMMMMMMMMMMMMMMMMM
+          MmmmmmmmmmmmmmmmmmmmmmmmmmM
+       MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+      MmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmM
+     MmmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmmM
+    MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+    MmmmmmmmmmmmmmmmmKKKKKmmmmmmmmmmmmmmmmM
+      mm     mm    mm mm mm mm    mm     mm
+      mm     mm  mm mm  mm   mm     mm      mm
+      mm    mm mm  mm   mm    mm      mm
+     mm   mm mm   mm    mm      mm      mm
+    mm  mm  mm    mm      mm      mm      mm
+ mm  mm    mm      mm       mm      mm    mm
+m   mm     mm       mm       mm     mm    mm
+   mm       mm       mm       mm    mm   mm
+    mm       mm       mm     mm    mm   mm
+    mm        mm      mm    mm    mm    mm
+--- art
+             _____________________
+          /                         \
+       /                               \
+      /                                 \
+     /                                   \
+    /                                     \
+    /                                     \
+
+
+
+
+
+
+
+
+
+
+--- mask
+             MMMMMMMMMMMMMMMMMMMMM
+          MmmmmmmmmmmmmmmmmmmmmmmmmmM
+       MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+      MmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmM
+     MmmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmmM
+    MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+    MmmmmmmmmmmmmmmmmKKKKKmmmmmmmmmmmmmmmmM
+         mm  mm mm mm  mm     mm     mm     mm
+       mm  mm mm  mm    mm      mm     mm   mm
+     mm  mm  mm   mm      mm      mm    mm   m
+   mm  mm   mm     mm       mm     mm   mm  mm
+mm   mm     mm       mm      mm    mm   mm  mm
+     mm      mm       mm     mm    mm  mm   mm
+     mm       mm       mm    mm   mm   mm    m
+      mm       mm     mm    mm   mm    mm
+       mm      mm    mm   mm    mm      mm
+       mm     mm    mm   mm      mm       mm
+--- art
+             _____________________
+          /                         \
+       /                               \
+      /                                 \
+     /                                   \
+    /                                     \
+    /                                     \
+
+
+
+
+
+
+
+
+
+
+--- mask
+             MMMMMMMMMMMMMMMMMMMMM
+          MmmmmmmmmmmmmmmmmmmmmmmmmmM
+       MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+      MmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmM
+     MmmmmmmmmYKYmmmmmmmmmmmmmYKYmmmmmmmmM
+    MmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmM
+    MmmmmmmmmmmmmmmmmKKKKKmmmmmmmmmmmmmmmmM
+       mm mm  mm   mm     mm     mm    mm mm
+     mm mm   mm     mm     mm     mm   mm mm
+  mm   mm    mm      mm      mm   mm  mm mm
+mm     mm     mm      mm     mm   mm mm   mm
+m      mm      mm      mm    mm  mm  mm    mm
+m       mm      mm     mm  mm   mm   mm      m
+m       mm      mm   mm   mm   mm     mm
+mm      mm     mm   mm   mm     mm      mm
+mm     mm    mm   mm     mm      mm        mm
+m     mm   mm    mm      mm        mm        m

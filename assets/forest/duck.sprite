@@ -6,6 +6,7 @@ speed: 1..2.5
 depth: 12
 fps: 2
 sleeps: 0.7
+life: yes
 behaviors: swim
 --- art
     _o>

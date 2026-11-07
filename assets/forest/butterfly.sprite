@@ -10,6 +10,7 @@ random-frame: yes
 bob-amplitude: 1
 bob-frequency: 1.6
 pool: warm
+life: yes
 behaviors: wander
 --- art
 }{

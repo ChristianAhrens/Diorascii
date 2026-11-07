@@ -16,32 +16,72 @@ debug build and runs the tests. Assets are embedded into the binary at build tim
 
 ## Run
 
-    diorascii                     # q quit, p pause, r restart, i info
-    diorascii --dump 100          # headless: print the scene after 100 steps
-    diorascii --assets ./my-art   # add or override sprites from a directory
+    diorascii                       # q quit, p pause, r restart, i info, f feed, left/right scene
+    diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
+    diorascii --dump 100            # headless: print the scene after 100 steps
+    diorascii --gallery             # print every sprite (art review)
+    diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
-## Add your own creature
+## Extending: sprites
 
-Drop a `*.sprite` file into a directory and pass it with `--assets` (or into
-`assets/` to ship it). Example:
+A `*.sprite` file is a header of `key: value` lines followed by one or more
+`--- art` frames, each optionally followed by a `--- mask`. Drop it into a
+directory and pass `--assets DIR` (or put it in `assets/` to ship it).
 
     name: darter
     facing: right            # direction the art points
+    habitat: medium          # medium (water) | surface | sky | ground
     speed: 9..18             # cells per second
     depth: 3..16             # draw order, larger = further away
-    spawn-per-cells: 230     # one per N cells of open water
-    behaviors: swim emit_bubbles
+    tag: prey                # lets behaviors find it (prey, food, ...)
+    behaviors: seek_food swim emit_bubbles
     pool: warm               # color pool for mask digits 1-9
     --- art
     <=={o>
     --- mask
     2111W1
 
+Other keys: `fps`, `loop: no`, `die-after-animation: yes`, `color: #rrggbb`
+(default color), `slope` (diagonal flight), `anchor-row` (row that sits on the
+surface line), `mouth-row`, `bubble-rate`, `bob-amplitude`, `bob-frequency`.
+
 Mask rules: `1`-`9` use the creature's randomized palette, letters are fixed
 colors (`W`hite `R`ed `G`reen `B`lue `C`yan `Y`ellow `M`agenta `O`range blac`K`;
 lower case = darker), a space is the default color. A space in the art with
-mask `_` is opaque, with a color letter it is a solid block of that color. Add
-more `--- art` / `--- mask` pairs for animation frames; set `fps:`.
+mask `_` is opaque, with a color letter it is a solid block of that color.
+
+Behaviors: `swim` (horizontal, leaves the world at the edge), `fly` (both
+axes), `bob`, `rise` (bubbles), `sink` (food), `emit_bubbles`, `seek_food`
+(chase and eat food flakes), `hunt` (eat sprites tagged `prey`).
+
+## Extending: scenes
+
+A `*.scene` file describes a whole world as data; sprites are shared between
+scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
+
+    name: aquarium
+    title: Aquarium
+    sky: #06081c #223462            # top and bottom colors
+    medium-colors: #1e7896 #051642  # surface and deep (omit with "medium: no")
+    ground-colors: #967c52 #765e3c
+    sky-fraction: 0.2               # share of the height above the surface (1 = all sky)
+    ground-rows: 2
+    stars: 23                       # one star per N sky cells
+    feed: food                      # what the f key drops
+    event-interval: 12..35          # seconds between rare visitors
+
+    --- population                  # <sprite> per-cells|per-cols|count <n>
+    darter  per-cells  230
+    @seaweed per-cols  15           # built-in procedural plant
+
+    --- decor                       # <sprite> left|right|center|random <margin> [y <row>]
+    castle  right  2
+
+    --- events                      # <sprite> <weight>; one at a time
+    shark   3
+
+Scene files are checked on load: a reference to a sprite that does not exist is
+reported as an error instead of being silently ignored.
 
 ## Layout
 
@@ -56,5 +96,6 @@ other frontends (SDL window, tvOS) can be added without touching it.
 
 ## Status
 
-Aquarium slice only: waterline, stars, seabed, seaweed, four creatures, bubbles.
-The Windows backend is written but has not been compiled yet.
+Two scenes (aquarium, moon) with 21 original sprites; feeding, predation and
+scheduled events work. Switching scenes uses the left/right arrow keys for now;
+a proper ASCII menu comes later.

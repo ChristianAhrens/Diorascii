@@ -1,0 +1,25 @@
+name: Linux
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset release
+      - name: Build
+        run: cmake --build build/release -j
+      - name: Test
+        run: ctest --test-dir build/release --output-on-failure
+      - name: Check binary dependencies
+        run: ldd build/release/src/diorascii
+      - name: Package
+        run: cd build/release && cpack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diorascii-linux
+          path: build/release/diorascii-*.tar.gz

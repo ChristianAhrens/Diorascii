@@ -10,6 +10,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# Reported by --version and used for package names. Release builds pass the pushed
+# tag here (x.y.z); everyone else gets the version declared in project() above.
+set(DIORASCII_VERSION "${PROJECT_VERSION}" CACHE STRING "Version string compiled into the binary")
+
 option(DIORASCII_BUILD_TESTS "Build the test suite" ON)
 option(DIORASCII_STATIC_RUNTIME "Link the C/C++ runtime statically (single-file binary)" ON)
 
@@ -55,7 +59,7 @@ install(TARGETS diorascii RUNTIME DESTINATION bin)
 install(FILES LICENSE README.md DESTINATION share/doc/diorascii)
 
 set(CPACK_PACKAGE_NAME diorascii)
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_VERSION ${DIORASCII_VERSION})
 set(CPACK_PACKAGE_VENDOR "Diorascii contributors")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 if(WIN32)

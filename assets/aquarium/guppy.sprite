@@ -1,0 +1,13 @@
+name: guppy
+facing: right
+habitat: medium
+speed: 3..7
+depth: 3..16
+tag: prey
+behaviors: seek_food swim emit_bubbles
+bubble-rate: 0.02
+pool: any
+--- art
+=<o>
+--- mask
+21W1

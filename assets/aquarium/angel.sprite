@@ -1,0 +1,21 @@
+name: angel
+facing: right
+habitat: medium
+speed: 2..5
+depth: 6..18
+behaviors: seek_food swim emit_bubbles
+bubble-rate: 0.03
+mouth-row: 2
+pool: any
+--- art
+   /\
+  /  \
+><( o >
+  \  /
+   \/
+--- mask
+   11
+  1__1
+221_W_1
+  1__1
+   11

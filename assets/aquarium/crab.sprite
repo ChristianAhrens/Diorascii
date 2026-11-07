@@ -1,0 +1,20 @@
+name: crab
+facing: right
+habitat: ground
+speed: 1.5..3
+depth: 19
+fps: 3
+behaviors: swim
+pool: warm
+--- art
+ \/(o_o)\/
+   // \\
+--- mask
+ 221W1W122
+   22 22
+--- art
+ \/(o_o)\/
+   \\ //
+--- mask
+ 221W1W122
+   22 22

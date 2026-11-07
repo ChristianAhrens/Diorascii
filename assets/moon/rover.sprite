@@ -1,0 +1,24 @@
+name: rover
+facing: right
+habitat: ground
+speed: 1.5..2.5
+depth: 15
+fps: 3
+behaviors: swim
+color: #d8d8e0
+--- art
+   ___
+ _/_|_\_
+(+)---(+)
+--- mask
+   
+ 
+ W     W
+--- art
+   ___
+ _/_|_\_
+(x)---(x)
+--- mask
+   
+ 
+ W     W

@@ -1,0 +1,14 @@
+name: coral
+habitat: ground
+depth: 20
+pool: warm
+--- art
+  ,  ,  ,
+ \|/\|/ |/
+  \|/ \|/
+   |   |
+--- mask
+  1  2  3
+ 111111 11
+  111 111
+   1   1

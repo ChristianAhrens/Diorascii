@@ -1,0 +1,17 @@
+name: puffer
+facing: right
+habitat: medium
+speed: 2..4
+depth: 5..18
+behaviors: seek_food swim emit_bubbles
+bubble-rate: 0.06
+mouth-row: 1
+pool: warm
+--- art
+  ,-""-.
+>( .  o)
+  `-..-'
+--- mask
+  111111
+21_3__W1
+  111111

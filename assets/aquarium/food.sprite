@@ -1,0 +1,9 @@
+name: food
+tag: food
+color: #ffd166
+fps: 4
+behaviors: sink
+--- art
+*
+--- art
++

@@ -1,0 +1,15 @@
+name: splat
+fps: 6
+loop: no
+die-after-animation: yes
+color: #e04848
+--- art
+ *
+--- art
+\|/
+-*-
+/|\
+--- art
+ . '
+' . '
+ ' .

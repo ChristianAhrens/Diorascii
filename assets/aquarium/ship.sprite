@@ -1,0 +1,24 @@
+name: ship
+facing: right
+habitat: surface
+anchor-row: 6
+speed: 3..5
+depth: 8
+color: #ddd6c4
+behaviors: swim
+--- art
+       |>
+       |
+      /|\
+     / | \
+    /__|__\
+ ___/__|__\___
+ \___________/
+--- mask
+       WR
+
+
+
+
+ ooooooooooooo
+ ooooooooooooo

@@ -1,0 +1,11 @@
+name: meteor
+facing: right
+habitat: sky
+speed: 35..55
+slope: 0.35
+depth: 4
+behaviors: fly
+--- art
+.:-=*
+--- mask
+kkcWW

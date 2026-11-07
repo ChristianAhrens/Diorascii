@@ -1,0 +1,22 @@
+name: shark
+facing: right
+habitat: medium
+speed: 14..20
+depth: 2
+behaviors: swim hunt
+mouth-row: 4
+color: #8fa6bd
+--- art
+              _
+             / \
+      ___.--'   `--.__
+ |\  /                `-._
+ | >=     ^   o          `>
+ |/  \_  `-..__.--.___..-'
+       `-._ ___.-'
+--- mask
+
+
+
+
+              W

@@ -1,0 +1,15 @@
+name: lander
+habitat: ground
+depth: 22
+color: #c9c9d2
+--- art
+    .-^-.
+   /_____\
+  |_|___|_|
+   /|   |\
+  / |   | \
+ `` `   ' ''
+--- mask
+         
+         
+  

@@ -1,0 +1,26 @@
+name: eel
+facing: right
+habitat: medium
+speed: 3..6
+depth: 8..18
+fps: 4
+behaviors: swim
+pool: any
+--- art
+.-.   .-.     
+   `-'   `-'o>
+--- mask
+111   111     
+   111   111W1
+--- art
+.   .-.   .-  
+ `-'   `-'  o>
+--- mask
+1   111   11  
+ 111   111  W1
+--- art
+  .-.   .-.   
+-'   `-'   `o>
+--- mask
+  111   111   
+11   111   1W1

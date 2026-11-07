@@ -1,0 +1,20 @@
+name: earth
+habitat: sky
+depth: 30
+solid: yes
+--- art
+   .---.
+  /     \
+ /       \
+|         |
+ \       /
+  \     /
+   `---'
+--- mask
+   BBBBB
+  BbggbbB
+ BbbgggbbB
+BbgggbbbgbB
+ BbbbggbbB
+  BbbbbbB
+   BBBBB

@@ -16,7 +16,8 @@ debug build and runs the tests. Assets are embedded into the binary at build tim
 
 ## Run
 
-    diorascii                       # q quit, p pause, r restart, i info, f feed, left/right scene
+    diorascii                       # q quit, p pause, r restart, i info, f feed, c style, left/right scene
+    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --gallery             # print every sprite (art review)

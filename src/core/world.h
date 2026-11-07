@@ -87,7 +87,7 @@ class World {
   void step(double dt);
   /// Draws the scene into out.
   /// @param style how colorful to draw
-  void render(Frame& out) const;
+  void render(Frame& out, Style style = Style::Full) const;
 
   /// Drops food into the scene (up to 10 flakes at once). Returns how many were added.
   int feed();
@@ -157,7 +157,7 @@ class World {
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
-  void renderBackground(Frame& out) const;
+  void renderBackground(Frame& out, Style style) const;
 
   /// Not owned; must outlive the world.
   const AssetPack* pack_;

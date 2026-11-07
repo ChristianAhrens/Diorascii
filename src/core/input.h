@@ -32,6 +32,7 @@ enum class Action {
   Select,
   /// Cancel (opens the menu, or closes it).
   Back,
+  Style,  ///< cycle full -> terminal -> mono colors
 };
 
 }  // namespace dio

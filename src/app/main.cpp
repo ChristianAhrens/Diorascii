@@ -41,6 +41,8 @@ struct Options {
   bool forceTrueColor = false, force256 = false;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
+  /// Render style (--style).
+  Style style = Style::Full;
 };
 
 /// Prints the command line help.
@@ -53,6 +55,7 @@ void usage() {
       "  --seed N         deterministic run\n"
       "  --assets DIR     load extra/override *.sprite and *.scene files from DIR\n"
       "  --fps N          frame rate (default 20)\n"
+      "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
@@ -60,7 +63,7 @@ void usage() {
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: q quit | p/space pause | r restart | i info | f feed | left/right switch scene");
+      "keys: left/right scene | c style | f feed | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -74,6 +77,15 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--fps") { const char* v = next(); if (!v) return false; o.fps = std::atof(v); if (o.fps < 1) o.fps = 1; }
     else if (a == "--dump") { const char* v = next(); if (!v) return false; o.dumpSteps = std::atoi(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
+    else if (a == "--style") {
+      const char* v = next();
+      if (!v) return false;
+      const std::string n = v;
+      if (n == "full") o.style = Style::Full;
+      else if (n == "terminal") o.style = Style::Terminal;
+      else if (n == "mono") o.style = Style::Mono;
+      else return false;
+    }
     else if (a == "--truecolor") o.forceTrueColor = true;
     else if (a == "--256") o.force256 = true;
     else if (a == "--list-scenes") o.listScenes = true;
@@ -86,21 +98,19 @@ bool parseArgs(int argc, char** argv, Options& o) {
 }
 
 /// Draws the info line (version, scene, size, entity count, seed, fps) in row 0.
-void drawInfo(Frame& f, const World& w, bool paused, double fps) {
-  const Rgb fg{235, 235, 235}, bg{20, 20, 30};
+void drawInfo(Frame& f, const World& w, bool paused, double fps, Style style) {
   char line[128];
   std::snprintf(line, sizeof(line), " diorascii %s | %s | %dx%d | %zu entities | seed %llu | %.0f fps%s ",
                 DIORASCII_VERSION, w.scene().name.c_str(), w.width(), w.height(), w.entityCount(),
                 static_cast<unsigned long long>(w.seed()), fps, paused ? " | PAUSED" : "");
-  drawText(f, 0, 0, line, fg, bg);
+  drawLabel(f, 0, 0, line, style);
 }
 
 /// Draws a short centered message, for example the scene title after a switch.
-void drawToast(Frame& f, const std::string& text) {
+void drawToast(Frame& f, const std::string& text, Style style) {
   const std::string padded = "  " + text + "  ";
   const int len = static_cast<int>(decodeUtf8(padded).size());
-  drawText(f, std::max((f.width() - len) / 2, 0), std::max(f.height() / 2 - 1, 0), padded,
-           {255, 255, 255}, {20, 20, 30});
+  drawLabel(f, std::max((f.width() - len) / 2, 0), std::max(f.height() / 2 - 1, 0), padded, style);
 }
 
 /// Prints every sprite (first two frames) for art review.
@@ -182,6 +192,7 @@ int main(int argc, char** argv) {
   int w = 80, h = 24;
   term.size(w, h);
   uint64_t seed = opt.seed;
+  Style style = opt.style;
   auto world = std::make_unique<World>(pack, scenes[sceneIdx], w, h, seed);
   Frame cur, prev;
   bool havePrev = false, paused = false, info = false;
@@ -193,6 +204,12 @@ int main(int argc, char** argv) {
   double measuredFps = opt.fps;
   auto lastFrame = clock::now();
 
+  auto switchScene = [&](size_t idx) {
+    sceneIdx = idx % scenes.size();
+    toast = scenes[sceneIdx]->title;
+    toastLeft = 2.0;
+  };
+
   while (!term.quitRequested()) {
     bool quit = false, rebuild = false;
     for (Action a : term.poll(5)) {
@@ -202,13 +219,12 @@ int main(int argc, char** argv) {
         case Action::Info: info = !info; break;
         case Action::Feed: world->feed(); break;
         case Action::Redraw: rebuild = true; ++seed; break;
-        case Action::Left:
-        case Action::Right:
-          sceneIdx = (sceneIdx + (a == Action::Right ? 1 : scenes.size() - 1)) % scenes.size();
-          toast = scenes[sceneIdx]->title;
-          toastLeft = 2.0;
-          rebuild = true;
+        case Action::Style:
+          style = static_cast<Style>((static_cast<int>(style) + 1) % 3);
+          havePrev = false;
           break;
+        case Action::Left: switchScene(sceneIdx + scenes.size() - 1); rebuild = true; break;
+        case Action::Right: switchScene(sceneIdx + 1); rebuild = true; break;
         default: break;
       }
     }
@@ -232,13 +248,15 @@ int main(int argc, char** argv) {
     if (elapsed > 0) measuredFps = measuredFps * 0.9 + (1.0 / elapsed) * 0.1;
 
     if (!paused) world->step(dt);
-    world->render(cur);
-    if (info) drawInfo(cur, *world, paused, measuredFps);
+    world->render(cur, style);
+    if (info) drawInfo(cur, *world, paused, measuredFps, style);
     if (toastLeft > 0) {
-      drawToast(cur, toast);
+      drawToast(cur, toast, style);
       toastLeft -= dt;
     }
-    term.write(encodeFrame(havePrev ? &prev : nullptr, cur, term.colorMode()));
+    // The terminal style uses the user's 16 ANSI colors so it follows their theme.
+    const ColorMode mode = style == Style::Terminal ? ColorMode::Ansi16 : term.colorMode();
+    term.write(encodeFrame(havePrev ? &prev : nullptr, cur, mode));
     prev = cur;
     havePrev = true;
   }

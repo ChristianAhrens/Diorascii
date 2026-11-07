@@ -433,7 +433,7 @@ void World::step(double dt) {
 
 // ---------------------------------------------------------------- render ---
 
-void World::renderBackground(Frame& out) const {
+void World::renderBackground(Frame& out, Style style) const {
   const SceneDef& sc = *scene_;
   for (int y = 0; y < h_; ++y) {
     for (int x = 0; x < w_; ++x) {
@@ -465,14 +465,16 @@ void World::renderBackground(Frame& out) const {
         c.fg = sc.surfaceFg;
         c.bg = sc.mediumTop;
       }
+      if (style != Style::Full) c.defaultBg = true;  // no backdrop in the terminal styles
+      if (style == Style::Mono) c.defaultFg = true;
       out.at(x, y) = c;
     }
   }
 }
 
-void World::render(Frame& out) const {
+void World::render(Frame& out, Style style) const {
   out.resize(w_, h_);
-  renderBackground(out);
+  renderBackground(out, style);
 
   std::vector<const Entity*> order;
   order.reserve(entities_.size());
@@ -493,10 +495,14 @@ void World::render(Frame& out) const {
         if (ch == U' ') {
           if (m == U' ') continue;
           cell.ch = U' ';
-          if (m != U'_') cell.bg = maskColor(m, *e);
+          if (m != U'_') {  // solid block: keeps its color unless the style is monochrome
+            cell.bg = maskColor(m, *e);
+            cell.defaultBg = style == Style::Mono;
+          }
         } else {
           cell.ch = ch;
           cell.fg = maskColor(m, *e);
+          cell.defaultFg = style == Style::Mono;
         }
       }
     }

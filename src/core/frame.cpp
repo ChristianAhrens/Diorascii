@@ -30,6 +30,23 @@ void drawText(Frame& f, int x, int y, std::string_view utf8, Rgb fg, Rgb bg) {
       c.fg = fg;
       c.bg = bg;
       c.bold = false;
+      c.defaultFg = c.defaultBg = c.reverse = false;
+    }
+    ++x;
+  }
+}
+
+void drawLabel(Frame& f, int x, int y, std::string_view utf8, Style style) {
+  if (style == Style::Full) {
+    drawText(f, x, y, utf8, {240, 240, 240}, {20, 20, 30});
+    return;
+  }
+  for (char32_t ch : decodeUtf8(utf8)) {
+    if (f.inBounds(x, y)) {
+      Cell c;
+      c.ch = ch;
+      c.defaultFg = c.defaultBg = c.reverse = true;
+      f.at(x, y) = c;
     }
     ++x;
   }

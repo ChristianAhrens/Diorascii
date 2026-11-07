@@ -10,6 +10,12 @@
 
 namespace dio {
 
+/// How colorful a scene is drawn.
+///   Full     - gradient backdrops and the scene's own colors
+///   Terminal - no backdrop: the terminal's own background, sprites in the 16 ANSI colors
+///   Mono     - no color at all: the terminal's own foreground and background
+enum class Style { Full, Terminal, Mono };
+
 /// One character cell of a frame: a glyph, its colors and attributes.
 struct Cell {
   /// Unicode code point drawn in the cell (a space for an empty cell).
@@ -20,9 +26,15 @@ struct Cell {
   Rgb bg{0, 0, 0};
   /// Bold weight.
   bool bold = false;
+  bool defaultFg = false;  ///< use the terminal's own foreground instead of `fg`
+  bool defaultBg = false;  ///< use the terminal's own background instead of `bg`
+  /// Swap foreground and background (reverse video).
+  bool reverse = false;
   /// Compares what would be drawn: colors only count when not defaulted.
   friend bool operator==(const Cell& a, const Cell& b) {
-    return a.ch == b.ch && a.fg == b.fg && a.bg == b.bg && a.bold == b.bold;
+    return a.ch == b.ch && a.bold == b.bold && a.reverse == b.reverse &&
+           a.defaultFg == b.defaultFg && a.defaultBg == b.defaultBg &&
+           (a.defaultFg || a.fg == b.fg) && (a.defaultBg || a.bg == b.bg);
   }
 };
 
@@ -59,5 +71,9 @@ class Frame {
 
 /// Draws UTF-8 text with a solid background (used by the UI layer).
 void drawText(Frame& f, int x, int y, std::string_view utf8, Rgb fg, Rgb bg);
+
+/// Small overlay label (info line, toast): light-on-dark in Full style, reverse
+/// video in the terminal styles so it follows the user's theme.
+void drawLabel(Frame& f, int x, int y, std::string_view utf8, Style style);
 
 }  // namespace dio

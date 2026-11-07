@@ -24,22 +24,47 @@ int rgbTo256(Rgb c) {
   return grayDist < cubeDist ? 232 + gi : 16 + 36 * r + 6 * g + b;
 }
 
+int rgbToAnsi16(Rgb c) {
+  // xterm's default palette; index 0 (black) is deliberately left out.
+  static const Rgb pal[16] = {{0, 0, 0},       {205, 0, 0},     {0, 205, 0},     {205, 205, 0},
+                              {0, 0, 238},     {205, 0, 205},   {0, 205, 205},   {229, 229, 229},
+                              {127, 127, 127}, {255, 0, 0},     {0, 255, 0},     {255, 255, 0},
+                              {92, 92, 255},   {255, 0, 255},   {0, 255, 255},   {255, 255, 255}};
+  int best = 8, bestD = 1 << 30;
+  for (int i = 1; i < 16; ++i) {
+    const int dr = c.r - pal[i].r, dg = c.g - pal[i].g, db = c.b - pal[i].b;
+    const int d = dr * dr + dg * dg + db * db;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
 namespace {
 
-/// Appends the decimal text of v.
-void appendNum(std::string& s, int v) { s += std::to_string(v); }
-
-/// Appends the SGR parameters that select color c as foreground or background.
-void appendColor(std::string& s, bool fg, Rgb c, ColorMode mode) {
-  if (mode == ColorMode::TrueColor) {
-    s += fg ? "38;2;" : "48;2;";
-    appendNum(s, c.r); s += ';';
-    appendNum(s, c.g); s += ';';
-    appendNum(s, c.b);
-  } else {
-    s += fg ? "38;5;" : "48;5;";
-    appendNum(s, rgbTo256(c));
+/// SGR parameter that selects color c as foreground or background in the given mode.
+std::string colorParam(bool fg, Rgb c, ColorMode mode) {
+  switch (mode) {
+    case ColorMode::TrueColor:
+      return std::string(fg ? "38;2;" : "48;2;") + std::to_string(c.r) + ';' + std::to_string(c.g) +
+             ';' + std::to_string(c.b);
+    case ColorMode::Ansi256:
+      return std::string(fg ? "38;5;" : "48;5;") + std::to_string(rgbTo256(c));
+    case ColorMode::Ansi16: {
+      const int i = rgbToAnsi16(c);
+      const int base = fg ? (i < 8 ? 30 : 90) : (i < 8 ? 40 : 100);
+      return std::to_string(base + (i & 7));
+    }
   }
+  return "";
+}
+
+/// True if both cells show the same foreground (defaults compare equal).
+bool sameFg(const Cell& a, const Cell& b) {
+  return a.defaultFg == b.defaultFg && (a.defaultFg || a.fg == b.fg);
+}
+/// True if both cells show the same background (defaults compare equal).
+bool sameBg(const Cell& a, const Cell& b) {
+  return a.defaultBg == b.defaultBg && (a.defaultBg || a.bg == b.bg);
 }
 
 }  // namespace
@@ -58,19 +83,21 @@ std::string encodeFrame(const Frame* prev, const Frame& cur, ColorMode mode) {
       if (!full && prev->at(x, y) == c) continue;
 
       if (x != nextX) {
-        out += "\x1b[";
-        appendNum(out, y + 1); out += ';';
-        appendNum(out, x + 1); out += 'H';
+        out += "\x1b[" + std::to_string(y + 1) + ';' + std::to_string(x + 1) + 'H';
       }
-      if (!haveStyle || style.fg != c.fg || style.bg != c.bg || style.bold != c.bold) {
-        out += "\x1b[";
-        if (!haveStyle || style.bold != c.bold) out += c.bold ? "1;" : "22;";
-        if (!haveStyle || style.fg != c.fg) { appendColor(out, true, c.fg, mode); out += ';'; }
-        if (!haveStyle || style.bg != c.bg) { appendColor(out, false, c.bg, mode); out += ';'; }
-        out.back() = 'm';
-        style = c;
-        haveStyle = true;
-      }
+      std::string params;
+      auto add = [&params](const std::string& p) {
+        if (!params.empty()) params += ';';
+        params += p;
+      };
+      if (!haveStyle || style.bold != c.bold) add(c.bold ? "1" : "22");
+      if (!haveStyle || style.reverse != c.reverse) add(c.reverse ? "7" : "27");
+      if (!haveStyle || !sameFg(style, c)) add(c.defaultFg ? "39" : colorParam(true, c.fg, mode));
+      if (!haveStyle || !sameBg(style, c)) add(c.defaultBg ? "49" : colorParam(false, c.bg, mode));
+      if (!params.empty()) out += "\x1b[" + params + 'm';
+      style = c;
+      haveStyle = true;
+
       appendUtf8(out, c.ch);
       nextX = x + 1;
     }

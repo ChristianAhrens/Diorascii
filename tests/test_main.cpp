@@ -86,6 +86,7 @@ TEST(props_parse_colors) {
   CHECK(s->props().color("missing", {9, 9, 9}) == (Rgb{9, 9, 9}));
 }
 
+
 // A mask color on a blank art cell paints a solid block. That is only intended
 // for sprites that say so (`solid: yes`); anywhere else it is a mask typo, such
 // as a mask row that is shifted against the art.
@@ -258,6 +259,48 @@ TEST(moon_has_no_medium_and_ground_walkers_stand_on_the_ground) {
   CHECK(f.height() == 30);
 }
 
+
+// -------------------------------------------------------------------- styles ---
+
+TEST(styles_control_backdrop_and_color_use) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("aquarium"), 100, 30, 4);
+  for (int i = 0; i < 100; ++i) world.step(0.05);
+
+  Frame full, term, mono;
+  world.render(full, Style::Full);
+  world.render(term, Style::Terminal);
+  world.render(mono, Style::Mono);
+  CHECK(full.toText() == term.toText() && full.toText() == mono.toText());  // same glyphs
+
+  for (int y = 0; y < 30; ++y) {
+    for (int x = 0; x < 100; ++x) {
+      CHECK(!full.at(x, y).defaultBg);
+      CHECK(term.at(x, y).defaultBg);                     // the terminal's own background
+      CHECK(mono.at(x, y).defaultBg && mono.at(x, y).defaultFg);
+    }
+  }
+  bool anyColoredGlyph = false;
+  for (int y = 0; y < 30; ++y) {
+    for (int x = 0; x < 100; ++x) {
+      const Cell& c = term.at(x, y);
+      anyColoredGlyph |= c.ch != U' ' && !c.defaultFg;
+    }
+  }
+  CHECK(anyColoredGlyph);  // the terminal style still colors the sprites
+}
+
+TEST(solid_blocks_keep_their_color_in_terminal_style_but_not_in_mono) {
+  AssetPack pack = miniPack("--- decor\nblock left 0 y 1\n",
+                            {"name: block\nhabitat: sky\nsolid: yes\n--- art\n  \n--- mask\nbb\n"});
+  World world(pack, pack.scene("t"), 20, 12, 1);
+  Frame term, mono;
+  world.render(term, Style::Terminal);
+  world.render(mono, Style::Mono);
+  CHECK(!term.at(0, 1).defaultBg);
+  CHECK(mono.at(0, 1).defaultBg);
+}
+
 // ------------------------------------------------------------------ terminal ---
 
 TEST(vt_diff_is_minimal) {
@@ -275,6 +318,38 @@ TEST(rgb_to_256_hits_cube_and_gray) {
   CHECK(rgbTo256({255, 0, 0}) == 196);
   CHECK(rgbTo256({0, 0, 0}) == 16 || rgbTo256({0, 0, 0}) == 232);
   CHECK(rgbTo256({128, 128, 128}) >= 232);
+}
+
+
+TEST(vt_default_colors_and_reverse_use_terminal_theme) {
+  Frame a(4, 1), b(4, 1);
+  for (int x = 0; x < 4; ++x) { b.at(x, 0).defaultFg = b.at(x, 0).defaultBg = true; }
+  b.at(1, 0).reverse = true;
+  b.at(1, 0).ch = U'X';
+  const std::string d = encodeFrame(&a, b, ColorMode::TrueColor);
+  CHECK(d.find("39") != std::string::npos && d.find("49") != std::string::npos);
+  CHECK(d.find("38;2") == std::string::npos && d.find("48;2") == std::string::npos);
+  CHECK(d.find(";7") != std::string::npos || d.find("[7") != std::string::npos);
+}
+
+TEST(vt_ansi16_uses_named_colors_only_and_never_black_text) {
+  Frame a(3, 1), b(3, 1);
+  b.at(0, 0).ch = U'a'; b.at(0, 0).fg = {255, 0, 0};
+  b.at(1, 0).ch = U'b'; b.at(1, 0).fg = {70, 70, 85};   // dark: must not become invisible black
+  b.at(2, 0).ch = U'c'; b.at(2, 0).fg = {240, 240, 240};
+  const std::string d = encodeFrame(&a, b, ColorMode::Ansi16);
+  CHECK(d.find("38;") == std::string::npos);  // no extended color sequences
+  CHECK(d.find("91") != std::string::npos);   // bright red
+  CHECK(d.find("90") != std::string::npos);   // bright black (dark gray) for the dark color
+  CHECK(d.find("30") == std::string::npos);   // plain black is never used for text
+}
+
+TEST(rgb_to_ansi16_maps_to_named_colors) {
+  CHECK(rgbToAnsi16({255, 0, 0}) == 9);
+  CHECK(rgbToAnsi16({0, 255, 255}) == 14);
+  CHECK(rgbToAnsi16({255, 255, 255}) == 15);
+  CHECK(rgbToAnsi16({0, 0, 0}) != 0);
+  CHECK(rgbToAnsi16({70, 70, 85}) == 8);
 }
 
 int main() {

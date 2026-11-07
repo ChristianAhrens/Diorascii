@@ -1,7 +1,8 @@
 name: bubble
-kind: effect
+habitat: medium
 fps: 2.5
 loop: no
+color: #6fb4d0
 behaviors: rise
 --- art
 .

@@ -1,11 +1,11 @@
 name: grouper
-kind: creature
 facing: right
+habitat: medium
 speed: 2..4
 depth: 17..20
-spawn-per-cells: 3200
-behaviors: swim emit_bubbles
+behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.08
+mouth-row: 2
 pool: cool
 --- art
      ,-""""-.

@@ -1,10 +1,10 @@
 name: darter
-kind: creature
 facing: right
+habitat: medium
 speed: 5..10
 depth: 3..16
-spawn-per-cells: 520
-behaviors: swim emit_bubbles
+tag: prey
+behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.03
 pool: warm
 --- art

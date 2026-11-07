@@ -1,10 +1,10 @@
 name: tang
-kind: creature
 facing: right
+habitat: medium
 speed: 3..7
 depth: 4..17
-spawn-per-cells: 750
-behaviors: swim emit_bubbles
+tag: prey
+behaviors: seek_food swim emit_bubbles
 bubble-rate: 0.04
 pool: any
 --- art

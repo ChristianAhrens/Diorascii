@@ -1,9 +1,8 @@
 name: jelly
-kind: creature
 facing: right
+habitat: medium
 speed: 0.6..1.6
 depth: 6..14
-spawn-per-cells: 1500
 fps: 2.5
 behaviors: swim bob
 bob-amplitude: 2.5

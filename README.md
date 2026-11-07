@@ -30,16 +30,17 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
 ## Usage
 
-    diorascii                       # m menu, left/right scene, f action, c style, t time of day, i info, p pause, r restart, q quit
+    diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
+    diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
-The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, resume
+The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, resume
 and quit. It is drawn into the same cell grid as the scene and driven only by abstract
 actions (up, down, left, right, select, back), so any input device can use it.
 
@@ -76,6 +77,23 @@ carries over when you switch scenes. The info line (`i`) shows the clock.
 
 In the terminal styles the cycle shows in the stars, the sun and moon and the creatures
 coming and going; the colors themselves stay with your terminal theme.
+
+### Rare events
+
+Every scene has a rare catastrophe that turns up every few minutes (the first one after
+two to five minutes) and wipes out life. It is announced by its arrival: it crosses the
+scene, strikes halfway across, and moves on. Press `x`, or choose *Rare event* in the menu,
+to summon it right away instead of waiting.
+
+| Scene | Catastrophe | What happens |
+|---|---|---|
+| Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and at the middle it **kills every animal**: fish, jellyfish, eels, crabs, shark and whale burst into ink |
+| Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
+| Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **swallows every animal** |
+| Moon | Alien | an alien walks across the surface and **destroys the rover and the flagpole**, and nothing else |
+
+The dead do not stay dead: they come back one by one over the next minute or so, animals
+walking in from the edges and the flagpole planted again. Sleeping animals die unseen.
 
 ### Styles
 
@@ -141,6 +159,11 @@ Header keys:
 | `feast-time`, `hunt-effect` | for hunters: how long they stay put after a kill, and the sprite shown at the kill |
 | `dust-rate` | puffs of dust kicked up per second by `emit_dust` |
 | `wind: yes` | a particle that is blown across the whole scene (sand), for a weather action |
+| `life: yes` | a living thing: catastrophes that wipe out life take it |
+| `row: 2` | pinned to this row (a negative number counts from the bottom) |
+| `wipes`, `strike-at`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out, how far across the scene (0 to 1) it strikes, and the sprite shown on every victim |
+| `strike-sprite`, `screen-flash`, `storm-rain` | a bolt that hits the ground under the attacker, seconds of screen flashing (two quick flashes), and seconds of rain it brings (needs a weather action in the scene) |
+| `tag: gloom` | the scene darkens (like heavy weather) while this sprite is around |
 | `backing: 0.5` | darkens the background behind the sprite's glyphs by this share (full style only), so light sprites stay readable on bright and dark backdrops |
 | `hop-period`, `hop-height` | seconds per hop and hop height in rows, for the `hop` behavior |
 | `destructible: no` | survives meteor strikes (ground sprites are destructible by default) |
@@ -169,6 +192,7 @@ Behaviors:
 | `hunt` | eats every sprite tagged `prey` that its mouth touches; counts kills and can feast afterwards |
 | `chase` | runs down the closest `prey`: turns towards it, changes lane to line up and closes in; gives up after its first kill |
 | `emit_dust` | kicks up puffs of dust behind its feet |
+| `catastrophe` | crosses the scene and strikes once, wiping out `life` or named sprites; the victims come back later, one by one |
 | `twister` | a tornado: weaves across the scene, whirls up sand and throws animals in its path into the air |
 | `ballistic` | thrown under the scene's gravity, gone when it lands (debris, dust) |
 | `meteorite` | streaks down and strikes the ground where its head arrives |
@@ -204,6 +228,8 @@ scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
     sun-sprite: sun_big             # sprites that cross the sky by day and by night
     moon-sprite: moon_big
     event-interval: 12..35          # seconds between rare visitors
+    rare-first: 150..300            # seconds until the first rare catastrophe, and between later ones:
+    rare-interval: 300..600
 
     --- population                  # <sprite> per-cells|per-cols|count <n>
     darter  per-cells  230
@@ -214,6 +240,9 @@ scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
 
     --- events                      # <sprite> <weight>; one at a time
     shark   3
+
+    --- rare                        # <sprite> <weight>; one catastrophe at a time, on a slow timer
+    kraken  1
 
 The scene's colors are its daytime look; the night look is derived from them. The
 river takes at most half of the ground rows at the bottom, and a ground of more than a
@@ -275,7 +304,8 @@ other frontends (SDL window, tvOS) can be added without touching it.
 
 Four scenes (aquarium, forest, desert, moon) with original sprites; feeding, predation, rain,
 sandstorms and tornadoes, meteor strikes with craters, herds, a hunting lion, a day and night
-cycle with sleeping animals, scheduled events, three render styles and an ASCII menu work.
+cycle with sleeping animals, scheduled events, rare catastrophes (kraken, thunderstorm, sandworm,
+alien), three render styles and an ASCII menu work.
 Planned: a mountain scene with its own action, and windowed and tvOS frontends.
 
 ## License

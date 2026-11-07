@@ -44,6 +44,8 @@ class Menu {
   void setValue(const std::string& id, size_t value);  ///< no event is emitted
   /// Changes the text of an entry, for example when the scene action changes.
   void setLabel(const std::string& id, std::string label);
+  /// Replaces the options of a choice, for example when a scene offers different ones.
+  void setOptions(const std::string& id, std::vector<std::string> options, size_t value = 0);
   /// Currently selected option of a choice.
   size_t value(const std::string& id) const;
 

@@ -47,6 +47,13 @@ void Menu::setLabel(const std::string& id, std::string label) {
   if (Item* it = find(id)) it->label = std::move(label);
 }
 
+void Menu::setOptions(const std::string& id, std::vector<std::string> options, size_t value) {
+  Item* it = find(id);
+  if (!it || options.empty()) return;
+  it->options = std::move(options);
+  it->value = std::min(value, it->options.size() - 1);
+}
+
 size_t Menu::value(const std::string& id) const {
   for (const auto& it : items_) {
     if (it.id == id) return it.value;

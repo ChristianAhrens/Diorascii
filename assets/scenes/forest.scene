@@ -15,6 +15,12 @@ river-flow: 2.5
 action: weather raindrop
 action-label: Make it rain
 weather-duration: 18
+stars: 20
+day-night: yes
+day-length: 240
+start-hour: 10
+sun-sprite: sun_big
+moon-sprite: moon_big
 event-first: 6..14
 event-interval: 25..60
 
@@ -31,6 +37,8 @@ bird           per-cols   40
 deer           per-cols   38
 rabbit         per-cols   50
 duck           per-cols   45
+butterfly      per-cols   18
+firefly        per-cols   5
 
 --- decor
 # sprite       align      margin

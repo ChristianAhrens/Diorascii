@@ -1,0 +1,18 @@
+name: firefly
+facing: right
+habitat: sky
+altitude: 8
+speed: 0.5..1.5
+depth: 6..14
+glow: yes
+active: night
+fps: 1.5
+random-frame: yes
+bob-amplitude: 1.5
+bob-frequency: 0.9
+color: #d8f060
+behaviors: wander
+--- art
+*
+--- art
+.

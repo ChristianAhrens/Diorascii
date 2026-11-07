@@ -1,0 +1,12 @@
+name: sun_big
+glow: yes
+solid: yes
+habitat: sky
+--- art
+ \|/
+-( )-
+ /|\
+--- mask
+ YYY
+YYYYY
+ YYY

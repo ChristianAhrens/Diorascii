@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 
 namespace dio {
@@ -49,6 +50,58 @@ Rgb maskColor(char32_t m, const Entity& e) {
     default: return e.fg;
   }
   return (m >= U'a' && m <= U'z') ? scale(base, 0.6) : base;
+}
+
+/// Backdrop color at the given light: fades towards a dark blue at night.
+Rgb backdrop(Rgb c, const Light& l) {
+  if (l.day >= 1.0) return c;
+  return lerp(lerp(c, {6, 9, 30}, 0.82), c, l.day);
+}
+
+/// Color of a thing in the world at the given light: darker and bluer at night.
+Rgb shade(Rgb c, const Light& l) {
+  if (l.day >= 1.0) return c;
+  const Rgb night{static_cast<uint8_t>(c.r * 0.72), static_cast<uint8_t>(c.g * 0.78),
+                  static_cast<uint8_t>(c.b * 0.95)};
+  return lerp(night, c, l.day);
+}
+
+/// True if the entity is shown at the given light.
+bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
+  if (!hasCycle || e.active == Entity::Active::Always) return true;
+  return e.active == Entity::Active::Day ? l.sun > 0.35 : l.sun < 0.35;
+}
+
+/// Draws one entity into out, shaded for the light, skipping rows from maxRow down.
+void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) {
+  const SpriteFrame& f = e.sprite->frame(e.mirrored, e.frame);
+  const int ox = static_cast<int>(std::floor(e.x));
+  const int oy = static_cast<int>(std::floor(e.y));
+  auto colorOf = [&](char32_t m) {
+    const Rgb c = maskColor(m, e);
+    return e.glow ? c : shade(c, l);
+  };
+  for (int r = 0; r < e.height(); ++r) {
+    for (int c = 0; c < e.width(); ++c) {
+      const int px = ox + c, py = oy + r;
+      if (!out.inBounds(px, py) || py >= maxRow) continue;
+      const char32_t ch = f.art[r][c], m = f.mask[r][c];
+      Cell& cell = out.at(px, py);
+      if (ch == U' ') {
+        if (m == U' ') continue;
+        cell.ch = U' ';
+        if (m != U'_') {  // solid block: keeps its color unless the style is monochrome
+          cell.bg = colorOf(m);
+          cell.defaultBg = style == Style::Mono;
+        }
+      } else {
+        cell.ch = ch;
+        cell.fg = colorOf(m);
+        cell.defaultFg = style == Style::Mono;
+        if (e.backing > 0 && style == Style::Full) cell.bg = scale(cell.bg, 1 - e.backing);
+      }
+    }
+  }
 }
 
 /// Cheap deterministic hash of a cell position, for static noise such as stars.
@@ -237,6 +290,9 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.bobAmp = p.num("bob-amplitude", 1.5);
   e.bobFreq = p.num("bob-frequency", 1.0);
   e.mouthRow = static_cast<int>(p.num("mouth-row", e.height() / 2));
+  e.glow = p.str("glow", "no") == "yes";
+  const std::string active = p.str("active", "always");
+  e.active = active == "day" ? Entity::Active::Day : active == "night" ? Entity::Active::Night : Entity::Active::Always;
   e.hopPeriod = std::max(p.num("hop-period", 1.2), 0.1);
   e.hopHeight = p.num("hop-height", 1.5);
   e.phase = rng.range(0, 6.28);
@@ -284,6 +340,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
   crater_.assign(static_cast<size_t>(w_), 0.0);
+  phase_ = std::fmod(sc.startHour / 24.0, 1.0);
   populate();
 }
 
@@ -326,7 +383,12 @@ double World::habitatY(const Props& p, int spriteHeight) {
   if (habitat == "ground") return seabedY_ - spriteHeight;
   if (habitat == "river") return rng_.rangeInt(riverTopY_, std::max(h_ - spriteHeight, riverTopY_));
   if (habitat == "surface") return surfaceY_ - p.num("anchor-row", spriteHeight - 1);
-  if (habitat == "sky") return rng_.rangeInt(0, std::max(surfaceY_ - spriteHeight, 0));
+  if (habitat == "sky") {
+    if (p.has("altitude")) {  // hovering within a few rows above the ground
+      return std::max(surfaceY_ - spriteHeight - rng_.rangeInt(0, static_cast<int>(p.num("altitude", 0))), 0);
+    }
+    return rng_.rangeInt(0, std::max(surfaceY_ - spriteHeight, 0));
+  }
   const int lo = surfaceY_ + 2;
   return rng_.rangeInt(lo, std::max(seabedY_ - spriteHeight, lo));
 }
@@ -495,6 +557,42 @@ int World::interact() {
   return 0;
 }
 
+void World::setPhase(double phase) {
+  phase_ = std::fmod(std::fmod(phase, 1.0) + 1.0, 1.0);
+}
+
+void World::setTimeMode(TimeMode mode) {
+  if (!scene_->dayNight) return;
+  timeMode_ = mode;
+  switch (mode) {
+    case TimeMode::Dawn: phase_ = 0.27; break;
+    case TimeMode::Day: phase_ = 0.5; break;
+    case TimeMode::Dusk: phase_ = 0.73; break;
+    case TimeMode::Night: phase_ = 0.0; break;
+    case TimeMode::Cycle: break;  // carry on from the current time
+  }
+}
+
+Light World::light() const {
+  Light l;
+  if (!scene_->dayNight) return l;
+  constexpr double kTwoPi = 6.283185307179586;
+  const double height = -std::cos(kTwoPi * phase_);  // sun height: -1 at midnight, +1 at noon
+  const double t = std::clamp((height + 0.12) / 0.47, 0.0, 1.0);
+  l.sun = t * t * (3 - 2 * t);
+  l.day = l.sun * (1 - 0.5 * overcast_);
+  l.glow = std::exp(-(height / 0.22) * (height / 0.22)) * (1 - 0.6 * overcast_);
+  l.stars = 1 - l.sun;
+  return l;
+}
+
+std::string World::clockText() const {
+  const int minutes = static_cast<int>(std::lround(phase_ * 1440.0)) % 1440;  // rounds away float noise
+  char buf[8];
+  std::snprintf(buf, sizeof(buf), "%02d:%02d", minutes / 60, minutes % 60);
+  return buf;
+}
+
 void World::spawnRain(double dt) {
   const std::string& drop = scene_->action.sprite;
   const double want = 0.45 * w_ * dt;
@@ -588,6 +686,9 @@ void World::step(double dt) {
     rainLeft_ = std::max(0.0, rainLeft_ - dt);
     spawnRain(dt);
   }
+  if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
+  const double cloudTarget = rainLeft_ > 0 ? 1.0 : 0.0;
+  overcast_ += std::clamp(cloudTarget - overcast_, -0.25 * dt, 0.4 * dt);
   bool eventAlive = false;
   for (auto& e : entities_) {
     if (e->dead) continue;
@@ -618,22 +719,30 @@ void World::step(double dt) {
 
 // ---------------------------------------------------------------- render ---
 
-void World::renderBackground(Frame& out, Style style) const {
+void World::renderBackground(Frame& out, Style style, const Light& light) const {
   const SceneDef& sc = *scene_;
+  // The scene's colors are its daytime look; the light turns them into the current look.
+  const Rgb skyTop = lerp(backdrop(sc.skyTop, light), Rgb{110, 70, 130}, light.glow * 0.3);
+  const Rgb skyLow = lerp(backdrop(sc.skyLow, light), Rgb{255, 150, 80}, light.glow * 0.55);
+  const Rgb mediumTop = backdrop(sc.mediumTop, light), mediumDeep = backdrop(sc.mediumDeep, light);
+  const Rgb groundA = backdrop(sc.groundA, light), groundB = backdrop(sc.groundB, light);
+  const Rgb surfaceFg = backdrop(sc.surfaceFg, light);
+  const Rgb riverTop = backdrop(sc.riverTop, light), riverDeep = backdrop(sc.riverDeep, light);
+
   for (int y = 0; y < h_; ++y) {
     for (int x = 0; x < w_; ++x) {
       Cell c;
       const uint32_t h = hash2(x, y);
       if (y < surfaceY_) {
-        c.bg = lerp(sc.skyTop, sc.skyLow, surfaceY_ > 1 ? double(y) / (surfaceY_ - 1) : 1.0);
-        if (sc.starDensity > 0 && h % static_cast<uint32_t>(sc.starDensity) == 0) {  // twinkling stars
-          const bool bright = std::sin(time_ * 2.0 + (h >> 8)) > 0;
+        c.bg = lerp(skyTop, skyLow, surfaceY_ > 1 ? double(y) / (surfaceY_ - 1) : 1.0);
+        if (sc.starDensity > 0 && light.stars > 0.2 && h % static_cast<uint32_t>(sc.starDensity) == 0) {
+          const bool bright = std::sin(time_ * 2.0 + (h >> 8)) > 0;  // twinkling stars
           c.ch = bright ? U'*' : U'.';
-          c.fg = bright ? Rgb{250, 250, 220} : Rgb{150, 150, 170};
+          c.fg = lerp(c.bg, bright ? Rgb{250, 250, 220} : Rgb{150, 150, 170}, light.stars);
         }
       } else if (riverRows_ > 0 && y >= riverTopY_) {  // river: flowing ripples
         const double t = riverRows_ > 1 ? double(y - riverTopY_) / (riverRows_ - 1) : 0.0;
-        c.bg = lerp(sc.riverTop, sc.riverDeep, t);
+        c.bg = lerp(riverTop, riverDeep, t);
         const double flow = time_ * sc.riverFlow;
         const double v = std::sin(x * 0.6 - flow + y * 1.7) + 0.5 * std::sin(x * 0.23 - flow * 0.6);
         c.ch = v > 0.8 ? U'~' : v > 0.2 ? U'-' : (h % 9 == 0 ? U'.' : U' ');
@@ -641,30 +750,30 @@ void World::renderBackground(Frame& out, Style style) const {
       } else if (y >= seabedY_) {
         const int row = y - seabedY_;
         const int dug = craterRows(x);
-        c.bg = (y == seabedY_) ? sc.groundA : sc.groundB;
+        c.bg = (y == seabedY_) ? groundA : groundB;
         const auto& g = sc.groundGlyphs;
         c.ch = g.empty() ? U' ' : g[h % g.size()];
         c.fg = scale(c.bg, 1.35);
         if (row < dug) {  // dug out: open sky with the crater walls drawn as slopes
-          c.bg = sc.skyLow;
+          c.bg = skyLow;
           c.ch = craterRows(x - 1) <= row ? U'\\' : craterRows(x + 1) <= row ? U'/' : U' ';
-          c.fg = scale(sc.groundA, 0.9);
+          c.fg = scale(groundA, 0.9);
         } else if (row == dug && dug > 0) {
-          c.bg = sc.groundB;  // freshly exposed, darker floor
+          c.bg = groundB;  // freshly exposed, darker floor
         }
       } else {
         const double t = double(y - surfaceY_) / std::max(seabedY_ - surfaceY_, 1);
-        c.bg = lerp(sc.mediumTop, sc.mediumDeep, std::min(t * 1.2, 1.0));
+        c.bg = lerp(mediumTop, mediumDeep, std::min(t * 1.2, 1.0));
         if (y == surfaceY_ + 1 && hash2(x + static_cast<int>(time_ * 3), y) % 5 == 0) {
           c.ch = U'.';
-          c.fg = scale(sc.surfaceFg, 0.7);
+          c.fg = scale(surfaceFg, 0.7);
         }
       }
       if (hasMedium_ && y == surfaceY_ && sc.surfaceGlyphs.size() == 3) {  // animated waterline
         const double v = std::sin(x * 0.45 + time_ * 1.6) + 0.5 * std::sin(x * 0.17 - time_ * 0.7);
         c.ch = v > 0.5 ? sc.surfaceGlyphs[0] : v > -0.5 ? sc.surfaceGlyphs[1] : sc.surfaceGlyphs[2];
-        c.fg = sc.surfaceFg;
-        c.bg = sc.mediumTop;
+        c.fg = surfaceFg;
+        c.bg = mediumTop;
       }
       if (style != Style::Full) c.defaultBg = true;  // no backdrop in the terminal styles
       if (style == Style::Mono) c.defaultFg = true;
@@ -673,42 +782,38 @@ void World::renderBackground(Frame& out, Style style) const {
   }
 }
 
+void World::renderCelestial(Frame& out, Style style, const Light& light) const {
+  if (!scene_->dayNight || surfaceY_ <= 0 || overcast_ > 0.6) return;
+  constexpr double kPi = 3.14159265358979;
+  const bool byDay = phase_ >= 0.25 && phase_ <= 0.75;
+  // How far along its arc the body is: 0 as it rises, 1 as it sets.
+  const double u = byDay ? (phase_ - 0.25) / 0.5 : std::fmod(phase_ + 0.25, 1.0) / 0.5;
+  auto sprite = pack_->find(byDay ? scene_->sunSprite : scene_->moonSprite);
+  if (!sprite) return;
+  Entity body;
+  body.sprite = sprite;
+  body.glow = true;
+  body.fg = sprite->props().color("color", {255, 240, 180});
+  body.x = u * (w_ - 1) - sprite->width() / 2.0;
+  // At the horizon the whole body is just below it; it climbs to the top of the sky at mid-arc.
+  body.y = surfaceY_ * (1 - std::sin(kPi * u));
+  blit(out, body, style, light, surfaceY_);  // rows below the horizon stay hidden
+}
+
 void World::render(Frame& out, Style style) const {
   out.resize(w_, h_);
-  renderBackground(out, style);
+  const Light l = light();
+  renderBackground(out, style, l);
+  renderCelestial(out, style, l);
 
   std::vector<const Entity*> order;
   order.reserve(entities_.size());
-  for (const auto& e : entities_) order.push_back(e.get());
+  for (const auto& e : entities_) {
+    if (visibleNow(*e, l, scene_->dayNight)) order.push_back(e.get());
+  }
   std::stable_sort(order.begin(), order.end(),
                    [](const Entity* a, const Entity* b) { return a->z > b->z; });
-
-  for (const Entity* e : order) {
-    const SpriteFrame& f = e->sprite->frame(e->mirrored, e->frame);
-    const int ox = static_cast<int>(std::floor(e->x));
-    const int oy = static_cast<int>(std::floor(e->y));
-    for (int r = 0; r < e->height(); ++r) {
-      for (int c = 0; c < e->width(); ++c) {
-        const int px = ox + c, py = oy + r;
-        if (!out.inBounds(px, py)) continue;
-        const char32_t ch = f.art[r][c], m = f.mask[r][c];
-        Cell& cell = out.at(px, py);
-        if (ch == U' ') {
-          if (m == U' ') continue;
-          cell.ch = U' ';
-          if (m != U'_') {  // solid block: keeps its color unless the style is monochrome
-            cell.bg = maskColor(m, *e);
-            cell.defaultBg = style == Style::Mono;
-          }
-        } else {
-          cell.ch = ch;
-          cell.fg = maskColor(m, *e);
-          cell.defaultFg = style == Style::Mono;
-          if (e->backing > 0 && style == Style::Full) cell.bg = scale(cell.bg, 1 - e->backing);
-        }
-      }
-    }
-  }
+  for (const Entity* e : order) blit(out, *e, style, l, h_);
 }
 
 }  // namespace dio

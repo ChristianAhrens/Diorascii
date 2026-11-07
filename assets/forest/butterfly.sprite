@@ -1,0 +1,21 @@
+name: butterfly
+facing: right
+habitat: sky
+altitude: 7
+speed: 0.8..2
+depth: 6..14
+active: day
+fps: 4
+random-frame: yes
+bob-amplitude: 1
+bob-frequency: 1.6
+pool: warm
+behaviors: wander
+--- art
+}{
+--- mask
+11
+--- art
+)(
+--- mask
+11

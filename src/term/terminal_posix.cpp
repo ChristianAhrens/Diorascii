@@ -123,6 +123,7 @@ std::vector<Action> Terminal::poll(int timeoutMs) {
       case 'r': case 'R': actions.push_back(Action::Redraw); break;
       case 'm': case 'M': actions.push_back(Action::Menu); break;
       case 'c': case 'C': actions.push_back(Action::Style); break;
+      case 't': case 'T': actions.push_back(Action::Time); break;
       case ' ': actions.push_back(Action::Pause); break;
       case '\r': case '\n': actions.push_back(Action::Select); break;
       case 0x1b:

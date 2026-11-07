@@ -38,6 +38,8 @@ struct Options {
   int dumpAct = -1;    // with --dump: press the action key at this step
   /// Size used by --dump.
   int dumpWidth = 100, dumpHeight = 30;
+  /// Start time of day in hours (--hour); negative means the scene's own start time.
+  double hour = -1;
   /// Frame rate (--fps).
   double fps = 20;
   /// Force 24-bit or 256-color output (--truecolor, --256).
@@ -64,10 +66,11 @@ void usage() {
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
       "  --act N          with --dump: trigger the scene's action at step N\n"
+      "  --hour H         start at this time of day, 0 to 24 (scenes with a day and night cycle)\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: m/enter/esc menu | left/right scene | c style | f action (feed, meteor strike...) | i info | p pause | r restart | q quit");
+      "keys: m/enter/esc menu | left/right scene | c style | t time of day | f action (feed, rain, meteor...) | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -81,6 +84,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--fps") { const char* v = next(); if (!v) return false; o.fps = std::atof(v); if (o.fps < 1) o.fps = 1; }
     else if (a == "--dump") { const char* v = next(); if (!v) return false; o.dumpSteps = std::atoi(v); }
     else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
+    else if (a == "--hour") { const char* v = next(); if (!v) return false; o.hour = std::atof(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
     else if (a == "--style") {
       const char* v = next();
@@ -104,10 +108,11 @@ bool parseArgs(int argc, char** argv, Options& o) {
 
 /// Draws the info line (version, scene, size, entity count, seed, fps) in row 0.
 void drawInfo(Frame& f, const World& w, bool paused, double fps, Style style) {
-  char line[128];
-  std::snprintf(line, sizeof(line), " diorascii %s | %s | %dx%d | %zu entities | seed %llu | %.0f fps%s ",
+  char line[160];
+  const std::string clock = w.hasDayNight() ? " | " + w.clockText() : "";
+  std::snprintf(line, sizeof(line), " diorascii %s | %s | %dx%d | %zu entities | seed %llu | %.0f fps%s%s ",
                 DIORASCII_VERSION, w.scene().name.c_str(), w.width(), w.height(), w.entityCount(),
-                static_cast<unsigned long long>(w.seed()), fps, paused ? " | PAUSED" : "");
+                static_cast<unsigned long long>(w.seed()), fps, clock.c_str(), paused ? " | PAUSED" : "");
   drawLabel(f, 0, 0, line, style);
 }
 
@@ -121,6 +126,12 @@ void drawToast(Frame& f, const std::string& text, Style style) {
 /// Menu text for a render style.
 const char* styleName(Style s) {
   return s == Style::Full ? "Full color" : s == Style::Terminal ? "Terminal colors" : "Monochrome";
+}
+
+/// Options of the menu's time-of-day choice. Scenes without a cycle only have one.
+std::vector<std::string> timeOptions(bool hasCycle) {
+  if (!hasCycle) return {"No cycle"};
+  return {"Cycle", "Dawn", "Day", "Dusk", "Night"};
 }
 
 /// Prints every sprite (first two frames) for art review.
@@ -184,6 +195,7 @@ int main(int argc, char** argv) {
 
   if (opt.dumpSteps >= 0) {
     World world(pack, scenes[sceneIdx], opt.dumpWidth, opt.dumpHeight, opt.seed);
+    if (opt.hour >= 0) world.setHour(opt.hour);
     for (int i = 0; i < opt.dumpSteps; ++i) {
       if (i == opt.dumpAct) world.interact();
       world.step(1.0 / 20);
@@ -206,7 +218,16 @@ int main(int argc, char** argv) {
   term.size(w, h);
   uint64_t seed = opt.seed;
   Style style = opt.style;
-  auto world = std::make_unique<World>(pack, scenes[sceneIdx], w, h, seed);
+  // The time of day survives scene switches, restarts and resizes.
+  World::TimeMode timeMode = World::TimeMode::Cycle;
+  double carriedPhase = opt.hour >= 0 ? opt.hour / 24.0 : -1;
+  auto makeWorld = [&]() {
+    auto created = std::make_unique<World>(pack, scenes[sceneIdx], w, h, seed);
+    if (carriedPhase >= 0 && created->hasDayNight()) created->setPhase(carriedPhase);
+    created->setTimeMode(timeMode);
+    return created;
+  };
+  auto world = makeWorld();
   Frame cur, prev;
   bool havePrev = false, paused = false, info = false;
   std::string toast = scenes[sceneIdx]->title;
@@ -220,6 +241,7 @@ int main(int argc, char** argv) {
     menu.addChoice("style", "Style",
                    {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
                    static_cast<size_t>(style));
+    menu.addChoice("time", "Time of day", timeOptions(scenes[sceneIdx]->dayNight), 0);
     menu.addChoice("info", "Info line", {"off", "on"}, 0);
     menu.addButton("action", scenes[sceneIdx]->action.label);
     menu.addButton("resume", "Resume");
@@ -237,6 +259,7 @@ int main(int argc, char** argv) {
     toastLeft = 2.0;
     menu.setValue("scene", sceneIdx);
     menu.setLabel("action", scenes[sceneIdx]->action.label);
+    menu.setOptions("time", timeOptions(scenes[sceneIdx]->dayNight), static_cast<size_t>(timeMode));
   };
 
   // Runs the scene's action and confirms it on screen, so it is clear that something happened.
@@ -262,6 +285,15 @@ int main(int argc, char** argv) {
           menu.setValue("style", static_cast<size_t>(style));
           havePrev = false;
           break;
+        case Action::Time:
+          if (scenes[sceneIdx]->dayNight) {
+            timeMode = static_cast<World::TimeMode>((static_cast<int>(timeMode) + 1) % 5);
+            world->setTimeMode(timeMode);
+            menu.setValue("time", static_cast<size_t>(timeMode));
+            toast = timeOptions(true)[static_cast<size_t>(timeMode)];
+            toastLeft = 1.5;
+          }
+          break;
         case Action::Left: switchScene(sceneIdx + scenes.size() - 1); rebuild = true; break;
         case Action::Right: switchScene(sceneIdx + 1); rebuild = true; break;
         case Action::Menu:
@@ -273,6 +305,10 @@ int main(int argc, char** argv) {
     for (const auto& ev : menu.takeEvents()) {
       if (ev.id == "scene") { switchScene(ev.value); rebuild = true; }
       else if (ev.id == "style") { style = static_cast<Style>(ev.value); havePrev = false; }
+      else if (ev.id == "time") {
+        timeMode = static_cast<World::TimeMode>(ev.value);
+        world->setTimeMode(timeMode);
+      }
       else if (ev.id == "info") info = ev.value == 1;
       else if (ev.id == "action") runAction();
       else if (ev.id == "resume") menu.close();
@@ -284,7 +320,8 @@ int main(int argc, char** argv) {
       rebuild = true;
     }
     if (rebuild) {
-      world = std::make_unique<World>(pack, scenes[sceneIdx], w, h, seed);
+      if (world->hasDayNight()) carriedPhase = world->phase();
+      world = makeWorld();
       havePrev = false;
     }
 

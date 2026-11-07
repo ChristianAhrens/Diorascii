@@ -3,8 +3,8 @@ name: aquarium
 title: Aquarium
 order: 10
 
-sky: #06081c #223462
-medium-colors: #1e7896 #051642
+sky: #4a9fe0 #bfe4f6
+medium-colors: #2aa6cf #0b3f78
 ground-colors: #967c52 #765e3c
 surface-color: #afe8f5
 surface-glyphs: ~-_
@@ -13,6 +13,11 @@ sky-fraction: 0.2
 sky-rows: 1..5
 ground-rows: 2
 stars: 23
+day-night: yes
+day-length: 240
+start-hour: 11
+sun-sprite: sun_big
+moon-sprite: moon_big
 action: drop food
 action-label: Feed the fish
 event-first: 8..16

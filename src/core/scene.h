@@ -94,6 +94,12 @@ struct SceneDef {
   Rgb riverTop{74, 160, 216}, riverDeep{31, 106, 165};
   double riverFlow = 2.5;         ///< cells per second the ripples drift to the right
   double weatherDuration = 20;    ///< seconds a weather action lasts
+  /// True if the scene has a day and night cycle (sun, moon, stars, dimming light).
+  bool dayNight = false;
+  double dayLength = 180;  ///< seconds one full day takes
+  double startHour = 10;   ///< time of day when the scene starts, 0 to 24
+  /// Sprites crossing the sky by day and by night (optional, may be empty).
+  std::string sunSprite, moonSprite;
   std::pair<double, double> eventFirst{3, 8}, eventInterval{15, 40};  ///< seconds
 
   /// Sprites the scene starts with.

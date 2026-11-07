@@ -33,6 +33,7 @@ enum class Action {
   Back,
   Menu,   ///< open / close the menu
   Style,  ///< cycle full -> terminal -> mono colors
+  Time,   ///< cycle the time of day: cycle -> dawn -> day -> dusk -> night
 };
 
 }  // namespace dio

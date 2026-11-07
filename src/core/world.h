@@ -38,6 +38,12 @@ struct Entity {
   /// Darkens the background behind its glyphs by this share, 0 to 1 (full style only), so
   /// light sprites stay readable against both bright sky and dark trees.
   double backing = 0;
+  /// When the entity is shown, in scenes with a day and night cycle.
+  enum class Active { Always, Day, Night };
+  /// Visible only by day or only by night (ignored in scenes without a cycle).
+  Active active = Active::Always;
+  /// Emits its own light: not dimmed at night (fireflies, sun, moon).
+  bool glow = false;
   /// Remove the entity once its non-looping animation has played.
   bool dieAfterAnim = false;
   /// Top-left position in cells (fractional between steps).
@@ -77,6 +83,14 @@ struct Entity {
   int height() const { return sprite->height(); }
   /// True if it travels towards the right edge.
   bool movingRight() const { return facesRight ? !mirrored : mirrored; }
+};
+
+/// How bright the world is right now. All values run from 0 to 1.
+struct Light {
+  double day = 1;    ///< overall brightness of the surroundings, reduced by cloud cover
+  double sun = 1;    ///< how far the sun is up, ignoring clouds
+  double glow = 0;   ///< strength of the red horizon glow at sunrise and sunset
+  double stars = 1;  ///< how visible the stars are
 };
 
 /// The simulation: owns entities, advances them in fixed-size steps and renders
@@ -134,6 +148,28 @@ class World {
   int riverRows() const { return riverRows_; }
   /// True while a rain shower is going on.
   bool raining() const { return rainLeft_ > 0; }
+  /// How the time of day advances. The other modes freeze it at a fixed moment.
+  enum class TimeMode { Cycle, Dawn, Day, Dusk, Night };
+  /// Runs the day and night cycle, or freezes the time of day. Without a cycle in
+  /// the scene this changes nothing.
+  void setTimeMode(TimeMode mode);
+  /// Current time mode.
+  TimeMode timeMode() const { return timeMode_; }
+  /// Sets the time of day as a fraction of a day: 0 is midnight, 0.25 sunrise,
+  /// 0.5 noon and 0.75 sunset.
+  void setPhase(double phase);
+  /// Sets the time of day in hours, 0 to 24.
+  void setHour(double hour) { setPhase(hour / 24.0); }
+  /// Time of day as a fraction of a day, see setPhase().
+  double phase() const { return phase_; }
+  /// True if the scene has a day and night cycle.
+  bool hasDayNight() const { return scene_->dayNight; }
+  /// Current light levels (everything at full day in scenes without a cycle).
+  Light light() const;
+  /// Time of day as hours and minutes, for example 14:30.
+  std::string clockText() const;
+  /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
+  double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.
   double gravity() const { return scene_->gravity; }
   /// Rows of ground missing at column x (0 = intact).
@@ -188,7 +224,9 @@ class World {
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
-  void renderBackground(Frame& out, Style style) const;
+  void renderBackground(Frame& out, Style style, const Light& light) const;
+  /// Draws the sun or the moon on its arc across the sky.
+  void renderCelestial(Frame& out, Style style, const Light& light) const;
 
   /// Not owned; must outlive the world.
   const AssetPack* pack_;
@@ -202,6 +240,12 @@ class World {
   int riverTopY_ = 0, riverRows_ = 0;
   /// Seconds of rain left; 0 when it is dry.
   double rainLeft_ = 0;
+  /// Cloud cover from 0 to 1; follows the rain with a delay.
+  double overcast_ = 0;
+  /// Time of day as a fraction of a day.
+  double phase_ = 0.4;
+  /// Whether the time of day runs or stands still.
+  TimeMode timeMode_ = TimeMode::Cycle;
   /// True if the scene has a medium and there is room for it.
   bool hasMedium_ = true;
   /// Seed the world was built with.

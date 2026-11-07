@@ -114,6 +114,11 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->riverRows = std::max(static_cast<int>(p.num("river-rows", 0)), 0);
   sc->riverFlow = p.num("river-flow", sc->riverFlow);
   sc->weatherDuration = std::max(p.num("weather-duration", sc->weatherDuration), 1.0);
+  sc->dayNight = p.str("day-night", "no") == "yes";
+  sc->dayLength = std::max(p.num("day-length", sc->dayLength), 1.0);
+  sc->startHour = std::clamp(p.num("start-hour", sc->startHour), 0.0, 24.0);
+  sc->sunSprite = p.str("sun-sprite");
+  sc->moonSprite = p.str("moon-sprite");
   if (p.has("action")) {
     const auto t = p.list("action");
     if (t.size() == 1 && t[0] == "none") {

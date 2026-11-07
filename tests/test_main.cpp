@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <string>
 #include <vector>
@@ -165,7 +166,7 @@ TEST(embedded_assets_all_load) {
                         "splat", "earth", "lander", "rover", "meteor", "meteorite", "flash", "debris",
                         "dust", "flag", "rock", "pine_big", "pine_small", "oak", "bush", "cloud_big",
                         "cloud_small", "flower", "reeds", "bird", "deer", "rabbit", "duck", "eagle",
-                        "raindrop", "splash"})
+                        "raindrop", "splash", "sun_big", "moon_big", "firefly", "butterfly"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -398,7 +399,8 @@ TEST(styles_control_backdrop_and_color_use) {
   for (int y = 0; y < 30; ++y) {
     for (int x = 0; x < 100; ++x) {
       CHECK(!full.at(x, y).defaultBg);
-      CHECK(term.at(x, y).defaultBg);                     // the terminal's own background
+      // The terminal's own background everywhere, except under solid color blocks (the sun).
+      CHECK(term.at(x, y).defaultBg || term.at(x, y).ch == U' ');
       CHECK(mono.at(x, y).defaultBg && mono.at(x, y).defaultFg);
     }
   }
@@ -578,6 +580,286 @@ TEST(wandering_creatures_wobble_around_their_row) {
   }
   CHECK(far > 0.3);          // it does wobble
   CHECK(far <= 1.0 + 0.6 + 1e-9);  // ...but stays near its row
+}
+
+// ------------------------------------------------------------- day and night ---
+
+// A scene with a 100 second day that starts at 06:00, a 2-row sun 'S' and a moon 'M'.
+static AssetPack cyclePack(const std::string& body = "", const std::vector<std::string>& extra = {}) {
+  std::vector<std::string> sprites = {
+      "name: sun\nglow: yes\nhabitat: sky\ncolor: #ffffff\n--- art\nS\nS\n",
+      "name: moon\nglow: yes\nhabitat: sky\ncolor: #ffffff\n--- art\nM\nM\n"};
+  sprites.insert(sprites.end(), extra.begin(), extra.end());
+  return miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\nsky: #3050a0 #8090d0\nstars: 7\n"
+                  "day-night: yes\nday-length: 100\nstart-hour: 6\nsun-sprite: sun\nmoon-sprite: moon\n" + body,
+                  sprites);
+}
+
+static int countChar(const Frame& f, char32_t ch, int fromRow, int toRow) {
+  int n = 0;
+  for (int y = fromRow; y < toRow && y < f.height(); ++y) {
+    for (int x = 0; x < f.width(); ++x) n += f.at(x, y).ch == ch;
+  }
+  return n;
+}
+
+TEST(scene_parses_day_night_keys) {
+  std::string err;
+  auto sc = SceneDef::parse("name: s\nday-night: yes\nday-length: 90\nstart-hour: 30\nsun-sprite: a\nmoon-sprite: b\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->dayNight && sc->dayLength == 90 && sc->startHour == 24);  // the start hour is clamped
+  CHECK(sc->sunSprite == "a" && sc->moonSprite == "b");
+  auto off = SceneDef::parse("name: s\n", err);
+  CHECK(off && !off->dayNight);
+  AssetPack pack;
+  pack.addText("a.scene", "name: s\nsun-sprite: ghost\nmoon-sprite: phantom\n");
+  pack.validate();
+  CHECK(pack.errors().size() == 2);  // unknown sky bodies are reported
+}
+
+TEST(time_of_day_advances_wraps_and_reports_the_clock) {
+  AssetPack pack = cyclePack();
+  World world(pack, pack.scene("t"), 40, 20, 1);
+  CHECK(std::fabs(world.phase() - 0.25) < 1e-9);
+  CHECK(world.clockText() == "06:00");
+  for (int i = 0; i < 500; ++i) world.step(0.05);  // 25 s of a 100 s day
+  CHECK(std::fabs(world.phase() - 0.5) < 1e-6);
+  CHECK(world.clockText() == "12:00");
+  for (int i = 0; i < 1500; ++i) world.step(0.05);  // 75 s more: wraps past midnight
+  CHECK(std::fabs(world.phase() - 0.25) < 1e-6);
+  world.setHour(14.5);
+  CHECK(world.clockText() == "14:30");
+  world.setHour(0);
+  CHECK(world.clockText() == "00:00");
+  world.setHour(25.5);  // wraps instead of overflowing
+  CHECK(world.clockText() == "01:30");
+}
+
+TEST(light_follows_the_sun) {
+  AssetPack pack = cyclePack();
+  World world(pack, pack.scene("t"), 40, 20, 1);
+  world.setPhase(0.5);
+  CHECK(world.light().day == 1 && world.light().sun == 1 && world.light().stars == 0);
+  world.setPhase(0.0);
+  CHECK(world.light().day == 0 && world.light().stars == 1);
+  double previous = -1;
+  for (int i = 0; i <= 10; ++i) {  // from midnight to noon it only gets brighter
+    world.setPhase(0.5 * i / 10);
+    CHECK(world.light().day >= previous);
+    previous = world.light().day;
+  }
+  world.setPhase(0.25);  // the horizon glow peaks at sunrise and sunset, not at noon or midnight
+  const double sunrise = world.light().glow;
+  world.setPhase(0.75);
+  CHECK(std::fabs(world.light().glow - sunrise) < 1e-9);
+  world.setPhase(0.5);
+  CHECK(world.light().glow < 0.01 && sunrise > 0.9);
+  world.setPhase(0.0);
+  CHECK(world.light().glow < 0.01);
+}
+
+TEST(time_modes_freeze_the_clock_and_cycle_resumes_from_there) {
+  AssetPack pack = cyclePack();
+  World world(pack, pack.scene("t"), 40, 20, 1);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.phase() == 0.5);
+  for (int i = 0; i < 1000; ++i) world.step(0.05);
+  CHECK(world.phase() == 0.5);  // frozen
+  world.setTimeMode(World::TimeMode::Night);
+  CHECK(world.phase() == 0.0);
+  world.setTimeMode(World::TimeMode::Dawn);
+  CHECK(world.phase() == 0.27);
+  world.setTimeMode(World::TimeMode::Dusk);
+  CHECK(world.phase() == 0.73);
+  world.setTimeMode(World::TimeMode::Cycle);
+  for (int i = 0; i < 200; ++i) world.step(0.05);  // 10 s of a 100 s day
+  CHECK(std::fabs(world.phase() - 0.83) < 1e-6);   // carried on from dusk
+  CHECK(world.timeMode() == World::TimeMode::Cycle);
+}
+
+TEST(scenes_without_a_cycle_ignore_the_time_of_day) {
+  AssetPack pack = AssetPack::embedded();
+  World moon(pack, pack.scene("moon"), 60, 24, 1);
+  CHECK(!moon.hasDayNight());
+  const double before = moon.phase();
+  moon.setTimeMode(World::TimeMode::Night);
+  CHECK(moon.timeMode() == World::TimeMode::Cycle);  // unchanged
+  for (int i = 0; i < 200; ++i) moon.step(0.05);
+  CHECK(moon.phase() == before);
+  const Light l = moon.light();
+  CHECK(l.day == 1 && l.sun == 1 && l.glow == 0 && l.stars == 1);
+}
+
+TEST(stars_come_out_only_at_night_in_scenes_with_a_cycle) {
+  AssetPack pack = cyclePack();
+  World world(pack, pack.scene("t"), 100, 30, 1);
+  Frame f;
+  world.setPhase(0.5);
+  world.render(f);
+  const int noon = countChar(f, U'*', 0, world.surfaceY()) + countChar(f, U'.', 0, world.surfaceY());
+  world.setPhase(0.0);
+  world.render(f);
+  const int night = countChar(f, U'*', 0, world.surfaceY()) + countChar(f, U'.', 0, world.surfaceY());
+  CHECK(noon == 0);
+  CHECK(night > 20);
+  AssetPack all = AssetPack::embedded();
+  World moon(all, all.scene("moon"), 100, 30, 1);  // no cycle: the stars are always there
+  moon.render(f);
+  CHECK(countChar(f, U'*', 0, moon.surfaceY()) + countChar(f, U'.', 0, moon.surfaceY()) > 20);
+}
+
+TEST(sun_and_moon_cross_the_sky_and_set_behind_the_horizon) {
+  AssetPack pack = cyclePack();
+  World world(pack, pack.scene("t"), 101, 30, 1);
+  Frame f;
+  auto sunColumn = [&](double phase) {
+    world.setPhase(phase);
+    world.render(f);
+    for (int x = 0; x < f.width(); ++x) {
+      for (int y = 0; y < world.surfaceY(); ++y) {
+        if (f.at(x, y).ch == U'S') return x;
+      }
+    }
+    return -1;
+  };
+  const int morning = sunColumn(0.35), noon = sunColumn(0.5), evening = sunColumn(0.65);
+  CHECK(morning >= 0 && noon >= 0 && evening >= 0);
+  CHECK(morning < noon && noon < evening);          // it travels from left to right
+  CHECK(std::abs(noon - 50) <= 1);                  // and is in the middle at noon
+  world.setPhase(0.5);
+  world.render(f);
+  CHECK(countChar(f, U'S', 0, world.height()) == 2 && countChar(f, U'M', 0, world.height()) == 0);
+  CHECK(f.at(noon, 0).ch == U'S');                  // at the top of the sky
+  world.setPhase(0.254);                            // just risen: only the top row clears the horizon
+  world.render(f);
+  CHECK(countChar(f, U'S', 0, world.height()) == 1);
+  world.setPhase(0.0);
+  world.render(f);
+  CHECK(countChar(f, U'M', 0, world.height()) == 2 && countChar(f, U'S', 0, world.height()) == 0);
+  for (int y = world.surfaceY(); y < world.height(); ++y) {  // never drawn over the ground
+    for (int x = 0; x < f.width(); ++x) CHECK(f.at(x, y).ch != U'M');
+  }
+}
+
+TEST(day_and_night_creatures_appear_at_the_right_time) {
+  AssetPack pack = cyclePack("--- population\nbee count 1\nowl count 1\n",
+                             {"name: bee\nhabitat: sky\nspeed: 0..0\nactive: day\n--- art\nB\n",
+                              "name: owl\nhabitat: sky\nspeed: 0..0\nactive: night\n--- art\nO\n"});
+  World world(pack, pack.scene("t"), 80, 30, 2);
+  for (auto& e : world.entities()) e->x = 10;  // keep them on screen
+  Frame f;
+  world.setPhase(0.5);
+  world.render(f);
+  CHECK(countChar(f, U'B', 0, 30) == 1 && countChar(f, U'O', 0, 30) == 0);
+  world.setPhase(0.0);
+  world.render(f);
+  CHECK(countChar(f, U'B', 0, 30) == 0 && countChar(f, U'O', 0, 30) == 1);
+
+  AssetPack flat = miniPack("medium: no\nsky-fraction: 1\n--- population\nbee count 1\nowl count 1\n",
+                            {"name: bee\nhabitat: sky\nspeed: 0..0\nactive: day\n--- art\nB\n",
+                             "name: owl\nhabitat: sky\nspeed: 0..0\nactive: night\n--- art\nO\n"});
+  World noCycle(flat, flat.scene("t"), 80, 30, 2);
+  for (auto& e : noCycle.entities()) e->x = 10;
+  noCycle.render(f);
+  CHECK(countChar(f, U'B', 0, 30) == 1 && countChar(f, U'O', 0, 30) == 1);  // `active` needs a cycle
+}
+
+TEST(light_dims_things_unless_they_glow_and_the_backdrop_follows_the_sun) {
+  AssetPack pack = cyclePack("--- population\nlamp count 1\nstone count 1\n",
+                             {"name: lamp\nhabitat: sky\nspeed: 0..0\nglow: yes\ncolor: #ffffff\n--- art\nL\n",
+                              "name: stone\nhabitat: sky\nspeed: 0..0\ncolor: #ffffff\n--- art\nT\n"});
+  World world(pack, pack.scene("t"), 80, 30, 3);
+  int row = 3;
+  for (auto& e : world.entities()) {
+    if (e->tag.empty() && e->sprite->name() != "lamp" && e->sprite->name() != "stone") continue;
+    e->x = e->sprite->name() == "lamp" ? 10 : 20;
+    e->y = row;
+  }
+  Frame f;
+  world.setPhase(0.5);
+  world.render(f);
+  const Rgb skyNoon = f.at(40, 0).bg;
+  CHECK(f.at(10, row).fg == (Rgb{255, 255, 255}) && f.at(20, row).fg == (Rgb{255, 255, 255}));
+  CHECK(skyNoon == (Rgb{0x30, 0x50, 0xa0}));  // at noon the scene's own colors, exactly
+
+  world.setPhase(0.0);
+  world.render(f);
+  CHECK(f.at(10, row).fg == (Rgb{255, 255, 255}));                        // a lamp keeps shining
+  CHECK(f.at(20, row).fg.r < 200 && f.at(20, row).fg.b > f.at(20, row).fg.r);  // a stone goes dark and blue
+  const Rgb skyNight = f.at(40, 0).bg;
+  CHECK(skyNight.r + skyNight.g + skyNight.b < (skyNoon.r + skyNoon.g + skyNoon.b) / 3);
+
+  world.setPhase(0.25);  // sunrise: the horizon glows red
+  world.render(f);
+  const Rgb horizon = f.at(40, world.surfaceY() - 1).bg;
+  world.setPhase(0.5);
+  world.render(f);
+  const Rgb horizonNoon = f.at(40, world.surfaceY() - 1).bg;
+  CHECK(horizon.r > horizonNoon.r);
+}
+
+TEST(rain_clouds_dim_the_day_and_hide_the_sun) {
+  AssetPack pack = cyclePack("action: weather drop\nweather-duration: 4\n", {"name: drop\nbehaviors: rain\n--- art\n\\\n"});
+  World world(pack, pack.scene("t"), 80, 30, 4);
+  world.setTimeMode(World::TimeMode::Day);
+  Frame f;
+  world.render(f);
+  CHECK(world.light().day == 1 && countChar(f, U'S', 0, 30) == 2);
+  CHECK(world.interact() == 1);
+  for (int i = 0; i < 70; ++i) world.step(0.05);  // 3.5 s into a 4 s shower: the clouds have rolled in
+  CHECK(world.overcast() > 0.9);
+  CHECK(world.light().day < 0.6);
+  world.render(f);
+  CHECK(countChar(f, U'S', 0, 30) == 0);  // the sun is behind the clouds
+  for (int i = 0; i < 400; ++i) world.step(0.05);  // the rain stopped long ago
+  CHECK(world.overcast() < 0.01);
+  CHECK(world.light().day > 0.99);
+}
+
+TEST(sky_creatures_with_an_altitude_hover_just_above_the_ground) {
+  AssetPack pack = cyclePack("--- population\nmoth count 40\n",
+                             {"name: moth\nhabitat: sky\naltitude: 3\nspeed: 0..0\n--- art\nm\nm\n"});
+  World world(pack, pack.scene("t"), 80, 30, 5);
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "moth") continue;
+    CHECK(e->y + e->height() <= world.surfaceY());
+    CHECK(e->y + e->height() >= world.surfaceY() - 3);
+  }
+}
+
+TEST(every_scene_renders_at_every_time_of_day_and_size) {
+  AssetPack pack = AssetPack::embedded();
+  for (const auto& sc : pack.scenes()) {
+    for (int w : {1, 3, 20, 120}) {
+      for (int h : {1, 3, 8, 30}) {
+        World world(pack, sc, w, h, 9);
+        Frame f;
+        for (int hour = 0; hour < 24; hour += 3) {
+          world.setHour(hour);
+          for (int i = 0; i < 20; ++i) world.step(0.05);
+          world.render(f, Style::Full);
+          world.render(f, Style::Mono);
+          CHECK(f.width() == w && f.height() == h);
+        }
+      }
+    }
+  }
+}
+
+TEST(menu_options_can_be_replaced_per_scene) {
+  Menu m("T");
+  m.addChoice("time", "Time", {"a", "b", "c"}, 2);
+  m.setOptions("time", {"only"}, 2);
+  CHECK(m.value("time") == 0);  // clamped into the new options
+  m.setOptions("time", {"x", "y", "z"}, 1);
+  CHECK(m.value("time") == 1);
+  m.setOptions("time", {}, 0);   // an empty list is ignored
+  m.setOptions("nope", {"q"}, 0);
+  CHECK(m.value("time") == 1);
+  m.open();
+  Frame f(60, 20);
+  m.render(f, Style::Full);
+  CHECK(f.toText().find("< y") != std::string::npos);
 }
 
 TEST(backing_darkens_the_background_behind_glyphs_in_full_style_only) {

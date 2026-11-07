@@ -1,0 +1,29 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset release-macos
+      - name: Build
+        run: cmake --build build/release-macos -j
+      - name: Test
+        run: ctest --test-dir build/release-macos --output-on-failure
+      - name: Check architectures and dependencies
+        run: |
+          lipo -archs build/release-macos/src/diorascii
+          otool -L build/release-macos/src/diorascii
+      - name: Ad-hoc sign
+        run: codesign --force --sign - build/release-macos/src/diorascii
+      - name: Package
+        run: cd build/release-macos && cpack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diorascii-macos-universal
+          path: build/release-macos/diorascii-*.tar.gz

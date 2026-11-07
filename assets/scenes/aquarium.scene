@@ -1,0 +1,43 @@
+# Underwater scene: sky | water | sandy seabed.
+name: aquarium
+title: Aquarium
+order: 10
+
+sky: #06081c #223462
+medium-colors: #1e7896 #051642
+ground-colors: #967c52 #765e3c
+surface-color: #afe8f5
+surface-glyphs: ~-_
+ground-glyphs: .,'`. : 
+sky-fraction: 0.2
+sky-rows: 1..5
+ground-rows: 2
+stars: 23
+feed: food
+event-first: 8..16
+event-interval: 40..90
+
+--- population
+# sprite     mode        amount
+darter       per-cells   520
+guppy        per-cells   650
+tang         per-cells   750
+angel        per-cells   1500
+puffer       per-cells   1900
+eel          per-cells   2600
+grouper      per-cells   3200
+jelly        per-cells   1500
+crab         per-cols    90
+@seaweed     per-cols    20
+
+--- decor
+# sprite     align       margin
+castle       right       2
+coral        left        5
+coral        random      0
+
+--- events
+# sprite     weight
+shark        3
+ship         2
+whale        2

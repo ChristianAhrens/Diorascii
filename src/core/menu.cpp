@@ -43,6 +43,10 @@ void Menu::setValue(const std::string& id, size_t value) {
   if (Item* it = find(id); it && !it->options.empty()) it->value = std::min(value, it->options.size() - 1);
 }
 
+void Menu::setLabel(const std::string& id, std::string label) {
+  if (Item* it = find(id)) it->label = std::move(label);
+}
+
 size_t Menu::value(const std::string& id) const {
   for (const auto& it : items_) {
     if (it.id == id) return it.value;

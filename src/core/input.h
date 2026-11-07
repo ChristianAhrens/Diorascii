@@ -14,8 +14,7 @@ enum class Action {
   Quit,
   /// Toggle pausing the simulation.
   Pause,
-  /// Drop food into the scene.
-  Feed,
+  Interact,  ///< the scene's primary action: feed the fish, strike the moon, ...
   /// Toggle the info line.
   Info,
   /// Rebuild the scene from a new seed.

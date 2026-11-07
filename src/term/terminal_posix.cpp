@@ -118,7 +118,7 @@ std::vector<Action> Terminal::poll(int timeoutMs) {
     switch (buf[i]) {
       case 'q': case 'Q': case 3: actions.push_back(Action::Quit); break;
       case 'p': case 'P': actions.push_back(Action::Pause); break;
-      case 'f': case 'F': actions.push_back(Action::Feed); break;
+      case 'f': case 'F': actions.push_back(Action::Interact); break;
       case 'i': case 'I': actions.push_back(Action::Info); break;
       case 'r': case 'R': actions.push_back(Action::Redraw); break;
       case 'm': case 'M': actions.push_back(Action::Menu); break;

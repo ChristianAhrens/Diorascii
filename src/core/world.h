@@ -33,6 +33,8 @@ struct Entity {
   bool facesRight = true;  ///< direction the unmirrored art points
   /// Sent by the event scheduler. At most one such entity exists at a time.
   bool isEvent = false;
+  bool grounded = false;      ///< habitat: ground
+  bool destructible = true;   ///< can be wrecked by an impact
   /// Remove the entity once its non-looping animation has played.
   bool dieAfterAnim = false;
   /// Top-left position in cells (fractional between steps).
@@ -89,8 +91,13 @@ class World {
   /// @param style how colorful to draw
   void render(Frame& out, Style style = Style::Full) const;
 
-  /// Drops food into the scene (up to 10 flakes at once). Returns how many were added.
-  int feed();
+  /// The scene's primary action (the F key): drop food, or call down a meteorite
+  /// strike. Returns how many things it started (0 = nothing happened).
+  int interact();
+
+  /// A meteorite hits the ground around column `cx`: digs a crater, wrecks what
+  /// stands there and throws up debris and dust. Dust refills the crater over time.
+  void impactAt(double cx);
 
   /// Width in cells.
   int width() const { return w_; }
@@ -114,6 +121,14 @@ class World {
   size_t eatenCount() const { return eaten_; }          // prey caught by predators
   /// Food flakes eaten by fish so far.
   size_t foodEatenCount() const { return foodEaten_; }  // food flakes eaten by fish
+  /// Ground objects wrecked by impacts so far.
+  size_t destroyedCount() const { return destroyed_; } // ground objects wrecked by impacts
+  /// Gravity of the scene in cells per second squared.
+  double gravity() const { return scene_->gravity; }
+  /// Rows of ground missing at column x (0 = intact).
+  int craterRows(int x) const;
+  /// Depth of the deepest crater column, in rows (fractional while dust settles).
+  double deepestCrater() const;
   /// Seed the world was built with.
   uint64_t seed() const { return seed_; }
   /// The scene being simulated.
@@ -154,6 +169,8 @@ class World {
   double areaFor(const std::string& habitat) const;
   /// Picks a starting row for a sprite of the given height in its habitat.
   double habitatY(const Props& p, int spriteHeight);
+  /// Half the width of a crater in columns.
+  int craterHalfWidth() const;
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
@@ -178,7 +195,8 @@ class World {
   /// Seconds until the next event. Negative means none is scheduled yet.
   double eventTimer_ = 0;
   /// Counters behind eatenCount, foodEatenCount and destroyedCount.
-  size_t eaten_ = 0, foodEaten_ = 0;
+  size_t eaten_ = 0, foodEaten_ = 0, destroyed_ = 0;
+  std::vector<double> crater_;  ///< per column, in rows; shrinks as dust settles
   /// Entities in the world.
   std::vector<std::unique_ptr<Entity>> entities_;
   /// Entities spawned during the current step.

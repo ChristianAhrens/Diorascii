@@ -42,6 +42,8 @@ class Menu {
   /// Adds an entry that only reports an event when it is selected.
   void addButton(std::string id, std::string label);
   void setValue(const std::string& id, size_t value);  ///< no event is emitted
+  /// Changes the text of an entry, for example when the scene action changes.
+  void setLabel(const std::string& id, std::string label);
   /// Currently selected option of a choice.
   size_t value(const std::string& id) const;
 

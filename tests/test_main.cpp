@@ -118,7 +118,7 @@ TEST(scene_parses_all_sections) {
   std::string err;
   auto sc = SceneDef::parse(
       "name: s\ntitle: Test Scene\norder: 5\nmedium: no\nsky: #000000 #ffffff\nstars: 12\nfeed: f\n"
-      "event-interval: 3..9\n--- population\n# comment\nfish per-cells 200\nweed per-cols 15\nrock count 2\n"
+      "event-interval: 3..9\naction: impact meteorite\naction-label: Strike\ngravity: 2.5\ndust-settle: 12\n--- population\n# comment\nfish per-cells 200\nweed per-cols 15\nrock count 2\n"
       "--- decor\ncastle right 2\nsun center 0 y 3\n--- events\nship 2\n", err);
   CHECK(sc != nullptr);
   CHECK(sc->title == "Test Scene" && sc->order == 5 && !sc->hasMedium);
@@ -129,6 +129,8 @@ TEST(scene_parses_all_sections) {
   CHECK(sc->decor.size() == 2 && sc->decor[1].hasY && sc->decor[1].y == 3);
   CHECK(sc->events.size() == 1 && sc->events[0].weight == 2);
   CHECK(sc->eventInterval.second == 9);
+  CHECK(sc->action.kind == SceneDef::Action::Kind::Impact && sc->action.sprite == "meteorite");
+  CHECK(sc->action.label == "Strike" && sc->gravity == 2.5 && sc->dustSettle == 12);
 }
 
 TEST(scene_rejects_bad_input) {
@@ -140,14 +142,16 @@ TEST(scene_rejects_bad_input) {
   CHECK(SceneDef::parse("name: s\nsky: #12345\n", err) == nullptr);
   CHECK(SceneDef::parse("name: s\nsurface-glyphs: ~~\n", err) == nullptr);
   CHECK(SceneDef::parse("name: s\n--- nonsense\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\naction: explode\n", err) == nullptr);
+  CHECK(SceneDef::parse("name: s\naction: drop\n", err) == nullptr);
 }
 
 TEST(pack_reports_unknown_sprite_references) {
   AssetPack pack;
-  pack.addText("a.scene", "name: s\n--- population\nghost count 1\n");
+  pack.addText("a.scene", "name: s\naction: impact boom\n--- population\nghost count 1\n");
   pack.validate();
   pack.validate();  // idempotent: no duplicate messages
-  CHECK(pack.errors().size() == 1);
+  CHECK(pack.errors().size() == 2);
 }
 
 TEST(embedded_assets_all_load) {
@@ -156,7 +160,8 @@ TEST(embedded_assets_all_load) {
   CHECK(pack.errors().empty());
   for (const char* n : {"darter", "guppy", "tang", "angel", "puffer", "eel", "grouper", "jelly",
                         "crab", "shark", "ship", "whale", "castle", "coral", "bubble", "food",
-                        "splat", "earth", "lander", "rover", "meteor"})
+                        "splat", "earth", "lander", "rover", "meteor", "meteorite", "flash", "debris",
+                        "dust", "flag", "rock"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -213,26 +218,38 @@ TEST(events_appear_on_schedule_and_one_at_a_time) {
 
 TEST(feeding_drops_a_clump_caps_at_thirty_and_fish_eat_it) {
   AssetPack pack = miniPack(
-      "feed: food\n--- population\nfish count 4\n",
+      "action: drop food\n--- population\nfish count 4\n",
       {"name: fish\nhabitat: medium\nspeed: 3..3\ndepth: 5\nbehaviors: seek_food swim\n--- art\n<o>\n",
        "name: food\ntag: food\nbehaviors: sink\n--- art\n*\n"});
   World world(pack, pack.scene("t"), 60, 24, 5);
-  CHECK(world.feed() == 8);
+  CHECK(world.interact() == 8);
   CHECK(world.countTag("food") == 8);
-  for (int i = 0; i < 6; ++i) world.feed();
+  for (int i = 0; i < 6; ++i) world.interact();
   CHECK(world.countTag("food") == 30);  // never more than 30 at once
   for (int i = 0; i < 1200; ++i) world.step(0.05);  // 60 s
   CHECK(world.countTag("food") == 0);               // eaten or decayed on the ground
   CHECK(world.foodEatenCount() > 0);
 }
 
-TEST(feeding_is_disabled_without_feed_sprite_or_medium) {
+TEST(actions_do_nothing_without_a_matching_scene_setup) {
   AssetPack a = miniPack("--- population\n", {});
   World w1(a, a.scene("t"), 60, 20, 1);
-  CHECK(w1.feed() == 0);
-  AssetPack b = AssetPack::embedded();
-  World w2(b, b.scene("moon"), 60, 24, 1);
-  CHECK(w2.feed() == 0);
+  CHECK(w1.interact() == 0);  // the scene has no action
+
+  AssetPack b = miniPack("medium: no\nsky-fraction: 1\naction: drop food\n",
+                         {"name: food\ntag: food\nbehaviors: sink\n--- art\n*\n"});
+  World w2(b, b.scene("t"), 60, 20, 1);
+  CHECK(w2.interact() == 0);  // food needs water to sink through
+}
+
+TEST(each_scene_has_its_own_action) {
+  AssetPack pack = AssetPack::embedded();
+  World aq(pack, pack.scene("aquarium"), 80, 30, 1);
+  CHECK(aq.interact() == 8);  // a clump of eight flakes of food
+  World moon(pack, pack.scene("moon"), 80, 30, 1);
+  CHECK(moon.interact() == 1);  // one meteorite
+  CHECK(moon.interact() == 0);  // ...only one at a time
+  CHECK(pack.scene("aquarium")->action.label != pack.scene("moon")->action.label);
 }
 
 TEST(predators_eat_prey_and_prey_respawns) {
@@ -310,7 +327,7 @@ TEST(menu_closes_with_back_and_leaves_other_actions_alone) {
   Menu m = sampleMenu();
   m.open();
   CHECK(!m.handle(Action::Quit));  // the app decides what quit means
-  CHECK(!m.handle(Action::Feed));
+  CHECK(!m.handle(Action::Interact));
   CHECK(m.isOpen());
   CHECK(m.handle(Action::Back));
   CHECK(!m.isOpen());
@@ -400,6 +417,158 @@ TEST(solid_blocks_keep_their_color_in_terminal_style_but_not_in_mono) {
   world.render(mono, Style::Mono);
   CHECK(!term.at(0, 1).defaultBg);
   CHECK(mono.at(0, 1).defaultBg);
+}
+
+
+// -------------------------------------------------------------------- impact ---
+
+static AssetPack impactPack(const std::string& extraSprites = "") {
+  std::vector<std::string> sprites = {
+      "name: meteorite\nfacing: right\ntag: meteorite\nbehaviors: meteorite\n--- art\n*\n",
+      "name: flash\nfps: 9\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n+\n",
+      "name: debris\nrandom-frame: yes\nbehaviors: ballistic\n--- art\n.\n--- art\n,\n",
+      "name: dust\nttl: 2..3\nbehaviors: ballistic\n--- art\n:\n",
+      "name: hut\nhabitat: ground\ntag: hut\n--- art\n[##]\n",
+      "name: walker\nhabitat: ground\ntag: walker\nspeed: 0..0\nbehaviors: walk\ndestructible: no\n--- art\noo\n",
+      "name: victim\nhabitat: ground\ntag: victim\nspeed: 0..0\nbehaviors: walk\n--- art\nxx\n"};
+  if (!extraSprites.empty()) sprites.push_back(extraSprites);
+  return miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 4\ngravity: 3\ndust-settle: 10\n"
+      "action: impact meteorite\n--- population\nwalker count 1\nvictim count 1\n--- decor\nhut random 0\n",
+      sprites);
+}
+
+static Entity* findTagged(World& w, const std::string& tag) {
+  for (auto& e : w.entities()) {
+    if (!e->dead && e->tag == tag) return e.get();
+  }
+  return nullptr;
+}
+
+TEST(impact_digs_a_crater_wrecks_the_ground_and_dust_refills_it) {
+  AssetPack pack = impactPack();
+  World world(pack, pack.scene("t"), 60, 30, 3);
+  Entity* hut = findTagged(world, "hut");
+  CHECK(hut != nullptr);
+  hut->x = 40;
+  findTagged(world, "victim")->x = 3;  // well outside the blast
+  findTagged(world, "walker")->x = 3;
+  const double cx = hut->x + hut->width() / 2.0;
+  const int col = static_cast<int>(cx);
+  const size_t before = world.entityCount();
+
+  world.impactAt(cx);
+  world.step(0.05);
+  CHECK(findTagged(world, "hut") == nullptr);   // wrecked, and decor does not come back
+  CHECK(world.destroyedCount() == 1);           // only the hut was in the blast
+  CHECK(world.deepestCrater() >= 2.5);
+  CHECK(world.craterRows(col) >= 3);
+  CHECK(world.craterRows(col - 20) == 0);       // only the blast area is dug out
+  CHECK(world.entityCount() > before + 20);     // debris, dust and the flash
+
+  Frame f;
+  world.render(f);
+  CHECK(f.at(col, world.seabedY()).ch == U' ');             // open sky where the ground was
+  CHECK(f.at(col - 20, world.seabedY()).bg == (Rgb{150, 124, 82}));  // intact ground elsewhere
+
+  for (int i = 0; i < 1000; ++i) world.step(0.05);  // 50 s, dust settles one row per 10 s
+  CHECK(world.deepestCrater() == 0);
+  CHECK(world.craterRows(col) == 0);
+  CHECK(findTagged(world, "hut") == nullptr);
+}
+
+TEST(wrecked_creatures_respawn_and_indestructible_ones_survive) {
+  AssetPack pack = impactPack();
+  World world(pack, pack.scene("t"), 60, 30, 3);
+  Entity* victim = findTagged(world, "victim");
+  Entity* walker = findTagged(world, "walker");
+  victim->x = 28;
+  walker->x = 30;
+  world.impactAt(30);
+  world.step(0.05);
+  CHECK(world.destroyedCount() >= 1);
+  CHECK(world.countTag("walker") == 1 && !walker->dead);  // destructible: no
+  CHECK(world.countTag("victim") == 1);                   // a replacement walked back in
+  Entity* again = findTagged(world, "victim");  // the old one is freed: only inspect the new one
+  CHECK(again != nullptr && (again->x < 0 || again->x >= world.width()));  // re-enters from off screen
+}
+
+TEST(crater_fills_gradually_not_all_at_once) {
+  AssetPack pack = impactPack();  // dust settles one row per 10 s
+  World world(pack, pack.scene("t"), 60, 30, 3);
+  world.impactAt(30);
+  const int deepStart = world.craterRows(30);
+  auto width = [&] {
+    int n = 0;
+    for (int x = 0; x < 60; ++x) n += world.craterRows(x) > 0;
+    return n;
+  };
+  const int widthStart = width();
+  CHECK(deepStart == 3);
+  for (int i = 0; i < 300; ++i) world.step(0.05);  // 15 s: one and a half rows of dust
+  CHECK(world.craterRows(30) < deepStart);         // shallower...
+  CHECK(world.craterRows(30) > 0);                 // ...but not gone yet
+  CHECK(width() < widthStart);                     // the shallow rim fills first
+  CHECK(width() > 0);
+}
+
+TEST(walkers_dip_into_craters_and_climb_out_again) {
+  AssetPack pack = impactPack();
+  World world(pack, pack.scene("t"), 60, 30, 3);
+  Entity* w = findTagged(world, "walker");
+  CHECK(w != nullptr);
+  w->x = 30 - w->width() / 2.0;
+  world.impactAt(30);
+  world.step(0.001);
+  CHECK(world.craterRows(30) >= 3);
+  CHECK(w->y == w->anchorY + world.craterRows(30));
+  CHECK(w->y > w->anchorY);
+  for (int i = 0; i < 1000; ++i) world.step(0.05);
+  CHECK(w->y == w->anchorY);
+}
+
+TEST(interact_sends_one_meteorite_that_strikes_the_ground) {
+  AssetPack pack = impactPack();
+  World world(pack, pack.scene("t"), 80, 30, 9);
+  CHECK(world.interact() == 1);
+  CHECK(world.countTag("meteorite") == 1);
+  CHECK(world.interact() == 0);  // already one on its way
+  bool struck = false;
+  for (int i = 0; i < 200 && !struck; ++i) {
+    world.step(0.05);
+    struck = world.deepestCrater() > 0;
+  }
+  CHECK(struck);
+  CHECK(world.countTag("meteorite") == 0);
+  CHECK(world.interact() == 1);  // ready for the next one
+}
+
+TEST(impacts_are_safe_at_the_edges_and_on_tiny_worlds) {
+  AssetPack pack = impactPack();
+  for (int w : {1, 3, 12, 60}) {
+    for (int h : {1, 4, 9, 30}) {
+      World world(pack, pack.scene("t"), w, h, 2);
+      world.impactAt(-5);
+      world.impactAt(0);
+      world.impactAt(w - 1);
+      world.impactAt(w + 10);
+      world.interact();
+      for (int i = 0; i < 100; ++i) world.step(0.05);
+      Frame f;
+      world.render(f);
+      CHECK(f.width() == w && f.height() == h);
+    }
+  }
+}
+
+TEST(menu_labels_can_change_with_the_scene_action) {
+  Menu m = sampleMenu();
+  m.setLabel("quit", "Meteor strike");
+  m.open();
+  Frame f(80, 24);
+  m.render(f, Style::Full);
+  CHECK(f.toText().find("Meteor strike") != std::string::npos);
+  CHECK(f.toText().find("Quit") == std::string::npos);
 }
 
 // ------------------------------------------------------------------ terminal ---

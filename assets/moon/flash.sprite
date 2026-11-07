@@ -1,0 +1,19 @@
+name: flash
+fps: 9
+loop: no
+die-after-animation: yes
+color: #ffe9a8
+--- art
+ *
+--- art
+\|/
+-*-
+/|\
+--- art
+ \ | /
+--  *  --
+ / | \
+--- art
+ . : .
+:  *  :
+ ' : '

@@ -44,6 +44,18 @@ struct SceneDef {
     /// Relative chance of being picked.
     double weight = 1;
   };
+  /// What the F key does in this scene.
+  ///   drop   <sprite>  items fall from the surface (food for the fish)
+  ///   impact <sprite>  a meteorite strikes the ground and digs a crater
+  struct Action {
+    /// Which action the scene offers.
+    enum class Kind { None, Drop, Impact };
+    /// What the action key does.
+    Kind kind = Kind::None;
+    /// Sprite that is dropped or hurled, depending on kind.
+    std::string sprite;
+    std::string label = "No action";  ///< shown on the menu button
+  };
 
   /// Unique name, and the title shown in the menu and toast.
   std::string name, title;
@@ -71,7 +83,10 @@ struct SceneDef {
   std::u32string surfaceGlyphs = U"~-_";  ///< crest, mid, trough; empty = no surface line
   int starDensity = 0;                   ///< one star per N sky cells, 0 = none
 
-  std::string feedSprite;  ///< what the "feed" action drops; empty = disabled
+  /// What the action key does in this scene.
+  Action action;
+  double gravity = 6;      ///< cells/s^2 for falling debris
+  double dustSettle = 40;  ///< seconds for dust to fill one row of a crater
   std::pair<double, double> eventFirst{3, 8}, eventInterval{15, 40};  ///< seconds
 
   /// Sprites the scene starts with.

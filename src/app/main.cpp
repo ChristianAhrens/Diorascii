@@ -34,6 +34,8 @@ struct Options {
   std::string scene;
   /// Headless mode: print the frame after this many steps (--dump).
   int dumpSteps = -1;  // >= 0: headless, print the frame after N steps and exit
+  /// Headless mode: press the action key at this step (--act).
+  int dumpAct = -1;    // with --dump: press the action key at this step
   /// Size used by --dump.
   int dumpWidth = 100, dumpHeight = 30;
   /// Frame rate (--fps).
@@ -61,10 +63,11 @@ void usage() {
       "  --256            force 256-color\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
+      "  --act N          with --dump: trigger the scene's action at step N\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: m/enter/esc menu | left/right scene | c style | f feed | i info | p pause | r restart | q quit");
+      "keys: m/enter/esc menu | left/right scene | c style | f action (feed, meteor strike...) | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -77,6 +80,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--scene") { const char* v = next(); if (!v) return false; o.scene = v; }
     else if (a == "--fps") { const char* v = next(); if (!v) return false; o.fps = std::atof(v); if (o.fps < 1) o.fps = 1; }
     else if (a == "--dump") { const char* v = next(); if (!v) return false; o.dumpSteps = std::atoi(v); }
+    else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
     else if (a == "--style") {
       const char* v = next();
@@ -180,7 +184,10 @@ int main(int argc, char** argv) {
 
   if (opt.dumpSteps >= 0) {
     World world(pack, scenes[sceneIdx], opt.dumpWidth, opt.dumpHeight, opt.seed);
-    for (int i = 0; i < opt.dumpSteps; ++i) world.step(1.0 / 20);
+    for (int i = 0; i < opt.dumpSteps; ++i) {
+      if (i == opt.dumpAct) world.interact();
+      world.step(1.0 / 20);
+    }
     Frame frame;
     world.render(frame);
     std::puts(frame.toText().c_str());
@@ -214,7 +221,7 @@ int main(int argc, char** argv) {
                    {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
                    static_cast<size_t>(style));
     menu.addChoice("info", "Info line", {"off", "on"}, 0);
-    menu.addButton("feed", "Feed");
+    menu.addButton("action", scenes[sceneIdx]->action.label);
     menu.addButton("resume", "Resume");
     menu.addButton("quit", "Quit");
   }
@@ -229,6 +236,15 @@ int main(int argc, char** argv) {
     toast = scenes[sceneIdx]->title;
     toastLeft = 2.0;
     menu.setValue("scene", sceneIdx);
+    menu.setLabel("action", scenes[sceneIdx]->action.label);
+  };
+
+  // Runs the scene's action and confirms it on screen, so it is clear that something happened.
+  auto runAction = [&]() {
+    if (world->interact() > 0) {
+      toast = scenes[sceneIdx]->action.label;
+      toastLeft = 1.2;
+    }
   };
 
   while (!term.quitRequested()) {
@@ -239,7 +255,7 @@ int main(int argc, char** argv) {
         case Action::Quit: quit = true; break;
         case Action::Pause: paused = !paused; break;
         case Action::Info: info = !info; menu.setValue("info", info); break;
-        case Action::Feed: world->feed(); break;
+        case Action::Interact: runAction(); break;
         case Action::Redraw: rebuild = true; ++seed; break;
         case Action::Style:
           style = static_cast<Style>((static_cast<int>(style) + 1) % 3);
@@ -258,7 +274,7 @@ int main(int argc, char** argv) {
       if (ev.id == "scene") { switchScene(ev.value); rebuild = true; }
       else if (ev.id == "style") { style = static_cast<Style>(ev.value); havePrev = false; }
       else if (ev.id == "info") info = ev.value == 1;
-      else if (ev.id == "feed") world->feed();
+      else if (ev.id == "action") runAction();
       else if (ev.id == "resume") menu.close();
       else if (ev.id == "quit") quit = true;
     }

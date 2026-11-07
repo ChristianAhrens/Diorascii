@@ -94,6 +94,30 @@ void sink(Entity& e, World& w, double dt) {
   }
 }
 
+/// Like swim, but the feet follow the ground: walkers dip into craters.
+void walk(Entity& e, World& w, double dt) {
+  swim(e, w, dt);
+  e.y = e.anchorY + w.craterRows(static_cast<int>(std::floor(e.x + e.width() / 2.0)));
+}
+
+/// Thrown debris and dust: falls under the scene's gravity, gone once it lands.
+void ballistic(Entity& e, World& w, double dt) {
+  e.vy += w.gravity() * dt;
+  e.x += e.vx * dt;
+  e.y += e.vy * dt;
+  if (e.vy > 0 && e.y >= w.seabedY() - 1) e.dead = true;
+}
+
+/// Streaks down and strikes the ground at the column of its head.
+void meteorite(Entity& e, World& w, double dt) {
+  e.x += e.vx * dt;
+  e.y += e.vy * dt;
+  if (e.y + e.height() >= w.seabedY()) {
+    w.impactAt(e.movingRight() ? e.x + e.width() - 1 : e.x);
+    e.dead = true;
+  }
+}
+
 /// Now and then releases a bubble from the mouth.
 void emitBubbles(Entity& e, World& w, double dt) {
   if (!w.rng().chance(e.bubbleRate * dt)) return;
@@ -141,7 +165,8 @@ void hunt(Entity& e, World& w, double) {
 BehaviorFn findBehavior(const std::string& name) {
   static const std::map<std::string, BehaviorFn> table = {
       {"swim", swim},   {"fly", fly},           {"bob", bob},       {"rise", rise},
-      {"sink", sink},   {"emit_bubbles", emitBubbles}, {"seek_food", seekFood}, {"hunt", hunt}};
+      {"sink", sink},   {"emit_bubbles", emitBubbles}, {"seek_food", seekFood}, {"hunt", hunt},
+      {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -176,6 +201,15 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.bobFreq = p.num("bob-frequency", 1.0);
   e.mouthRow = static_cast<int>(p.num("mouth-row", e.height() / 2));
   e.phase = rng.range(0, 6.28);
+  e.grounded = p.str("habitat", "medium") == "ground";
+  e.destructible = p.str("destructible", "yes") != "no";
+  if (p.has("ttl")) {
+    const auto r = p.range("ttl", {0, 0});
+    e.ttl = rng.range(r.first, r.second);
+  }
+  if (p.str("random-frame") == "yes" && e.sprite->frameCount() > 1) {
+    e.frame = rng.rangeInt(0, static_cast<int>(e.sprite->frameCount()) - 1);
+  }
   const std::string pool = p.str("pool", "any");
   for (auto& c : e.pal) c = pickFromPool(pool, rng);
   for (const auto& b : p.list("behaviors")) {
@@ -206,6 +240,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   }
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
+  crater_.assign(static_cast<size_t>(w_), 0.0);
   populate();
 }
 
@@ -312,6 +347,7 @@ void World::spawnEffect(const std::string& spriteName, double x, double y, int z
   e->z = z;
   e->vx = vx;
   e->vy = vy;
+  if (vx != 0) e->mirrored = (vx > 0) != e->facesRight;
   spawn(std::move(e));
 }
 
@@ -366,16 +402,83 @@ void World::spawnEvent() {
   }
 }
 
-int World::feed() {
-  if (scene_->feedSprite.empty() || !hasMedium_) return 0;
-  const int room = 30 - static_cast<int>(countTag("food"));
-  const int n = std::min(8, room);
-  const int center = rng_.rangeInt(1, std::max(w_ - 2, 1));
-  for (int i = 0; i < n; ++i) {
-    spawnEffect(scene_->feedSprite, std::clamp(center + rng_.rangeInt(-7, 7), 1, std::max(w_ - 2, 1)), surfaceY_ + 1, 2, 0, 1.8);
+int World::interact() {
+  const SceneDef::Action& a = scene_->action;
+  if (a.kind == SceneDef::Action::Kind::Drop) {
+    if (!hasMedium_ || !pack_->find(a.sprite)) return 0;
+    const int room = 30 - static_cast<int>(countTag("food"));
+    const int n = std::min(8, room);
+    const int center = rng_.rangeInt(1, std::max(w_ - 2, 1));
+    for (int i = 0; i < n; ++i) {
+      spawnEffect(a.sprite, std::clamp(center + rng_.rangeInt(-7, 7), 1, std::max(w_ - 2, 1)), surfaceY_ + 1, 2, 0, 1.8);
+    }
+    flushIncoming();
+    return std::max(n, 0);
   }
-  flushIncoming();
-  return std::max(n, 0);
+  if (a.kind == SceneDef::Action::Kind::Impact) {
+    auto sprite = pack_->find(a.sprite);
+    if (!sprite || countTag("meteorite") > 0) return 0;  // one at a time
+    const int hw = craterHalfWidth();
+    const double target = rng_.range(hw + 2, std::max(w_ - hw - 3, hw + 3));
+    const double vy = 24, vx = (rng_.chance(0.5) ? 1 : -1) * 0.8 * vy;
+    const double flight = (seabedY_ + sprite->height()) / vy;
+    const bool right = vx > 0;
+    const double headOffset = right ? sprite->width() - 1 : 0;  // x of the head inside the sprite
+    spawnEffect(a.sprite, target - headOffset - vx * flight, -sprite->height(), 1, vx, vy);
+    flushIncoming();
+    return 1;
+  }
+  return 0;
+}
+
+int World::craterHalfWidth() const { return std::clamp(w_ / 6, 2, 7); }
+
+int World::craterRows(int x) const {
+  if (x < 0 || x >= w_) return 0;
+  return static_cast<int>(std::floor(crater_[static_cast<size_t>(x)] + 0.5));
+}
+
+double World::deepestCrater() const {
+  double d = 0;
+  for (double c : crater_) d = std::max(d, c);
+  return d;
+}
+
+void World::impactAt(double cx) {
+  const int c = static_cast<int>(std::lround(cx));
+  const int hw = craterHalfWidth();
+  const int maxDepth = std::clamp(h_ - seabedY_ - 1, 1, 3);  // always leave some ground
+
+  for (int dx = -hw; dx <= hw; ++dx) {
+    const int x = c + dx;
+    if (x < 0 || x >= w_) continue;
+    const double t = static_cast<double>(dx) / (hw + 1);
+    crater_[static_cast<size_t>(x)] = std::max(crater_[static_cast<size_t>(x)], maxDepth * (1 - t * t));
+  }
+
+  // Wreck whatever stands in the blast, leaving debris behind.
+  for (auto& e : entities_) {
+    if (e->dead || !e->grounded || !e->destructible) continue;
+    if (e->x + e->width() < c - hw || e->x > c + hw) continue;
+    e->dead = true;
+    ++destroyed_;
+    const int pieces = std::clamp(e->width() * e->height() / 5, 4, 14);
+    for (int i = 0; i < pieces; ++i) {
+      spawnEffect("debris", e->x + rng_.range(0, e->width()), e->y + rng_.range(0, e->height()), 1,
+                  rng_.range(-5, 5), -rng_.range(1.5, 5));
+    }
+  }
+
+  // The strike itself: a flash, thrown rock and a cloud of dust that drifts back down.
+  if (auto flash = pack_->find("flash")) {
+    spawnEffect("flash", c - flash->width() / 2.0, seabedY_ - flash->height(), 1, 0, 0);
+  }
+  for (int i = 0; i < 14; ++i) {
+    spawnEffect("debris", c + rng_.range(-1, 1), seabedY_ - 1, 1, rng_.range(-6, 6), -rng_.range(2, 5.5));
+  }
+  for (int i = 0; i < 18; ++i) {
+    spawnEffect("dust", c + rng_.range(-hw, hw), seabedY_ - 1, 1, rng_.range(-3, 3), -rng_.range(0.5, 2.5));
+  }
 }
 
 size_t World::countTag(const std::string& tag) const {
@@ -403,6 +506,7 @@ void World::flushIncoming() {
 
 void World::step(double dt) {
   time_ += dt;
+  for (double& c : crater_) c = std::max(0.0, c - dt / scene_->dustSettle);  // dust fills craters
   bool eventAlive = false;
   for (auto& e : entities_) {
     if (e->dead) continue;
@@ -447,10 +551,19 @@ void World::renderBackground(Frame& out, Style style) const {
           c.fg = bright ? Rgb{250, 250, 220} : Rgb{150, 150, 170};
         }
       } else if (y >= seabedY_) {
+        const int row = y - seabedY_;
+        const int dug = craterRows(x);
         c.bg = (y == seabedY_) ? sc.groundA : sc.groundB;
         const auto& g = sc.groundGlyphs;
         c.ch = g.empty() ? U' ' : g[h % g.size()];
         c.fg = scale(c.bg, 1.35);
+        if (row < dug) {  // dug out: open sky with the crater walls drawn as slopes
+          c.bg = sc.skyLow;
+          c.ch = craterRows(x - 1) <= row ? U'\\' : craterRows(x + 1) <= row ? U'/' : U' ';
+          c.fg = scale(sc.groundA, 0.9);
+        } else if (row == dug && dug > 0) {
+          c.bg = sc.groundB;  // freshly exposed, darker floor
+        }
       } else {
         const double t = double(y - surfaceY_) / std::max(seabedY_ - surfaceY_, 1);
         c.bg = lerp(sc.mediumTop, sc.mediumDeep, std::min(t * 1.2, 1.0));

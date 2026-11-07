@@ -10,6 +10,10 @@ ground-colors: #8a8a92 #66666e
 ground-glyphs: .       o   ,     `    .      O    '        
 ground-rows: 4
 stars: 28
+action: impact meteorite
+action-label: Meteor strike
+gravity: 2.5
+dust-settle: 40
 event-first: 3..7
 event-interval: 6..14
 
@@ -19,6 +23,11 @@ rover        count       1
 --- decor
 earth        right       8     y 2
 lander       left        10
+flag         center      12
+rock         random      0
+rock         random      0
+rock         random      0
+rock         random      0
 
 --- events
 meteor       1

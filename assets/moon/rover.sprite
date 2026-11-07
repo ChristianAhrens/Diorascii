@@ -4,7 +4,7 @@ habitat: ground
 speed: 1.5..2.5
 depth: 15
 fps: 3
-behaviors: swim
+behaviors: walk
 color: #d8d8e0
 --- art
    ___

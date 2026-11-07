@@ -4,7 +4,7 @@ habitat: ground
 speed: 1.5..3
 depth: 19
 fps: 3
-behaviors: swim
+behaviors: walk
 pool: warm
 --- art
  \/(o_o)\/

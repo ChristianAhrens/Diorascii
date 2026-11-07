@@ -1,0 +1,11 @@
+name: flag
+habitat: ground
+depth: 21
+color: #e8e8f0
+--- art
+|>
+|
+|
+|
+--- mask
+WR

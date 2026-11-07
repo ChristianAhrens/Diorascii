@@ -2,6 +2,7 @@ name: food
 tag: food
 color: #ffd166
 fps: 4
+random-frame: yes
 behaviors: sink
 --- art
 *

@@ -13,7 +13,8 @@ sky-fraction: 0.2
 sky-rows: 1..5
 ground-rows: 2
 stars: 23
-feed: food
+action: drop food
+action-label: Feed the fish
 event-first: 8..16
 event-interval: 40..90
 

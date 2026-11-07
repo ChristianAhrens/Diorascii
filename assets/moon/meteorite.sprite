@@ -1,0 +1,12 @@
+name: meteorite
+facing: right
+tag: meteorite
+behaviors: meteorite
+--- art
+.
+ `.
+   *
+--- mask
+o
+ oo
+   Y

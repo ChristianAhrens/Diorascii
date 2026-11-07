@@ -3,6 +3,7 @@
 
 #include "core/scene.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "core/sprite.h"
@@ -108,7 +109,21 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->skyRowsMax = static_cast<int>(rows.second);
   sc->groundRows = static_cast<int>(p.num("ground-rows", 2));
   sc->starDensity = static_cast<int>(p.num("stars", 0));
-  sc->feedSprite = p.str("feed");
+  sc->gravity = p.num("gravity", sc->gravity);
+  sc->dustSettle = std::max(p.num("dust-settle", sc->dustSettle), 1.0);
+  if (p.has("action")) {
+    const auto t = p.list("action");
+    if (t.size() == 1 && t[0] == "none") {
+      sc->action.kind = Action::Kind::None;
+    } else if (t.size() == 2 && (t[0] == "drop" || t[0] == "impact")) {
+      sc->action.kind = t[0] == "drop" ? Action::Kind::Drop : Action::Kind::Impact;
+      sc->action.sprite = t[1];
+    } else {
+      err = "'action' must be 'none', 'drop <sprite>' or 'impact <sprite>'";
+      return nullptr;
+    }
+  }
+  sc->action.label = p.str("action-label", sc->action.kind == Action::Kind::None ? "No action" : "Action");
   sc->eventFirst = p.range("event-first", sc->eventFirst);
   sc->eventInterval = p.range("event-interval", sc->eventInterval);
   if (p.has("ground-glyphs")) sc->groundGlyphs = decodeUtf8(p.str("ground-glyphs"));

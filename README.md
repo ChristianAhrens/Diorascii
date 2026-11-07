@@ -32,6 +32,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
     diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
+    diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20

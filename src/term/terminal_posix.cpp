@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -25,6 +26,20 @@ std::atomic<bool> gQuit{false};
 void onWinch(int) { gResized = true; }
 /// SIGINT and SIGTERM handler: asks the main loop to stop.
 void onQuit(int) { gQuit = true; }
+
+/// True on the Linux text console (TERM=linux), also from inside tmux, which hides the
+/// outer terminal behind its own TERM but can tell us what the attached client uses.
+bool onLinuxConsole() {
+  auto isLinux = [](const char* t) { return t && std::strncmp(t, "linux", 5) == 0; };
+  if (isLinux(std::getenv("TERM"))) return true;
+  if (!std::getenv("TMUX")) return false;
+  FILE* p = popen("tmux display-message -p '#{client_termname}' 2>/dev/null", "r");
+  if (!p) return false;
+  char buf[64] = {};
+  const bool got = std::fgets(buf, sizeof buf, p) != nullptr;
+  pclose(p);
+  return got && isLinux(buf);
+}
 
 /// Writes the whole buffer to stdout, retrying after interruptions.
 void writeAll(const char* data, size_t n) {
@@ -90,6 +105,7 @@ bool Terminal::init() {
   if (ct && (std::strstr(ct, "truecolor") || std::strstr(ct, "24bit"))) {
     colorMode_ = ColorMode::TrueColor;
   }
+  if (onLinuxConsole()) colorMode_ = ColorMode::Console;  // 16 colors whatever COLORTERM claims
   return true;
 }
 

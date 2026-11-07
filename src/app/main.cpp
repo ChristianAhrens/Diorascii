@@ -44,8 +44,8 @@ struct Options {
   double hour = -1;
   /// Frame rate (--fps).
   double fps = 20;
-  /// Force 24-bit or 256-color output (--truecolor, --256).
-  bool forceTrueColor = false, force256 = false;
+  /// Force 24-bit, 256-color or Linux console output (--truecolor, --256, --console).
+  bool forceTrueColor = false, force256 = false, forceConsole = false;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
@@ -65,6 +65,7 @@ void usage() {
       "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
+      "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
       "  --act N          with --dump: trigger the scene's action at step N\n"
@@ -101,6 +102,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     }
     else if (a == "--truecolor") o.forceTrueColor = true;
     else if (a == "--256") o.force256 = true;
+    else if (a == "--console") o.forceConsole = true;
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -218,6 +220,7 @@ int main(int argc, char** argv) {
   }
   if (opt.forceTrueColor) term.setColorMode(ColorMode::TrueColor);
   if (opt.force256) term.setColorMode(ColorMode::Ansi256);
+  if (opt.forceConsole) term.setColorMode(ColorMode::Console);
 
   int w = 80, h = 24;
   term.size(w, h);

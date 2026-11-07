@@ -1843,6 +1843,17 @@ TEST(vt_ansi16_uses_named_colors_only_and_never_black_text) {
   CHECK(d.find("30") == std::string::npos);   // plain black is never used for text
 }
 
+TEST(vt_console_uses_dark_backgrounds_and_no_shade_glyphs) {
+  Frame a(2, 1), b(2, 1);
+  b.at(0, 0).bg = {0, 0, 110};
+  b.at(1, 0).bg = {200, 220, 255};
+  b.at(1, 0).ch = U'x'; b.at(1, 0).fg = {255, 255, 255};
+  const std::string d = encodeFrame(&a, b, ColorMode::Console);
+  CHECK(d.find("38;") == std::string::npos && d.find("48;") == std::string::npos);
+  CHECK(d.find("\xe2\x96") == std::string::npos);  // no shade glyphs: console fonts lack them
+  CHECK(d.find("10") == std::string::npos);        // bright backgrounds (100-107) are unreliable
+}
+
 TEST(rgb_to_ansi16_maps_to_named_colors) {
   CHECK(rgbToAnsi16({255, 0, 0}) == 9);
   CHECK(rgbToAnsi16({0, 255, 255}) == 14);

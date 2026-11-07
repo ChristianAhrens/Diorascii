@@ -1,0 +1,26 @@
+name: Windows
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset release
+      - name: Build
+        run: cmake --build build/release --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/release -C Release --output-on-failure
+      - name: Smoke test headless output
+        run: build/release/src/Release/diorascii.exe --seed 1 --dump 20 --size 60x15
+      - name: Package
+        working-directory: build/release
+        run: cpack -C Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diorascii-windows
+          path: build/release/diorascii-*.zip

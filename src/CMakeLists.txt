@@ -19,6 +19,7 @@ add_library(diorascii_core STATIC
   core/frame.cpp
   core/sprite.cpp
   core/scene.cpp
+  core/menu.cpp
   core/assets.cpp
   core/world.cpp
   "${EMBED_CPP}")

@@ -12,6 +12,7 @@
 #include <string>
 
 #include "core/assets.h"
+#include "core/menu.h"
 #include "core/utf8.h"
 #include "core/world.h"
 #include "term/terminal.h"
@@ -63,7 +64,7 @@ void usage() {
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: left/right scene | c style | f feed | i info | p pause | r restart | q quit");
+      "keys: m/enter/esc menu | left/right scene | c style | f feed | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -111,6 +112,11 @@ void drawToast(Frame& f, const std::string& text, Style style) {
   const std::string padded = "  " + text + "  ";
   const int len = static_cast<int>(decodeUtf8(padded).size());
   drawLabel(f, std::max((f.width() - len) / 2, 0), std::max(f.height() / 2 - 1, 0), padded, style);
+}
+
+/// Menu text for a render style.
+const char* styleName(Style s) {
+  return s == Style::Full ? "Full color" : s == Style::Terminal ? "Terminal colors" : "Monochrome";
 }
 
 /// Prints every sprite (first two frames) for art review.
@@ -199,6 +205,20 @@ int main(int argc, char** argv) {
   std::string toast = scenes[sceneIdx]->title;
   double toastLeft = 2.0;
 
+  Menu menu("DIORASCII");
+  {
+    std::vector<std::string> titles;
+    for (const auto& sc : scenes) titles.push_back(sc->title);
+    menu.addChoice("scene", "Scene", titles, sceneIdx);
+    menu.addChoice("style", "Style",
+                   {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
+                   static_cast<size_t>(style));
+    menu.addChoice("info", "Info line", {"off", "on"}, 0);
+    menu.addButton("feed", "Feed");
+    menu.addButton("resume", "Resume");
+    menu.addButton("quit", "Quit");
+  }
+
   using clock = std::chrono::steady_clock;
   auto next = clock::now();
   double measuredFps = opt.fps;
@@ -208,25 +228,39 @@ int main(int argc, char** argv) {
     sceneIdx = idx % scenes.size();
     toast = scenes[sceneIdx]->title;
     toastLeft = 2.0;
+    menu.setValue("scene", sceneIdx);
   };
 
   while (!term.quitRequested()) {
     bool quit = false, rebuild = false;
     for (Action a : term.poll(5)) {
+      if (menu.handle(a)) continue;  // the open menu consumes navigation
       switch (a) {
         case Action::Quit: quit = true; break;
         case Action::Pause: paused = !paused; break;
-        case Action::Info: info = !info; break;
+        case Action::Info: info = !info; menu.setValue("info", info); break;
         case Action::Feed: world->feed(); break;
         case Action::Redraw: rebuild = true; ++seed; break;
         case Action::Style:
           style = static_cast<Style>((static_cast<int>(style) + 1) % 3);
+          menu.setValue("style", static_cast<size_t>(style));
           havePrev = false;
           break;
         case Action::Left: switchScene(sceneIdx + scenes.size() - 1); rebuild = true; break;
         case Action::Right: switchScene(sceneIdx + 1); rebuild = true; break;
+        case Action::Menu:
+        case Action::Select:
+        case Action::Back: menu.open(); break;
         default: break;
       }
+    }
+    for (const auto& ev : menu.takeEvents()) {
+      if (ev.id == "scene") { switchScene(ev.value); rebuild = true; }
+      else if (ev.id == "style") { style = static_cast<Style>(ev.value); havePrev = false; }
+      else if (ev.id == "info") info = ev.value == 1;
+      else if (ev.id == "feed") world->feed();
+      else if (ev.id == "resume") menu.close();
+      else if (ev.id == "quit") quit = true;
     }
     if (quit) break;
     if (term.takeResized()) {
@@ -250,10 +284,11 @@ int main(int argc, char** argv) {
     if (!paused) world->step(dt);
     world->render(cur, style);
     if (info) drawInfo(cur, *world, paused, measuredFps, style);
-    if (toastLeft > 0) {
+    if (toastLeft > 0 && !menu.isOpen()) {
       drawToast(cur, toast, style);
       toastLeft -= dt;
     }
+    menu.render(cur, style);
     // The terminal style uses the user's 16 ANSI colors so it follows their theme.
     const ColorMode mode = style == Style::Terminal ? ColorMode::Ansi16 : term.colorMode();
     term.write(encodeFrame(havePrev ? &prev : nullptr, cur, mode));

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/assets.h"
+#include "core/menu.h"
 #include "core/world.h"
 #include "term/vt.h"
 
@@ -259,6 +260,106 @@ TEST(moon_has_no_medium_and_ground_walkers_stand_on_the_ground) {
   CHECK(f.height() == 30);
 }
 
+
+// ---------------------------------------------------------------------- menu ---
+
+static Menu sampleMenu() {
+  Menu m("T");
+  m.addChoice("scene", "Scene", {"A", "B", "C"}, 0);
+  m.addChoice("style", "Style", {"x", "y"}, 0);
+  m.addButton("quit", "Quit");
+  return m;
+}
+
+TEST(menu_is_inert_until_opened) {
+  Menu m = sampleMenu();
+  CHECK(!m.isOpen());
+  CHECK(!m.handle(Action::Down));
+  CHECK(m.takeEvents().empty());
+  Frame f(60, 20);
+  m.render(f, Style::Full);
+  CHECK(f.toText().find("Scene") == std::string::npos);
+}
+
+TEST(menu_navigates_wraps_and_reports_changes) {
+  Menu m = sampleMenu();
+  m.open();
+  CHECK(m.handle(Action::Right));  // scene A -> B
+  auto ev = m.takeEvents();
+  CHECK(ev.size() == 1 && ev[0].id == "scene" && ev[0].value == 1);
+  CHECK(m.handle(Action::Left));
+  CHECK(m.handle(Action::Left));   // wraps A -> C
+  ev = m.takeEvents();
+  CHECK(ev.size() == 2 && ev[1].value == 2);
+  CHECK(m.value("scene") == 2);
+
+  CHECK(m.handle(Action::Up));     // wraps to the last entry (button)
+  CHECK(m.handle(Action::Right));  // nothing to change on a button
+  CHECK(m.takeEvents().empty());
+  CHECK(m.handle(Action::Select));
+  ev = m.takeEvents();
+  CHECK(ev.size() == 1 && ev[0].id == "quit");
+
+  CHECK(m.handle(Action::Down));   // wraps to the first entry
+  CHECK(m.handle(Action::Select)); // select on a choice advances it
+  ev = m.takeEvents();
+  CHECK(ev.size() == 1 && ev[0].id == "scene" && ev[0].value == 0);
+}
+
+TEST(menu_closes_with_back_and_leaves_other_actions_alone) {
+  Menu m = sampleMenu();
+  m.open();
+  CHECK(!m.handle(Action::Quit));  // the app decides what quit means
+  CHECK(!m.handle(Action::Feed));
+  CHECK(m.isOpen());
+  CHECK(m.handle(Action::Back));
+  CHECK(!m.isOpen());
+  m.open();
+  CHECK(m.handle(Action::Menu));
+  CHECK(!m.isOpen());
+}
+
+TEST(menu_set_value_is_silent_and_clamped) {
+  Menu m = sampleMenu();
+  m.setValue("scene", 99);
+  CHECK(m.value("scene") == 2);
+  CHECK(m.takeEvents().empty());
+}
+
+TEST(menu_renders_a_centered_box_and_degrades_on_small_screens) {
+  Menu m = sampleMenu();
+  m.open();
+  Frame big(80, 24);
+  m.render(big, Style::Full);
+  const std::string t = big.toText();
+  CHECK(t.find("Scene") != std::string::npos && t.find("< A") != std::string::npos);
+  CHECK(t.find("T") != std::string::npos && t.find("+--") != std::string::npos);
+  CHECK(t.find("esc: close") != std::string::npos);
+
+  Frame plain(80, 24);
+  m.render(plain, Style::Mono);
+  bool anyRgb = false, anyReverse = false;
+  for (int y = 0; y < plain.height(); ++y) {
+    for (int x = 0; x < plain.width(); ++x) {
+      const Cell& c = plain.at(x, y);
+      if (c.ch != U' ' && !c.defaultFg) anyRgb = true;
+      anyReverse |= c.reverse;
+    }
+  }
+  CHECK(!anyRgb);       // monochrome menu uses only the terminal's own colors
+  CHECK(anyReverse);    // ...and marks the selection with reverse video
+
+  for (int w : {1, 5, 20, 30}) {
+    for (int h : {1, 3, 8, 12}) {
+      Frame tiny(w, h);
+      m.render(tiny, Style::Full);  // must not crash or write out of bounds
+      CHECK(tiny.width() == w);
+    }
+  }
+  Frame narrow(16, 12);
+  m.render(narrow, Style::Full);
+  CHECK(narrow.toText().find("[T] ") != std::string::npos);  // compact one-line form
+}
 
 // -------------------------------------------------------------------- styles ---
 

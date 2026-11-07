@@ -16,12 +16,15 @@ debug build and runs the tests. Assets are embedded into the binary at build tim
 
 ## Run
 
-    diorascii                       # q quit, p pause, r restart, i info, f feed, c style, left/right scene
-    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
+    diorascii                       # q quit, p pause, r restart, i info, f feed, left/right scene
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
+
+The menu (`m`, Enter or Esc) lists scene, style, info line, feed, resume and quit.
+It is drawn into the same cell grid as the scene and driven only by abstract
+actions (up, down, left, right, select, back), so any input device can use it.
 
 ## Extending: sprites
 
@@ -97,6 +100,5 @@ other frontends (SDL window, tvOS) can be added without touching it.
 
 ## Status
 
-Two scenes (aquarium, moon) with 21 original sprites; feeding, predation and
-scheduled events work. Switching scenes uses the left/right arrow keys for now;
-a proper ASCII menu comes later.
+Two scenes (aquarium, moon) with 21 original sprites; feeding, predation,
+scheduled events, three render styles and an ASCII menu work.

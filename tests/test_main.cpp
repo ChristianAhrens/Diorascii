@@ -2057,6 +2057,31 @@ TEST(ambience_follows_the_aquarium_world) {
   CHECK(ambientFor(aq).whale >= 0.0f && ambientFor(aq).whale <= 1.0f);
 }
 
+TEST(ambience_the_desert_wind_grows_into_a_sandstorm_and_a_tornado_roars) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Desert;
+  const double base = ambienceRms(calm, 8);
+  CHECK(base > 0.003 && base < 0.02);  // barely audible
+  AmbientParams storm = calm;
+  storm.rain = 1;  // a sandstorm
+  CHECK(ambienceRms(storm, 8) > base * 2.5);
+  AmbientParams tornado = calm;
+  tornado.tornado = 1;
+  CHECK(ambienceRms(tornado, 8) > base * 3);
+  AmbientParams worm = calm;
+  worm.storm = 1;  // the sandworm
+  CHECK(ambienceRms(worm, 8) > base * 1.5);
+}
+
+TEST(ambience_follows_the_desert_world) {
+  AssetPack pack = AssetPack::embedded();
+  World desert(pack, pack.scene("desert"), 100, 30, 2);
+  CHECK(ambientFor(desert).kind == AmbientKind::Desert);
+  CHECK(ambientFor(desert).tornado == 0.0f);
+  desert.startRain(10);  // a sandstorm
+  CHECK(ambientFor(desert).rain == 1.0f);
+}
+
 TEST(ambience_is_deterministic_per_seed) {
   AmbientParams p;
   p.kind = AmbientKind::Forest;

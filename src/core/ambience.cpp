@@ -68,6 +68,7 @@ AmbientParams ambientFor(const World& world) {
   const std::string& name = world.scene().name;
   if (name == "forest") p.kind = AmbientKind::Forest;
   else if (name == "aquarium") p.kind = AmbientKind::Aquarium;
+  else if (name == "desert") p.kind = AmbientKind::Desert;
   const Light l = world.light();
   p.night = static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));
   p.rain = world.raining() ? 1.0f : 0.0f;
@@ -75,6 +76,7 @@ AmbientParams ambientFor(const World& world) {
   p.storm = static_cast<float>(world.stormProximity());
   p.nibbles = static_cast<unsigned>(world.foodEatenCount());
   p.whale = static_cast<float>(world.nearness("whale"));
+  p.tornado = static_cast<float>(world.nearness("tornado"));
   return p;
 }
 
@@ -83,6 +85,9 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowHum_ = coeff(1.0f / 110.0f / 6.28f);
   lowMuffle_ = coeff(1.0f / 650.0f / 6.28f);
   lowDeep_ = coeff(1.0f / 55.0f / 6.28f);
+  lowSandCut_ = coeff(1.0f / 1200.0f / 6.28f);
+  lowSandTop_ = coeff(1.0f / 4000.0f / 6.28f);
+  lowTornado_ = coeff(1.0f / 170.0f / 6.28f);
 }
 
 void Ambience::bubble(double delay, float f0, float dur, float amp) {
@@ -93,6 +98,46 @@ void Ambience::bubble(double delay, float f0, float dur, float amp) {
   b.dur = dur;
   b.amp = amp;
   b.pan = static_cast<float>(rng_.range(0.2, 0.8));
+}
+
+void Ambience::desertSample(const AmbientParams& p, float out[2]) {
+  (void)p;
+  const double dt = 1.0 / rate_;
+  // Dry wind: low-passed noise like the forest's, but steadier and a little higher. In a sandstorm
+  // it howls stronger, with the hiss of blown sand on top.
+  const float cutoffHz = (260.0f + 300.0f * gust_) * (1.0f + 0.7f * rain_);
+  const float lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
+  // Calm weather is barely a breath; a sandstorm or a tornado brings the full wind.
+  const float calm = 0.22f + 0.78f * std::min(1.0f, rain_ + tornado_);
+  const float windGain = (0.45f + 0.8f * gust_) * (1.0f + 3.0f * rain_ + 0.8f * tornado_) *
+                         (1.0f - 0.3f * night_) * calm * 0.085f;
+  const float sandLevel = std::max(rain_, tornado_ * 0.6f) * (0.55f + 0.45f * gust_);
+  // A tornado: a deep roar that turns, loud and quiet about three times a second.
+  tornadoPhase_ += kTwoPi * 2.8 * dt;
+  const float spin = 0.65f + 0.35f * static_cast<float>(std::sin(tornadoPhase_));
+  const float roar = tornado_ * std::sqrt(tornado_) * spin * 2.0f;
+  // Crickets at night, fewer than in the forest.
+  const float chirps = night_ * 0.014f * (cricket(t_, 2.1, 33, 4300) + 0.7f * cricket(t_ + 0.5, 1.7, 28, 4800));
+  // The sandworm below, as it nears: a growl in the ground.
+  const float growl = storm_ * storm_ * 0.5f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
+
+  for (int ch = 0; ch < 2; ++ch) {
+    const float n = noise(rng_) * noiseScale_;
+    desertLow_[ch][0] += (n - desertLow_[ch][0]) * lowWind;
+    desertLow_[ch][1] += (desertLow_[ch][0] - desertLow_[ch][1]) * lowWind;
+    const float n2 = noise(rng_) * noiseScale_;
+    sandLow_[ch][0] += (n2 - sandLow_[ch][0]) * lowSandCut_;
+    sandLow_[ch][1] += (n2 - sandLow_[ch][1]) * lowSandTop_;
+    const float n3 = noise(rng_) * noiseScale_;
+    tornadoLow_[ch][0] += (n3 - tornadoLow_[ch][0]) * lowTornado_;
+    tornadoLow_[ch][1] += (tornadoLow_[ch][0] - tornadoLow_[ch][1]) * lowTornado_;
+    const float n4 = noise(rng_) * noiseScale_;
+    deepLow_[ch][0] += (n4 - deepLow_[ch][0]) * lowDeep_;
+    deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
+    out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
+              tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl +
+              chirps * (ch ? 0.9f : 1.0f);
+  }
 }
 
 void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
@@ -196,7 +241,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     for (int k = 0; k < kAmbientKinds; ++k) approach(mix_[k], static_cast<int>(p.kind) == k ? 1.0f : 0.0f, kPresence);
     approach(rain_, p.rain, kRain);
     approach(night_, p.night, kNight);
-    approach(storm_, p.kind == AmbientKind::Forest || p.kind == AmbientKind::Aquarium ? p.storm : 0.0f, kStorm);
+    approach(storm_, p.storm, kStorm);
+    approach(tornado_, p.kind == AmbientKind::Desert ? p.tornado : 0.0f, kStorm);
     approach(whale_, p.kind == AmbientKind::Aquarium ? p.whale : 0.0f, kStorm);
     approach(volume_, p.volume, kVolume);
 
@@ -253,8 +299,9 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenNibbles_ = p.nibbles;
     }
-    float aq[2] = {0, 0};
+    float aq[2] = {0, 0}, desert[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
+    if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
 
     for (int ch = 0; ch < 2; ++ch) {
       // Wind: noise through two low-pass stages (no hiss, no crackle).
@@ -285,7 +332,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
 
       const float sample = (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
-                           aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)];
+                           aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
+                           desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)];
       out[2 * i + ch] = softClip(sample) * volume_ * 0.8f;
     }
   }

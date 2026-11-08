@@ -11,9 +11,9 @@ namespace dio {
 class World;
 
 /// What a scene sounds like.
-enum class AmbientKind { Silent, Forest, Aquarium };
+enum class AmbientKind { Silent, Forest, Aquarium, Desert };
 /// Number of AmbientKind values.
-inline constexpr int kAmbientKinds = 3;
+inline constexpr int kAmbientKinds = 4;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
 struct AmbientParams {
@@ -31,13 +31,16 @@ struct AmbientParams {
   unsigned nibbles = 0;
   /// How near a whale is, from 0 to 1 (World::nearness("whale")): it sings as it passes.
   float whale = 0;
+  /// How near a tornado is, from 0 to 1 (World::nearness("tornado")).
+  float tornado = 0;
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
 AmbientParams ambientFor(const World& world);
 
 /// Generates ambient sound: wind, rain, thunder and crickets at night in the forest, the deep
-/// hum, bubbles and passing whales of the aquarium. Pure
+/// hum, bubbles and passing whales of the aquarium, the dry wind, sandstorms and tornadoes of
+/// the desert. Pure
 /// computation without I/O, deterministic per seed, so it is testable without a sound device.
 /// Parameter changes are smoothed, so switching scenes or muting never clicks.
 class Ambience {
@@ -66,6 +69,8 @@ class Ambience {
   void bubble(double delay, float f0, float dur, float amp);
   /// One sample of the aquarium's sound for both ears.
   void aquariumSample(const AmbientParams& p, float out[2]);
+  /// One sample of the desert's sound for both ears.
+  void desertSample(const AmbientParams& p, float out[2]);
   /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
   void thunderLevels(float& crack, float& rumble, float& snap) const;
 
@@ -108,6 +113,13 @@ class Ambience {
   } song_;
   unsigned seenNibbles_ = 0;
   bool nibblesSynced_ = false;
+
+  float desertLow_[2][2] = {};  ///< two low-pass stages of the desert wind, per ear
+  float sandLow_[2][2] = {};    ///< band limits of the hiss of blown sand (low cut, high cut), per ear
+  float tornadoLow_[2][2] = {}; ///< the roar of a tornado, per ear
+  float tornado_ = 0;           ///< smoothed tornado proximity
+  double tornadoPhase_ = 0;     ///< phase of the roar's rotation
+  float lowSandCut_, lowSandTop_, lowTornado_;  ///< desert filter coefficients
 };
 
 }  // namespace dio

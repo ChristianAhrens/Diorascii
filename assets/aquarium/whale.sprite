@@ -1,5 +1,5 @@
 name: whale
-facing: right
+facing: left
 habitat: surface
 anchor-row: 4
 speed: 3..5

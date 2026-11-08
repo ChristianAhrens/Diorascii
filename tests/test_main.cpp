@@ -1999,6 +1999,64 @@ TEST(world_storm_proximity_follows_the_thundercloud_across_the_scene) {
   CHECK(moon.stormProximity() == 0.0);
 }
 
+// RMS of the seconds [from, to) of an aquarium render; `at` seconds in, the nibble counter rises by 3.
+static double aquariumRms(AmbientParams p, int from, int to, int at = -1, double window = 1.0, int rate = 48000) {
+  Ambience a(rate, 4);
+  std::vector<float> buf(static_cast<size_t>(rate) * 2);
+  double sum = 0;
+  size_t n = 0;
+  for (int s = 0; s < to; ++s) {
+    if (s == at) p.nibbles += 3;
+    a.render(p, buf.data(), rate);
+    if (s < from) continue;
+    const size_t count = static_cast<size_t>(window * rate) * 2;
+    for (size_t i = 0; i < count && i < buf.size(); ++i) {
+      CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+      sum += double(buf[i]) * buf[i];
+      ++n;
+    }
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_the_aquarium_hums_and_a_whale_or_kraken_nearby_adds_to_it) {
+  AmbientParams p;
+  p.kind = AmbientKind::Aquarium;
+  const double calm = aquariumRms(p, 2, 12);
+  CHECK(calm > 0.01 && calm < 0.08);  // a quiet hum
+  AmbientParams whale = p;
+  whale.whale = 1;
+  CHECK(aquariumRms(whale, 2, 12) > calm * 1.1);
+  AmbientParams kraken = p;
+  kraken.storm = 1;
+  CHECK(aquariumRms(kraken, 4, 8) > calm * 2);
+}
+
+TEST(ambience_fish_nibbling_at_food_make_blips_only_in_the_aquarium) {
+  constexpr int kRate = 48000;
+  auto peakAfter = [&](AmbientKind kind, bool nibble) {
+    Ambience a(kRate, 4);
+    AmbientParams p;
+    p.kind = kind;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    for (int s = 0; s < 3; ++s) a.render(p, buf.data(), kRate);  // the first second synchronises the counter
+    if (nibble) p.nibbles += 3;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = 0; i < static_cast<size_t>(kRate * 0.4) * 2; ++i) pk = std::max(pk, std::fabs(buf[i]));
+    return pk;
+  };
+  CHECK(peakAfter(AmbientKind::Aquarium, true) > peakAfter(AmbientKind::Aquarium, false) * 1.3f);
+  CHECK(peakAfter(AmbientKind::Silent, true) == 0.0f);
+}
+
+TEST(ambience_follows_the_aquarium_world) {
+  AssetPack pack = AssetPack::embedded();
+  World aq(pack, pack.scene("aquarium"), 100, 30, 2);
+  CHECK(ambientFor(aq).kind == AmbientKind::Aquarium);
+  CHECK(ambientFor(aq).whale >= 0.0f && ambientFor(aq).whale <= 1.0f);
+}
+
 TEST(ambience_is_deterministic_per_seed) {
   AmbientParams p;
   p.kind = AmbientKind::Forest;

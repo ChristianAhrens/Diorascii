@@ -235,6 +235,8 @@ class World {
   /// How close a "gloom" creature (a thundercloud) is to the middle of the scene, from 0 (far away
   /// or absent) to 1 (overhead). It starts to count a little before the creature comes into view.
   double stormProximity() const;
+  /// Like stormProximity() for any creature whose tag or sprite name is `key` (a whale, a tornado).
+  double nearness(const std::string& key) const;
   /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
   double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.

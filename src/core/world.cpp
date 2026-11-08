@@ -910,16 +910,18 @@ size_t World::countTag(const std::string& tag) const {
   return n;
 }
 
-double World::stormProximity() const {
+double World::nearness(const std::string& key) const {
   double best = 0;
   for (const auto& e : entities_) {
-    if (e->dead || e->tag != "gloom") continue;
+    if (e->dead || (e->tag != key && e->sprite->name() != key)) continue;
     const double cx = e->x + e->width() / 2.0;
     const double reach = w_ / 2.0 + e->width() / 2.0 + w_ * 0.25;  // starts before it is in view
     best = std::max(best, std::clamp(1.0 - std::fabs(cx - w_ / 2.0) / reach, 0.0, 1.0));
   }
   return best;
 }
+
+double World::stormProximity() const { return nearness("gloom"); }
 
 Entity* World::nearest(const std::string& tag, double x, double y, double maxDist) {
   Entity* best = nullptr;

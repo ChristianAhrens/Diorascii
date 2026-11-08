@@ -32,7 +32,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
     diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
-    diorascii --audio               # ambient sound (spike: the forest's wind, rain, thunder and night crickets); a toggles it
+    diorascii --audio               # ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
@@ -79,6 +79,17 @@ carries over when you switch scenes. The info line (`i`) shows the clock.
 
 In the terminal styles the cycle shows in the stars, the sun and moon and the creatures
 coming and going; the colors themselves stay with your terminal theme.
+
+### Sound
+
+Ambient sound is synthesized at run time (no recordings) and off by default: `--audio`, the `a`
+key or the menu's Sound entry turn it on. Without a sound device the app simply stays silent.
+Every scene has its own soundscape, and the sound follows what happens on screen:
+
+| Scene | What you hear |
+|---|---|
+| Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
+| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale and the growl of the kraken as it nears |
 
 ### Rare events
 

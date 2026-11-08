@@ -887,7 +887,8 @@ TEST(sleeping_animals_stay_put_are_not_hunted_and_scenes_without_a_cycle_ignore_
   world.setTimeMode(World::TimeMode::Day);
   sleeper->x = 40;
   for (int i = 0; i < 10; ++i) world.step(0.05);
-  CHECK(sleeper->x > 40 || world.eatenCount() > 0);  // awake: it walks (or is caught)
+  // awake: it walks, or is caught - a caught sleeper is freed, so test that case first
+  CHECK(world.eatenCount() > 0 || sleeper->x > 40);
 
   AssetPack flat = miniPack("medium: no\nsky-fraction: 1\n--- population\nsleeper count 10\n",
                             {"name: sleeper\nhabitat: sky\nspeed: 0..0\nsleeps: 1\n--- art\nZ\n"});

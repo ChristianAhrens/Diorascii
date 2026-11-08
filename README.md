@@ -294,6 +294,7 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
 
     src/core   headless simulation, frame buffer, menu (no I/O, deterministic per seed)
     src/term   VT/ANSI encoder and the terminal backends (posix, windows)
+    src/audio  ambient sound playback (the synthesis itself is in src/core/ambience)
     src/app    command line + main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
@@ -334,3 +335,9 @@ asciiquarium is licensed under the GPL. Diorascii deliberately is not derived fr
 and is released under the permissive [MIT license](LICENSE), so it can be used,
 redistributed and shipped (including through app stores) without GPL obligations.
 This is a statement of how the project is made, not legal advice.
+
+Ambient sound is played through [miniaudio](https://miniaud.io) by David Reid, vendored as a
+single header in `third_party/miniaudio` (playback only). It is available under the public
+domain (Unlicense) or MIT No Attribution terms, which are compatible with this project's MIT
+license and with app store distribution; its license text is kept next to it. The sounds
+themselves are synthesized at run time, so no audio recordings are included.

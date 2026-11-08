@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "core/ambience.h"
 #include "core/assets.h"
 #include "core/menu.h"
 #include "core/world.h"
@@ -1860,6 +1861,161 @@ TEST(rgb_to_ansi16_maps_to_named_colors) {
   CHECK(rgbToAnsi16({255, 255, 255}) == 15);
   CHECK(rgbToAnsi16({0, 0, 0}) != 0);
   CHECK(rgbToAnsi16({70, 70, 85}) == 8);
+}
+
+// Renders `seconds` of ambience and returns the RMS of the last second, checking every sample.
+static double ambienceRms(const AmbientParams& p, double seconds, uint64_t seed = 1) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, seed);
+  std::vector<float> buf(static_cast<size_t>(kRate * seconds) * 2);
+  a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+  double sum = 0;
+  size_t n = 0;
+  for (size_t i = buf.size() > 2u * kRate ? buf.size() - 2u * kRate : 0; i < buf.size(); ++i) {
+    CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+    sum += double(buf[i]) * buf[i];
+    ++n;
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_is_silent_for_silent_scenes_and_audible_in_the_forest) {
+  AmbientParams p;
+  CHECK(ambienceRms(p, 3) == 0.0);  // the moon has no air to carry sound
+  p.kind = AmbientKind::Forest;
+  CHECK(ambienceRms(p, 3) > 0.005);
+}
+
+TEST(ambience_rain_makes_the_forest_louder_and_muting_silences_it) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Forest;
+  AmbientParams rainy = calm;
+  rainy.rain = 1;
+  CHECK(ambienceRms(rainy, 6) > ambienceRms(calm, 6) * 1.2);
+  AmbientParams muted = rainy;
+  muted.volume = 0;
+  CHECK(ambienceRms(muted, 3) < 1e-4);
+}
+
+// RMS of seconds [from, to) of a render in which the flash counter rises at second 1.
+static double thunderRms(AmbientKind kind, bool flash, int from, int to) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = kind;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  double sum = 0;
+  size_t n = 0;
+  for (int s = 0; s < to; ++s) {
+    if (s == 1 && flash) p.flashes = 1;  // after a first second at zero
+    a.render(p, buf.data(), kRate);
+    if (s < from) continue;
+    for (float v : buf) { CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f); sum += double(v) * v; ++n; }
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_thunder_rolls_in_after_lightning_in_the_forest_only) {
+  CHECK(thunderRms(AmbientKind::Forest, true, 2, 5) > thunderRms(AmbientKind::Forest, false, 2, 5) * 2);
+  CHECK(thunderRms(AmbientKind::Silent, true, 0, 5) == 0.0);  // the moon's alien flash is silent
+}
+
+TEST(ambience_ignores_a_flash_counter_that_resets_with_a_rebuilt_world) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  p.flashes = 5;  // a world that has had five flashes ...
+  a.render(p, buf.data(), kRate);
+  p.flashes = 0;  // ... is replaced by a fresh one
+  double sum = 0;
+  for (int s = 0; s < 4; ++s) {
+    a.render(p, buf.data(), kRate);
+    for (float v : buf) sum += double(v) * v;
+  }
+  CHECK(std::sqrt(sum / (4.0 * buf.size())) < 0.08);  // no thunder, just the quiet wind
+}
+
+TEST(ambience_a_strike_cracks_sharply_at_once_and_the_rumble_follows_after_it) {
+  constexpr int kRate = 48000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  a.render(p, buf.data(), kRate);  // a second of calm
+  a.render(p, buf.data(), kRate);
+  auto peak = [&](double fromS, double toS) {
+    float pk = 0;
+    for (size_t i = static_cast<size_t>(fromS * kRate) * 2; i < static_cast<size_t>(toS * kRate) * 2; ++i) {
+      pk = std::max(pk, std::fabs(buf[i]));
+    }
+    return pk;
+  };
+  const float calm = peak(0, 0.4);
+  p.flashes = 1;
+  a.render(p, buf.data(), kRate);
+  CHECK(peak(0, 0.15) > 0.5f && peak(0, 0.15) > calm * 5);  // the crack: loud and immediate
+  CHECK(peak(0.22, 0.29) < peak(0, 0.15) * 0.5f);            // it dies away before the second pop
+}
+
+TEST(ambience_rumbles_as_a_storm_approaches_before_any_lightning) {
+  constexpr int kRate = 8000;
+  auto rms = [&](float storm, AmbientKind kind) {
+    Ambience a(kRate, 9);
+    AmbientParams p;
+    p.kind = kind;
+    p.storm = storm;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    double sum = 0;
+    size_t n = 0;
+    for (int s = 0; s < 12; ++s) {
+      a.render(p, buf.data(), kRate);
+      if (s < 4) continue;
+      for (float v : buf) { CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f); sum += double(v) * v; ++n; }
+    }
+    return std::sqrt(sum / double(n));
+  };
+  CHECK(rms(1.0f, AmbientKind::Forest) > rms(0.0f, AmbientKind::Forest) * 1.5);
+  CHECK(rms(0.5f, AmbientKind::Forest) > rms(0.0f, AmbientKind::Forest));
+  CHECK(rms(1.0f, AmbientKind::Silent) == 0.0);
+}
+
+TEST(world_storm_proximity_follows_the_thundercloud_across_the_scene) {
+  AssetPack pack = AssetPack::embedded();
+  World w(pack, pack.scene("forest"), 100, 30, 3);
+  CHECK(w.stormProximity() == 0.0);  // no cloud yet
+  CHECK(w.triggerRare());
+  double lo = 1, hi = 0;
+  for (int i = 0; i < 4000; ++i) {
+    w.step(1.0 / 20);
+    const double s = w.stormProximity();
+    CHECK(s >= 0 && s <= 1);
+    lo = std::min(lo, s);
+    hi = std::max(hi, s);
+  }
+  CHECK(lo < 0.05 && hi > 0.6);  // it comes in, passes overhead and leaves
+  World moon(pack, pack.scene("moon"), 100, 30, 3);
+  CHECK(moon.stormProximity() == 0.0);
+}
+
+TEST(ambience_is_deterministic_per_seed) {
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  p.night = 1;
+  CHECK(ambienceRms(p, 2, 7) == ambienceRms(p, 2, 7));
+  CHECK(ambienceRms(p, 2, 7) != ambienceRms(p, 2, 8));
+}
+
+TEST(ambience_follows_the_world_scene_and_weather) {
+  AssetPack pack = AssetPack::embedded();
+  World forest(pack, pack.scene("forest"), 80, 24, 1);
+  World moon(pack, pack.scene("moon"), 80, 24, 1);
+  CHECK(ambientFor(forest).kind == AmbientKind::Forest);
+  CHECK(ambientFor(moon).kind == AmbientKind::Silent);
+  CHECK(ambientFor(forest).rain == 0.0f);
+  forest.startRain(10);
+  CHECK(ambientFor(forest).rain == 1.0f);
 }
 
 int main() {

@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "audio/audio.h"
 #include "core/assets.h"
 #include "core/menu.h"
 #include "core/utf8.h"
@@ -46,6 +47,8 @@ struct Options {
   double fps = 20;
   /// Force 24-bit, 256-color or Linux console output (--truecolor, --256, --console).
   bool forceTrueColor = false, force256 = false, forceConsole = false;
+  /// Start with ambient sound on (--audio).
+  bool audio = false;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
@@ -65,6 +68,7 @@ void usage() {
       "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
+      "  --audio          play ambient sound (a toggles it)\n"
       "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
@@ -74,7 +78,7 @@ void usage() {
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: m/enter/esc menu | left/right scene | c style | t time of day | f action (feed, rain, meteor...) | x rare event | i info | p pause | r restart | q quit");
+      "keys: m/enter/esc menu | left/right scene | c style | t time of day | f action (feed, rain, meteor...) | x rare event | a sound | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -103,6 +107,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--truecolor") o.forceTrueColor = true;
     else if (a == "--256") o.force256 = true;
     else if (a == "--console") o.forceConsole = true;
+    else if (a == "--audio") o.audio = true;
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -251,6 +256,7 @@ int main(int argc, char** argv) {
                    static_cast<size_t>(style));
     menu.addChoice("time", "Time of day", timeOptions(scenes[sceneIdx]->dayNight), 0);
     menu.addChoice("info", "Info line", {"off", "on"}, 0);
+    menu.addChoice("audio", "Sound", {"off", "on"}, 0);
     menu.addButton("action", scenes[sceneIdx]->action.label);
     menu.addButton("rare", "Rare event");
     menu.addButton("resume", "Resume");
@@ -271,6 +277,21 @@ int main(int argc, char** argv) {
     menu.setOptions("time", timeOptions(scenes[sceneIdx]->dayNight), static_cast<size_t>(timeMode));
   };
 
+  // Ambient sound is off until asked for; a machine without a sound device just stays silent.
+  AudioOutput audio;
+  bool soundOn = false;
+  auto setSound = [&](bool on) {
+    if (on && !audio.start()) {
+      on = false;
+      toast = "No audio device";
+      toastLeft = 1.5;
+    }
+    if (!on) audio.stop();
+    soundOn = on;
+    menu.setValue("audio", on ? 1 : 0);
+  };
+  if (opt.audio) setSound(true);
+
   // Runs the scene's action and confirms it on screen, so it is clear that something happened.
   auto runAction = [&]() {
     if (world->interact() > 0) {
@@ -289,6 +310,7 @@ int main(int argc, char** argv) {
         case Action::Info: info = !info; menu.setValue("info", info); break;
         case Action::Interact: runAction(); break;
         case Action::Rare: world->triggerRare(); break;
+        case Action::Audio: setSound(!soundOn); break;
         case Action::Redraw: rebuild = true; ++seed; break;
         case Action::Style:
           style = static_cast<Style>((static_cast<int>(style) + 1) % 3);
@@ -320,6 +342,7 @@ int main(int argc, char** argv) {
         world->setTimeMode(timeMode);
       }
       else if (ev.id == "info") info = ev.value == 1;
+      else if (ev.id == "audio") setSound(ev.value == 1);
       else if (ev.id == "action") runAction();
       else if (ev.id == "rare") world->triggerRare();
       else if (ev.id == "resume") menu.close();
@@ -346,6 +369,11 @@ int main(int argc, char** argv) {
     if (elapsed > 0) measuredFps = measuredFps * 0.9 + (1.0 / elapsed) * 0.1;
 
     if (!paused) world->step(dt);
+    if (soundOn) {
+      AmbientParams ap = ambientFor(*world);
+      if (paused) ap.volume = 0;
+      audio.setParams(ap);
+    }
     world->render(cur, style);
     if (info) drawInfo(cur, *world, paused, measuredFps, style);
     if (toastLeft > 0 && !menu.isOpen()) {

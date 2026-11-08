@@ -69,6 +69,7 @@ AmbientParams ambientFor(const World& world) {
   if (name == "forest") p.kind = AmbientKind::Forest;
   else if (name == "aquarium") p.kind = AmbientKind::Aquarium;
   else if (name == "desert") p.kind = AmbientKind::Desert;
+  else if (name == "moon") p.kind = AmbientKind::Moon;
   const Light l = world.light();
   p.night = static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));
   p.rain = world.raining() ? 1.0f : 0.0f;
@@ -77,6 +78,7 @@ AmbientParams ambientFor(const World& world) {
   p.nibbles = static_cast<unsigned>(world.foodEatenCount());
   p.whale = static_cast<float>(world.nearness("whale"));
   p.tornado = static_cast<float>(world.nearness("tornado"));
+  p.impacts = world.impactCount();
   return p;
 }
 
@@ -88,6 +90,7 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowSandCut_ = coeff(1.0f / 1200.0f / 6.28f);
   lowSandTop_ = coeff(1.0f / 4000.0f / 6.28f);
   lowTornado_ = coeff(1.0f / 170.0f / 6.28f);
+  lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
 }
 
 void Ambience::bubble(double delay, float f0, float dur, float amp) {
@@ -98,6 +101,61 @@ void Ambience::bubble(double delay, float f0, float dur, float amp) {
   b.dur = dur;
   b.amp = amp;
   b.pan = static_cast<float>(rng_.range(0.2, 0.8));
+}
+
+void Ambience::moonSample(const AmbientParams& p, float out[2]) {
+  (void)p;
+  const double dt = 1.0 / rate_;
+  // No air, so nothing to hear but what could be felt through the ground: a faint, deep drone of
+  // stacked fifths that drifts slowly, with a hint of shimmer above it.
+  const double drift = 0.7 + 0.3 * std::sin(kTwoPi * 0.043 * t_);
+  const double shimmer = 0.5 + 0.5 * std::sin(kTwoPi * 0.11 * t_ + 0.8);
+  float pad[2];
+  for (int ch = 0; ch < 2; ++ch) {
+    const double o = ch ? 0.9 : 0.0;
+    pad[ch] = static_cast<float>(
+        drift * (0.5 * std::sin(kTwoPi * 55.0 * t_ + o) + 0.35 * std::sin(kTwoPi * 82.5 * t_ + 1.0 + o)) +
+        0.18 * std::sin(kTwoPi * 220.0 * t_ + 2.0 + o) * drift +
+        0.07 * shimmer * std::sin(kTwoPi * 330.7 * t_ + o) + 0.03 * (1 - shimmer) * std::sin(kTwoPi * 441.0 * t_ + o)) * 0.06f;
+  }
+
+  // A meteorite strike: a thud that thumps up out of the ground and falls away, a dull rumble,
+  // and then debris pattering down slowly in the low gravity.
+  float thud = 0, rumble = 0, patter = 0, click = 0;
+  for (const Impact& im : impacts_) {
+    const double tau = t_ - im.start;
+    if (im.gain <= 0 || tau < 0 || tau > 9) continue;
+    const double sweep = 34.0 * tau + 70.0 * (1.0 - std::exp(-9.0 * tau)) / 9.0;  // 104 Hz sinking to 34 Hz
+    thud += static_cast<float>(std::sin(kTwoPi * sweep) * (1.0 - std::exp(-tau * 400.0)) * std::exp(-tau * 3.2)) * im.gain;
+    rumble += static_cast<float>(im.gain * std::exp(-tau * 1.3) * (1.0 - std::exp(-tau * 30.0)));
+    if (tau > 0.5) {
+      const double density = 60.0 * std::exp(-(tau - 0.5) * 0.8);  // clicks per second
+      if (rng_.uniform() < density * dt) click += static_cast<float>(rng_.range(0.4, 1.0) * (rng_.chance(0.5) ? 1 : -1)) * im.gain;
+    }
+  }
+  patter = click;
+
+  // The alien: an eerie rising warble.
+  float zap = 0;
+  const double zt = t_ - zapStart_;
+  if (zapStart_ > 0 && zt >= 0 && zt < 0.9) {
+    const double f = 350.0 + 1000.0 * (zt / 0.9) + 120.0 * std::sin(kTwoPi * 17.0 * zt);
+    zapPhase_ += kTwoPi * f * dt;
+    const double env = std::pow(std::sin(3.14159265 * zt / 0.9), 1.5);
+    zap = static_cast<float>((std::sin(zapPhase_) + 0.3 * std::sin(1.5 * zapPhase_)) * env) * 0.12f;
+  }
+
+  const float debrisF = 2.0f * std::sin(3.14159265f * std::min(900.0f, static_cast<float>(rate_) / 7.0f) / static_cast<float>(rate_));
+  for (int ch = 0; ch < 2; ++ch) {
+    const float n = noise(rng_) * noiseScale_;
+    moonLow_[ch][0] += (n - moonLow_[ch][0]) * lowMoon_;
+    moonLow_[ch][1] += (moonLow_[ch][0] - moonLow_[ch][1]) * lowMoon_;
+    // Debris: each click rings a short, dull resonance.
+    debrisLow_[ch] += debrisF * debrisBand_[ch];
+    const float high = patter * 6.0f - debrisLow_[ch] - 0.6f * debrisBand_[ch];
+    debrisBand_[ch] += debrisF * high;
+    out[ch] = pad[ch] + thud * 0.55f + moonLow_[ch][1] * 14.0f * rumble * 0.35f + debrisBand_[ch] * 0.3f + zap;
+  }
 }
 
 void Ambience::desertSample(const AmbientParams& p, float out[2]) {
@@ -234,6 +292,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Forest) {
       clap(rng_.range(0.03, 0.10), 1.0, true);  // the strike is overhead: sound follows at once
     }
+    if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Moon) zapStart_ = t_;  // the alien's flash
     seenFlashes_ = p.flashes;
   }
 
@@ -299,9 +358,21 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenNibbles_ = p.nibbles;
     }
-    float aq[2] = {0, 0}, desert[2] = {0, 0};
+    // Meteorite strikes and the alien's flash on the moon (first values seen are starting points).
+    if (!impactsSynced_) { seenImpacts_ = p.impacts; impactsSynced_ = true; }
+    if (p.impacts != seenImpacts_) {
+      if (p.impacts > seenImpacts_ && p.kind == AmbientKind::Moon) {
+        Impact& im = *std::min_element(std::begin(impacts_), std::end(impacts_),
+                                       [](const Impact& a, const Impact& b) { return a.start < b.start; });
+        im.start = t_ + rng_.range(0.0, 0.05);
+        im.gain = 1.0f;
+      }
+      seenImpacts_ = p.impacts;
+    }
+    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
+    if (mix_[static_cast<int>(AmbientKind::Moon)] > 1e-3f) moonSample(p, moon);
 
     for (int ch = 0; ch < 2; ++ch) {
       // Wind: noise through two low-pass stages (no hiss, no crackle).
@@ -333,7 +404,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
 
       const float sample = (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
                            aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
-                           desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)];
+                           desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
+                           moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)];
       out[2 * i + ch] = softClip(sample) * volume_ * 0.8f;
     }
   }

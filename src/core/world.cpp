@@ -867,6 +867,7 @@ double World::deepestCrater() const {
 }
 
 void World::impactAt(double cx) {
+  ++impacts_;
   const int c = static_cast<int>(std::lround(cx));
   const int hw = craterHalfWidth();
   const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;

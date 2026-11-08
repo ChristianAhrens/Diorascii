@@ -185,6 +185,8 @@ class World {
   size_t foodEatenCount() const { return foodEaten_; }  // food flakes eaten by fish
   /// Ground objects wrecked by impacts so far.
   size_t destroyedCount() const { return destroyed_; } // ground objects wrecked by impacts
+  /// Meteorite strikes so far (impactAt() calls); sound follows each one.
+  unsigned impactCount() const { return impacts_; }
   /// First row of the river (equals height() when the scene has no river).
   int riverTop() const { return riverTopY_; }
   /// Number of river rows at the bottom of the ground (0 = no river).
@@ -358,6 +360,8 @@ class World {
   double eventTimer_ = 0;
   /// Counters behind eatenCount, foodEatenCount and destroyedCount.
   size_t eaten_ = 0, foodEaten_ = 0, destroyed_ = 0;
+  /// Meteorite strikes so far.
+  unsigned impacts_ = 0;
   std::vector<double> crater_;  ///< per column, in rows; shrinks as dust settles
   /// Entities in the world.
   std::vector<std::unique_ptr<Entity>> entities_;

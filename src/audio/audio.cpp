@@ -29,7 +29,7 @@ struct AudioOutput::Impl {
   std::atomic<float> night{0}, rain{0}, volume{1};
   std::atomic<unsigned> flashes{0};
   std::atomic<float> storm{0}, whale{0}, tornado{0};
-  std::atomic<unsigned> nibbles{0};
+  std::atomic<unsigned> nibbles{0}, impacts{0};
 };
 
 namespace {
@@ -45,6 +45,7 @@ void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   p.whale = impl->whale.load();
   p.tornado = impl->tornado.load();
   p.nibbles = impl->nibbles.load();
+  p.impacts = impl->impacts.load();
   impl->ambience.render(p, static_cast<float*>(output), static_cast<int>(frames));
 }
 }  // namespace
@@ -99,6 +100,7 @@ void AudioOutput::setParams(const AmbientParams& p) {
   impl_->whale = p.whale;
   impl_->tornado = p.tornado;
   impl_->nibbles = p.nibbles;
+  impl_->impacts = p.impacts;
 }
 
 }  // namespace dio

@@ -11,9 +11,9 @@ namespace dio {
 class World;
 
 /// What a scene sounds like.
-enum class AmbientKind { Silent, Forest, Aquarium, Desert };
+enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon };
 /// Number of AmbientKind values.
-inline constexpr int kAmbientKinds = 4;
+inline constexpr int kAmbientKinds = 5;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
 struct AmbientParams {
@@ -33,6 +33,8 @@ struct AmbientParams {
   float whale = 0;
   /// How near a tornado is, from 0 to 1 (World::nearness("tornado")).
   float tornado = 0;
+  /// Counts meteorite strikes (World::impactCount()); each one thuds through the ground.
+  unsigned impacts = 0;
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -71,6 +73,8 @@ class Ambience {
   void aquariumSample(const AmbientParams& p, float out[2]);
   /// One sample of the desert's sound for both ears.
   void desertSample(const AmbientParams& p, float out[2]);
+  /// One sample of the moon's sound for both ears.
+  void moonSample(const AmbientParams& p, float out[2]);
   /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
   void thunderLevels(float& crack, float& rumble, float& snap) const;
 
@@ -120,6 +124,20 @@ class Ambience {
   float tornado_ = 0;           ///< smoothed tornado proximity
   double tornadoPhase_ = 0;     ///< phase of the roar's rotation
   float lowSandCut_, lowSandTop_, lowTornado_;  ///< desert filter coefficients
+
+  /// A meteorite strike heard through the ground: when it began and how hard it hit.
+  struct Impact {
+    double start = 0;
+    float gain = 0;
+  };
+  Impact impacts_[3];
+  double zapStart_ = 0;         ///< when the alien's warble began (0 = none yet)
+  double zapPhase_ = 0;         ///< phase of the warble
+  float moonLow_[2][2] = {};    ///< the dull rumble of an impact, per ear
+  float debrisBand_[2] = {}, debrisLow_[2] = {};  ///< resonator that rings the pattering debris, per ear
+  float lowMoon_;               ///< moon filter coefficient
+  unsigned seenImpacts_ = 0;
+  bool impactsSynced_ = false;
 };
 
 }  // namespace dio

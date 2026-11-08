@@ -1881,7 +1881,7 @@ static double ambienceRms(const AmbientParams& p, double seconds, uint64_t seed 
 
 TEST(ambience_is_silent_for_silent_scenes_and_audible_in_the_forest) {
   AmbientParams p;
-  CHECK(ambienceRms(p, 3) == 0.0);  // the moon has no air to carry sound
+  CHECK(ambienceRms(p, 3) == 0.0);  // unknown scenes are silent
   p.kind = AmbientKind::Forest;
   CHECK(ambienceRms(p, 3) > 0.005);
 }
@@ -1917,7 +1917,7 @@ static double thunderRms(AmbientKind kind, bool flash, int from, int to) {
 
 TEST(ambience_thunder_rolls_in_after_lightning_in_the_forest_only) {
   CHECK(thunderRms(AmbientKind::Forest, true, 2, 5) > thunderRms(AmbientKind::Forest, false, 2, 5) * 2);
-  CHECK(thunderRms(AmbientKind::Silent, true, 0, 5) == 0.0);  // the moon's alien flash is silent
+  CHECK(thunderRms(AmbientKind::Silent, true, 0, 5) == 0.0);  // no thunder where no scene sounds
 }
 
 TEST(ambience_ignores_a_flash_counter_that_resets_with_a_rebuilt_world) {
@@ -2082,6 +2082,40 @@ TEST(ambience_follows_the_desert_world) {
   CHECK(ambientFor(desert).rain == 1.0f);
 }
 
+TEST(ambience_the_moon_is_a_faint_drone_with_thuds_and_a_warble) {
+  constexpr int kRate = 48000;
+  auto peakIn = [&](unsigned impacts, unsigned flashes, double from, double to) {
+    Ambience a(kRate, 6);
+    AmbientParams p;
+    p.kind = AmbientKind::Moon;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    a.render(p, buf.data(), kRate);
+    a.render(p, buf.data(), kRate);
+    p.impacts = impacts;
+    p.flashes = flashes;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = static_cast<size_t>(from * kRate) * 2; i < static_cast<size_t>(to * kRate) * 2; ++i) {
+      CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+      pk = std::max(pk, std::fabs(buf[i]));
+    }
+    return pk;
+  };
+  const float calm = peakIn(0, 0, 0, 0.6);
+  CHECK(calm > 0.005f && calm < 0.1f);                    // faint, but there
+  CHECK(peakIn(1, 0, 0, 0.6) > calm * 5);                 // a meteorite thuds through the ground
+  CHECK(peakIn(0, 1, 0, 0.9) > calm * 3);                 // the alien warbles
+}
+
+TEST(ambience_follows_the_moon_world_strikes) {
+  AssetPack pack = AssetPack::embedded();
+  World moon(pack, pack.scene("moon"), 100, 30, 2);
+  CHECK(moon.impactCount() == 0);
+  const unsigned before = ambientFor(moon).impacts;
+  moon.impactAt(50);
+  CHECK(ambientFor(moon).impacts == before + 1);
+}
+
 TEST(ambience_is_deterministic_per_seed) {
   AmbientParams p;
   p.kind = AmbientKind::Forest;
@@ -2095,7 +2129,7 @@ TEST(ambience_follows_the_world_scene_and_weather) {
   World forest(pack, pack.scene("forest"), 80, 24, 1);
   World moon(pack, pack.scene("moon"), 80, 24, 1);
   CHECK(ambientFor(forest).kind == AmbientKind::Forest);
-  CHECK(ambientFor(moon).kind == AmbientKind::Silent);
+  CHECK(ambientFor(moon).kind == AmbientKind::Moon);
   CHECK(ambientFor(forest).rain == 0.0f);
   forest.startRain(10);
   CHECK(ambientFor(forest).rain == 1.0f);

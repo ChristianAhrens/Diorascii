@@ -3,3 +3,22 @@ build/
 compile_commands.json
 .DS_Store
 dist/
+
+# Signing material, credentials and build products must never be committed
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.p8
+*.pfx
+*.cer
+*.pem
+*.key
+*.keychain
+*.keychain-db
+AuthKey_*
+private_keys/
+.env
+.env.*
+*.ipa
+*.xcarchive
+*.dmg

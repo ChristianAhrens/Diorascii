@@ -49,6 +49,23 @@ Each rule has a source. "Owner" = Christian Ahrens.
   the owner mid-session; re-check `git branch` before committing.
 - Untracked files the assistant did not create (screenshots, videos) are not committed unless asked.
 
+## Secrets and personal data
+
+- **Never commit** certificates, private keys, provisioning profiles (`.mobileprovision`), API keys or
+  tokens, app-specific passwords, Apple IDs or e-mail addresses, developer team IDs, device UDIDs,
+  certificate fingerprints, notarization submission IDs, or absolute paths from the owner's machine
+  (`/Users/...`). The repository is public and its history is forever. `.gitignore` blocks the usual
+  file types; that is a safety net, not a substitute for looking.
+- Scripts take such values as arguments or environment variables (`package-tvos.sh <apple-id> [team-id]`,
+  `DIORASCII_APPLE_TEAM`) and reference **keychain item names**, never the secrets in them.
+- Before a commit that touches scripts, CI, docs about releases or binary assets, search the diff for
+  the patterns above. Screenshots and other binaries carry metadata (creation time, display model,
+  EXIF/XMP): strip it from new files.
+- Public by nature and fine to keep: the bundle ID, the GitHub user name, the copyright holder in LICENSE.
+- Audit of 2026-11-08: no secrets or identifiers in any tracked file or in the history of `main`,
+  `develop` and `gh-pages`. Known and accepted: the commit author e-mail address, and screenshot PNGs
+  that carry creation timestamps and the display model (shipped in a tag, so not changeable).
+
 ## Quality gates
 
 - Every commit: builds with no warnings, tests pass, no undocumented declarations, no missing

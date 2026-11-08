@@ -27,7 +27,8 @@ is in [docs/ai/](docs/ai/README.md).
    documentation must be updated in the same change whenever code changes** (README, CHANGELOG,
    `docs/ai/`, `CLAUDE.md`, code comments). Every behavior gets tests; every commit builds
    warning-free and passes its tests.
-9. **Say what you could not verify** (sound by ear, colors by eye, Windows/Linux/GCC runs).
+9. **Never commit secrets or personal data**: certificates, keys, provisioning profiles, tokens, passwords, Apple IDs, team IDs, UDIDs, local paths. The repository is public; see [guardrails](docs/ai/guardrails.md#secrets-and-personal-data).
+10. **Say what you could not verify** (sound by ear, colors by eye, Windows/Linux/GCC runs).
 
 ## Commands
 

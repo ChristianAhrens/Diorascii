@@ -23,6 +23,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
   # Only the app gets a scheme (enabled in apple/tvOS): otherwise Xcode opens on ALL_BUILD, which
   # has nothing to run, so Run would build and then do nothing.
   set(CMAKE_XCODE_GENERATE_SCHEME OFF)
+  set(CMAKE_XCODE_ATTRIBUTE_SKIP_INSTALL YES)
 endif()
 
 project(diorascii VERSION ${DIORASCII_CHANGELOG_VERSION} LANGUAGES CXX)

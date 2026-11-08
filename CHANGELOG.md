@@ -10,7 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
-- Added a tvOS app (work in progress): the same scenes drawn on the Apple TV, steered with the Siri Remote, with synthesized sound through AVAudioEngine. It is built entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`); see the README
+- Added a tvOS app (work in progress): the same scenes drawn on the Apple TV, steered with the Siri Remote, with synthesized sound through AVAudioEngine. It is built entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`); see the README. `scripts/package-tvos.sh` builds, signs, validates and uploads it to App Store Connect
 
 ### Changed
 - Changed the ambient sound to be on by default, in the terminal program as on tvOS; `--mute` starts without it, and the `a` key and the menu still switch it. A machine without a sound device stays silent without a message unless `--audio` is given

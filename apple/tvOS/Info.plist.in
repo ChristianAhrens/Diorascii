@@ -10,7 +10,7 @@
   <key>CFBundleDisplayName</key><string>Diorascii</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>@DIORASCII_PROJECT_VERSION@</string>
-  <key>CFBundleVersion</key><string>@DIORASCII_PROJECT_VERSION@</string>
+  <key>CFBundleVersion</key><string>@DIORASCII_BUILD_NUMBER@</string>
   <key>LSRequiresIPhoneOS</key><true/>
   <key>UIUserInterfaceStyle</key><string>Dark</string>
   <key>UILaunchScreen</key><dict/>

@@ -157,6 +157,12 @@ menu is open), click = scene action (Select while the menu is open), Play/Pause 
 Keyboards (the Simulator's, or one attached to a real Apple TV) arrive as presses whose `type` is a raw HID value (2000 + usage, e.g. 2079 right arrow) and whose `key` is set, not as Siri Remote button types; `handleKey:` maps arrows, Return, Space, Escape and the terminal program's letters (m f x c t a i p r). Debug builds log input and focus with the prefix `DIORASCII-INPUT`. Verified in the tvOS 27.2 simulator: launches, draws, animates. **Not verified:** remote input,
 sound by ear, performance on a real Apple TV, the signed device build.
 
+`scripts/package-tvos.sh <apple-id> [team-id]` (2026-11-08) builds `build/package-tvos` with CMake, archives
+(the app target is the only one installed into the archive: `SKIP_INSTALL`), exports an App Store `.ipa`
+with a generated `exportOptions.plist` (`app-store-connect`, automatic signing), validates and uploads with
+`altool` using the keychain item `AppSpecificPW`. `CFBundleVersion` is `DIORASCII_BUILD_NUMBER` (default: commit
+count). Verified: configure and an unsigned archive. With the installed profile "Diorascii tvOS distribution profile" (App Store, no devices) the script signs manually (certificate chosen by the SHA-1 found in the profile and the keychain, since two Apple Distribution certificates share a name; the profile goes to the app target only, static libraries cannot have one); archive, export and the `.ipa` (signature, embedded profile, build number) were verified locally on 2026-11-08. Automatic signing fails for the archive without a registered Apple TV ("no devices from which to generate a provisioning profile"). **Not run:** validate and upload.
+
 App Store Connect validation (2026-11-08) required, beyond a signed build: the Info.plist key
 `TVTopShelfImage.TVTopShelfPrimaryImageWide` and a **2x image for every layer of the small app icon**. Both come
 from the asset catalog: `Resources/Icon/tvOS/make_rasters.sh` renders the 2x layers and the Top Shelf images

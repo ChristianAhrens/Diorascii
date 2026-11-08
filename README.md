@@ -394,6 +394,23 @@ The release is created as a draft and only published once all three platforms bu
 and passed their tests. The binaries report the tag as their version. Every push to
 `main` also redeploys the project page and the API documentation to GitHub Pages.
 
+The tvOS app goes to App Store Connect (TestFlight) with one script, which generates the project
+with CMake, archives it, signs it with automatic signing, exports the `.ipa`, validates it and
+uploads it:
+
+    scripts/package-tvos.sh you@example.com [TEAMID]    # DIORASCII_SKIP_UPLOAD=1 to stop after validating
+
+If the App Store distribution profile (`DIORASCII_PROFILE`, default "Diorascii tvOS distribution profile",
+downloaded from the developer portal and installed by double-clicking it once) is installed, the app is
+signed manually with it and its Apple Distribution certificate, which needs no registered Apple TV;
+without it automatic signing is used, which does.
+
+It uses the same keychain item for the app-specific password as the other Apple projects
+(`AppSpecificPW`, stored with `xcrun altool --store-password-in-keychain-item`), takes the team from the
+argument, `DIORASCII_APPLE_TEAM` or your signing certificate, and numbers the build by the commit count
+(`DIORASCII_BUILD_NUMBER`), which App Store Connect needs to grow with every upload. The app record
+`com.ChristianAhrens.Diorascii` for tvOS must exist in App Store Connect first.
+
 The macOS asset is a disk image with the binary, a `usr-local-bin` link to drop it onto
 (`/usr/bin` itself is protected by macOS) and an installer script for `~/.local/bin`. The
 copy CI builds is only ad-hoc signed. To build the same image with your own Developer ID

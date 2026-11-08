@@ -12,7 +12,8 @@ src/core   (no I/O, deterministic per seed; library diorascii_core)
         v                                                       |
 src/term   VT/ANSI encoder (vt.cpp) + Terminal (terminal_posix.cpp | terminal_win.cpp)
 src/audio  miniaudio device wrapper; own thread, parameters via std::atomic
-src/app    main.cpp: CLI, main loop, menu glue, info line, sound toggle
+src/app    Session (scene, menu, style, time of day, pause, toasts, info line, sound request; no I/O)
+           + main.cpp: CLI and the terminal main loop around a Session
 ```
 
 Planned (v1.2.0): a native Apple shell for tvOS (and later iOS if it becomes a supported target),
@@ -22,13 +23,16 @@ the session logic unchanged: it renders the `Frame` with a bundled monospace fon
 Siri Remote input into `Action`s. **No SDL3 and no desktop window**: Diorascii is a terminal app,
 and every desktop OS has a terminal. Decided 2026-11-08, replacing the earlier SDL3 plan.
 
-CMake targets: `diorascii_core`, `diorascii_term`, `diorascii_miniaudio` (vendored single header,
+CMake targets: `diorascii_core`, `diorascii_app`, `diorascii_term`, `diorascii_miniaudio` (vendored single header,
 built without project warnings), `diorascii_audio`, executable `diorascii`, test executable
 `diorascii_tests`.
 
 ## Frame loop (src/app/main.cpp)
 
-Fixed 20 fps (`--fps`), world steps at `dt = 1/fps`; input polled in 5 ms slices; the menu is
+`Session` (src/app/session.*, library `diorascii_app`) holds all interactive state and is driven by
+any frontend: `handle(Action)`, `resize`, `step(dt)`, `render(Frame&)`, plus `soundWanted()` /
+`soundUnavailable()` / `ambient()` for the frontend's sound device and `takeRepaint()`. The
+terminal `main.cpp` adds only pacing, the terminal and the audio device. Fixed 20 fps (`--fps`), world steps at `dt = 1/fps`; input polled in 5 ms slices; the menu is
 drawn into the same `Frame` as the scene. Frames are encoded by the pure function
 `encodeFrame(prev, cur, ColorMode)` which emits only changed cells. `--dump N` runs N steps
 headless and prints the scene as text (also used by CI as a smoke test on Windows).

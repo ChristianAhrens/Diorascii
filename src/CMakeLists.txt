@@ -52,6 +52,11 @@ add_library(diorascii_audio STATIC audio/audio.cpp)
 target_link_libraries(diorascii_audio PUBLIC diorascii_core PRIVATE diorascii_miniaudio)
 diorascii_warnings(diorascii_audio)
 
+# The interactive state (scene, menu, style, time of day, toasts), shared by every frontend.
+add_library(diorascii_app STATIC app/session.cpp)
+target_link_libraries(diorascii_app PUBLIC diorascii_core)
+diorascii_warnings(diorascii_app)
+
 add_executable(diorascii app/main.cpp)
-target_link_libraries(diorascii PRIVATE diorascii_core diorascii_term diorascii_audio)
+target_link_libraries(diorascii PRIVATE diorascii_app diorascii_core diorascii_term diorascii_audio)
 diorascii_warnings(diorascii)

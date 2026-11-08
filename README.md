@@ -401,7 +401,7 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
     src/core   headless simulation, frame buffer, menu (no I/O, deterministic per seed)
     src/term   VT/ANSI encoder and the terminal backends (posix, windows)
     src/audio  ambient sound playback (the synthesis itself is in src/core/ambience)
-    src/app    command line + main loop
+    src/app    interactive session logic (shared by frontends), command line + terminal main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
     scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)

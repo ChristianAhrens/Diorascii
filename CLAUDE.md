@@ -43,7 +43,7 @@ is in [docs/ai/](docs/ai/README.md).
     src/core    simulation, frame buffer, menu, ambient-sound synth (headless, deterministic per seed)
     src/term    VT/ANSI encoder + posix/windows terminal backends
     src/audio   miniaudio playback wrapper
-    src/app     command line and main loop
+    src/app     Session (shared interactive state, no I/O) + command line and terminal loop
     assets/     *.sprite and *.scene data, embedded into the binary at build time
     tests/      one dependency-free test file
     CHANGELOG.md  single source of the version and of the GitHub release text

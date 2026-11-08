@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added PRIVACY.md: Diorascii collects no data, in the terminal program, in the tvOS app and on the project page
 - Added a tvOS app (work in progress): the same scenes drawn on the Apple TV, steered with the Siri Remote, with synthesized sound through AVAudioEngine. It is built entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`); see the README. `scripts/package-tvos.sh` builds, signs, validates and uploads it to App Store Connect
 
 ### Changed

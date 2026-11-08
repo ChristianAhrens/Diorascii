@@ -61,6 +61,9 @@ Each rule has a source. "Owner" = Christian Ahrens.
 - Before a commit that touches scripts, CI, docs about releases or binary assets, search the diff for
   the patterns above. Screenshots and other binaries carry metadata (creation time, display model,
   EXIF/XMP): strip it from new files.
+- `PRIVACY.md` states that the program, the tvOS app and the project page collect nothing. **Keep it true:** if
+  a change adds network access, analytics, stored user data, logging of identifiers or a third-party
+  service (also on `pages/index.html`), update `PRIVACY.md` and the App Store privacy answers in the same change.
 - Public by nature and fine to keep: the bundle ID, the GitHub user name, the copyright holder in LICENSE.
 - Audit of 2026-11-08: no secrets or identifiers in any tracked file or in the history of `main`,
   `develop` and `gh-pages`. Known and accepted: the commit author e-mail address, and screenshot PNGs

@@ -453,7 +453,7 @@ Planned: a tvOS app.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) &middot; [Privacy](PRIVACY.md)
 
 ## Credits and legal
 

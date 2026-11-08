@@ -1,0 +1,14 @@
+name: snowpuff
+fps: 5
+loop: no
+die-after-animation: yes
+color: #f4f8ff
+behaviors: fly
+--- art
+@
+--- art
+*
+--- art
+o
+--- art
+.

@@ -1,0 +1,12 @@
+name: shrub
+facing: right
+habitat: ground
+zone: woods
+solid: yes
+speed: 0..0
+--- art
+ .^.
+(^^^)
+--- mask
+ GgG
+GgggG

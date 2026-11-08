@@ -90,6 +90,18 @@ struct SceneDef {
   Action action;
   double gravity = 6;      ///< cells/s^2 for falling debris
   double dustSettle = 40;  ///< seconds for dust to fill one row of a crater
+  /// True for a mountain scene: the whole height is a landscape. A meadow with a stream at the
+  /// bottom, a forest belt, bare rock and snow on top of the peaks, and the sky above them. The
+  /// ground-colors and ground-glyphs are the meadow's.
+  bool mountains = false;
+  /// Altitude of the highest peak, the tree line and the snow line, as shares of the height.
+  double peakHeight = 0.86, treeline = 0.45, snowline = 0.68;
+  /// Colors of the forest belt, the rock and the snow, each from the lower to the higher part.
+  Rgb forestA{52, 104, 58}, forestB{36, 78, 44};
+  Rgb rockA{126, 122, 118}, rockB{96, 92, 94};
+  Rgb snowA{238, 244, 250}, snowB{206, 220, 238};
+  /// Characters scattered over the forest belt, the rock and the snow.
+  std::u32string forestGlyphs = U"^\"'^ ,", rockGlyphs = U".:  ,'", snowGlyphs = U"*. .  ";
   /// Rows at the bottom of the ground that are a flowing river (0 = no river).
   int riverRows = 0;
   /// River colors from the bank down to the deepest row.

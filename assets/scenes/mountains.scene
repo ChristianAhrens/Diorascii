@@ -1,0 +1,63 @@
+# Mountains: the whole height of the terminal is a landscape. A meadow with a stream in front,
+# a forest belt, bare rock and then snow and ice on the peaks, and the sky above. Eagles soar
+# down as far as the rock, goats leap about the crags, deer and birds live in the valley and the
+# woods, and bears stroll there hunting. F brings a snowstorm; now and then an avalanche rips
+# down a flank, through the forest and into the stream.
+name: mountains
+title: Mountains
+order: 18
+
+medium: no
+sky-fraction: 1
+sky: #3f7fcc #c4e0f4
+mountains: yes
+peak-height: 0.86
+treeline: 0.46
+snowline: 0.68
+ground-colors: #5cb049 #3f8a37
+ground-glyphs: ,   "    '       .        ,     
+ground-rows: 9
+river-rows: 2
+river-colors: #5ab4e6 #2b7bbb
+river-flow: 3
+forest-colors: #3f7d48 #2b5e36
+rock-colors: #8c8882 #6a6660
+snow-colors: #f4f8fc #cfdeee
+action: weather snowflake
+action-label: Snowstorm
+weather-duration: 22
+overcast-tint: #e2ecf6 0.7
+stars: 18
+day-night: yes
+day-length: 240
+start-hour: 10
+sun-sprite: sun_big
+moon-sprite: moon_big
+rare-first: 90..200
+rare-interval: 240..480
+
+--- population
+# sprite       mode       amount
+cloud_wisp     per-cols   45
+fir_big        per-cols   6
+fir_small      per-cols   5
+shrub          per-cols   9
+dwarf_pine     per-cols   14
+crag           per-cols   14
+ice_spire      per-cols   26
+oak            per-cols   20
+flower         per-cols   6
+red_deer       per-cols   30
+bear           per-cols   70
+goat           per-cols   26
+finch          per-cols   34
+golden_eagle   per-cols   55
+
+--- decor
+# sprite       align      margin
+reeds          random     0     y -3
+reeds          random     0     y -3
+reeds          random     0     y -3
+
+--- rare
+avalanche      1

@@ -1,0 +1,22 @@
+name: golden_eagle
+facing: right
+habitat: sky
+zone: air
+speed: 4..7
+depth: 18
+active: day
+color: #8a6532
+life: yes
+behaviors: soar
+--- art
+\_.-.v.-._/
+   '---'
+--- art
+  _.-v-._
+-'  '-'  '-
+--- art
+-._.-"v"-._
+    `-'
+--- art
+    \v/
+     V

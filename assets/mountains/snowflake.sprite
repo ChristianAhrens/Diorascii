@@ -1,0 +1,19 @@
+name: snowflake
+wind: yes
+speed: 16..32
+fall: 0.5..4
+density: 1.6
+tag: flake
+random-frame: yes
+color: #f4f8ff
+behaviors: fly
+--- art
+*
+--- art
+.
+--- art
++
+--- art
+*
+--- art
+.

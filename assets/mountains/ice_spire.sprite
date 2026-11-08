@@ -1,0 +1,12 @@
+name: ice_spire
+facing: right
+habitat: ground
+zone: snow
+destructible: no
+solid: yes
+speed: 0..0
+color: #bfe2f8
+--- art
+  /\
+ /  \
+/_/\_\

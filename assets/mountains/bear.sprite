@@ -1,0 +1,34 @@
+name: bear
+facing: right
+habitat: ground
+zone: woods
+solid: yes
+speed: 3..4.5
+fps: 3
+mouth-row: 1
+feast-time: 5
+hunt-effect: pounce
+backing: 0.4
+sleeps: 0.8
+life: yes
+behaviors: chase hunt ledge
+--- art
+  .--""--.
+ (        )o>
+  ||    ||
+  /\    /\
+--- mask
+  NNNNNNNN
+ NNNNNNNNNNkk
+  NN    NN
+  NN    NN
+--- art
+  .--""--.
+ (        )o>
+  ||    ||
+  \/    \/
+--- mask
+  NNNNNNNN
+ NNNNNNNNNNkk
+  NN    NN
+  NN    NN

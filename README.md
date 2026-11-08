@@ -13,6 +13,38 @@ terminal-themed look that follows your own colors.
 &middot; [Project page](https://christianahrens.github.io/Diorascii/)
 &middot; [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html)
 
+## Screenshots
+
+Every scene by day and by night (the moon has no day and night cycle).
+
+<table>
+  <tr><th></th><th>Day</th><th>Night</th></tr>
+  <tr>
+    <th>Aquarium</th>
+    <td align="center"><img src="Resources/Diorascii_Sea_Day.png" alt="Aquarium by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Sea_Night.png" alt="Aquarium by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Forest</th>
+    <td align="center"><img src="Resources/Diorascii_Forest_Day.png" alt="Forest by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Forest_Night.png" alt="Forest by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Desert</th>
+    <td align="center"><img src="Resources/Diorascii_Desert_Day.png" alt="Desert by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Desert_Night.png" alt="Desert by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Mountains</th>
+    <td align="center"><img src="Resources/Diorascii_Mountains_Day.png" alt="Mountains by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Mountains_Night.png" alt="Mountains by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Moon</th>
+    <td colspan="2" align="center"><img src="Resources/Diorascii_Moon.png" alt="The moon" width="400"></td>
+  </tr>
+</table>
+
 ## Download
 
 Every release on the [releases page](https://github.com/ChristianAhrens/Diorascii/releases/latest)

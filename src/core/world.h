@@ -23,6 +23,21 @@ struct Entity;
 /// @param dt length of the step in seconds
 using BehaviorFn = void (*)(Entity&, World&, double dt);
 
+/// Where on a mountain a thing lives (a sprite's `zone:` header). The ground zones are bands of
+/// altitude whose limits wobble from column to column; the air zones are flying bands.
+enum class Zone {
+  None,     ///< no zone: placed by the sprite's habitat
+  Meadow,   ///< the valley floor above the stream
+  Forest,   ///< the belt of trees
+  Woods,    ///< forest and meadow together
+  Rock,     ///< bare rock above the tree line
+  Snow,     ///< snow and ice above the snow line
+  Alpine,   ///< rock and snow together
+  Sky,      ///< the sky around the peaks
+  Air,      ///< the air down to the rock, where eagles soar
+  LowAir    ///< the air over the forest and the valley, where small birds fly
+};
+
 /// A live thing in the world: a sprite with a position, motion and behaviors.
 struct Entity {
   /// What it looks like.
@@ -99,6 +114,12 @@ struct Entity {
   bool loop = true;
   std::array<Rgb, 9> pal{};  ///< colors for mask digits 1-9
   Rgb fg{220, 220, 220};     ///< color for ' ' in the mask
+  /// Where it lives on a mountain, and for flyers the rows (top of the sprite) it may use.
+  Zone zone = Zone::None;
+  double rowLo = 0, rowHi = 0;
+  /// Row a ledge walker is climbing to (negative = none), and whether it moves in hops.
+  double laneTarget = -1;
+  bool hops = false;
   /// Seconds alive, lifetime in seconds (negative means unlimited), and a
   /// random phase offset for bobbing.
   double age = 0, ttl = -1, phase = 0;
@@ -191,8 +212,32 @@ class World {
   int riverTop() const { return riverTopY_; }
   /// Number of river rows at the bottom of the ground (0 = no river).
   int riverRows() const { return riverRows_; }
-  /// True while a rain shower is going on.
+  /// True while a rain shower (or a snowstorm) is going on.
   bool raining() const { return rainLeft_ > 0; }
+  /// True for a mountain scene.
+  bool mountains() const { return scene_->mountains; }
+  /// First row of the mountain at column x, where the sky ends (seabedY() without mountains).
+  int ridgeRow(int x) const;
+  /// What lies at column x, row y: a zone of the mountain, or Zone::None in the sky.
+  Zone zoneAt(int x, int y) const;
+  /// True if a sprite of the entity's size with its top at row `top` and its left edge at column
+  /// `x` stands in the entity's zone with its feet in the zone and its head inside the mountain.
+  bool fits(const Entity& e, double x, double top) const;
+  /// Puts a zone sprite where it belongs: a random place of its zone, or at an edge to walk in.
+  /// @param keepX keep the column the entity has
+  /// @param enter start off screen on the side it comes from (`right`: it moves right)
+  void placeInZone(Entity& e, bool keepX, bool enter, bool right);
+  /// Picks a new row for a ledge walker at its column, if one fits, and sets it as its target.
+  void pickLane(Entity& e);
+  /// Draw order for a thing on the mountain whose feet are at this row: lower is nearer.
+  int depthFor(double feetRow) const;
+  /// How much of the avalanche's swath still covers the cell, from 0 to 1.
+  double scarAt(int x, int y) const;
+  /// How loud the avalanche is, from 0 (none) to 1 (it is thundering down); sound follows it.
+  double avalancheLevel() const { return slideLevel_; }
+  /// Moves an avalanche entity one step down the mountain, scarring what it passes and wiping out
+  /// what it buries. Called by the `avalanche` behavior.
+  void slideStep(Entity& e, double dt);
   /// How the time of day advances. The other modes freeze it at a fixed moment.
   enum class TimeMode { Cycle, Dawn, Day, Dusk, Night };
   /// Runs the day and night cycle, or freezes the time of day. Without a cycle in
@@ -288,6 +333,10 @@ class World {
  private:
   /// Spawns the scene population and decorations.
   void populate();
+  /// Builds the mountain range: the skyline, the tree line and the snow line of every column.
+  void buildTerrain();
+  /// Takes an entity out of the world after a catastrophe and brings it back some seconds later.
+  void claim(Entity& o, const std::string& effect);
   /// Places one decoration.
   void spawnDecor(const SceneDef::Decor& d);
   /// Grows one procedural seaweed plant.
@@ -310,6 +359,9 @@ class World {
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
   void renderBackground(Frame& out, Style style, const Light& light) const;
+  /// Draws the mountain range over the sky: meadow, forest, rock, snow, the stream and the swath
+  /// of an avalanche.
+  void renderTerrain(Frame& out, Style style, const Light& light) const;
   /// Draws the sun or the moon on its arc across the sky.
   void renderCelestial(Frame& out, Style style, const Light& light) const;
 
@@ -323,6 +375,26 @@ class World {
   int surfaceY_ = 0, seabedY_ = 0;
   /// River band: first row and number of rows (rows is 0 without a river).
   int riverTopY_ = 0, riverRows_ = 0;
+  /// Mountains: first terrain row, tree line row and snow line row of every column, and which
+  /// side of its peak the column is on (-1 left, 1 right: the way the rock is streaked).
+  std::vector<int> ridge_, treeRow_, snowRow_;
+  std::vector<signed char> side_;
+  /// Lowest skyline row, where the sun sets behind the foothills.
+  int horizonY_ = 0;
+  /// Rows (feet) a zone spans: index by Zone.
+  int zoneLo_[10] = {}, zoneHi_[10] = {};
+  /// Fading trace of the avalanche over every cell, row by row.
+  std::vector<float> scar_;
+  /// The avalanche under way: where it starts, where it is heading, how far down it has come.
+  struct Slide {
+    bool active = false;
+    double x0 = 0, y0 = 0, dir = 1, gradient = 1, wobble = 0;
+    double head = 0, lastHead = 0;
+    double endedAt = -1;  ///< age of the avalanche entity when its head reached the bottom
+    double puffs = 0;
+  } slide_;
+  /// How loud the avalanche is right now.
+  double slideLevel_ = 0;
   /// Seconds until the next rare event; negative means none is scheduled yet.
   double rareTimer_ = 0;
   /// A wiped-out entity waiting to be brought back.

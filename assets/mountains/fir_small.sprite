@@ -1,0 +1,16 @@
+name: fir_small
+facing: right
+habitat: ground
+zone: forest
+solid: yes
+speed: 0..0
+--- art
+  ^
+ /^\
+/^^^\
+  |
+--- mask
+  g
+ GgG
+GgggG
+  n

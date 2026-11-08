@@ -1,0 +1,23 @@
+name: finch
+facing: right
+habitat: sky
+zone: low-air
+speed: 6..10
+depth: 20..26
+fps: 5
+random-frame: yes
+bob-amplitude: 1.2
+bob-frequency: 1.1
+color: #f4e4a0
+backing: 0.4
+active: day
+life: yes
+behaviors: wander
+--- art
+\v/
+--- art
+_v_
+--- art
+/v\
+--- art
+_v_

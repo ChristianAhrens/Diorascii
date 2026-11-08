@@ -15,6 +15,21 @@ the GitHub release (see "Releasing" in the README).
 
 ### Fixed
 
+## [1.1.1] 2026-11-08
+### Added
+- Added the Mountains scene, which uses the whole height of the terminal: a meadow with a stream, a forest belt, bare rock and snow on the peaks, and the sky above. The ground is a mountain range with a different set of peaks every run; the tree line and snow line wobble, the far flanks lie in shadow, and the sun and moon set behind the ridges
+- Added mountain wildlife that keeps to its own zone: eagles soar across the sky and swoop down as far as the rock, goats leap along the rocky and snowy ledges, deer and small birds live in the meadow and the forest, and bears stroll there and hunt the deer
+- Added the snowstorm (`f`): icy wind sweeps snow across the whole screen and turns the scene into a whiteout
+- Added the avalanche (the rare event, `x`): the snow cracks high on a flank, then a powder cloud rips down the mountainside through the rock and the forest into the stream, burying trees, bushes and animals; its swath fades after a while and what was buried comes back
+- Added mountains soundscape: alpine wind, a gurgling stream, the occasional cry of an eagle and drumming of a woodpecker by day, a howling icy wind in a snowstorm, and the cracking, rumbling and roar of an avalanche, which crackles and thumps as it breaks loose and as it knocks down trees on its way
+- Added scene keys `mountains`, `peak-height`, `treeline`, `snowline`, `forest-colors`, `rock-colors`, `snow-colors` and `forest-glyphs`, `rock-glyphs`, `snow-glyphs`; sprite keys `zone`, `fall` and `density`; behaviors `ledge`, `soar` and `avalanche`
+- Added a Mountains button and clips to the project page, and screenshots of every scene by day and by night to the README
+
+### Changed
+- Changed the background clips of the project page to show only the terminal, without the window border, and to be smaller (20 frames per second, 1920 pixels wide)
+
+### Fixed
+
 ## [1.1.0] 2026-11-08
 ### Added
 - Added CHANGELOG.md, which also provides the version for CMake and the text of the GitHub release

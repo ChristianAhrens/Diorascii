@@ -1,0 +1,51 @@
+name: avalanche
+facing: right
+habitat: sky
+solid: yes
+speed: 0..0
+depth: 1
+fps: 6
+tag: avalanche
+behaviors: avalanche
+--- art
+    .oo*o.`*:  
+ @@.  : *@ :oo 
+`.*         .:*
+*.:       * :.@
+:@ *o: o  ..*'.
+ .  '':*:. '   
+--- mask
+    WWWWWWlWl  
+ lWWWWWWWWWWWW 
+lWWWWWWWWWWWWWW
+WlWWWWWWWWWWWWW
+ll WWWWlWWWWWlW
+ l  lllWWW l   
+--- art
+   ::*.*.@: @ :
+oo*.* *    ::* 
+:*.         *@.
+.o@        .o*.
+:`.**     :*:*`
+    :.**....o  
+--- mask
+   lWlWlWWl W l
+WWWlWWWWWWWWWW 
+WlWWWWWWWWWWllW
+llWWWWWWWWWWWlW
+llllWWWWWWlWlll
+    lllWWlWlW  
+--- art
+    ** .o:***  
+.*@o    *  : `@
+.*o.       @ .*
+o*.         .**
+ :::o*.  : *.  
+  :.@o*:o.. *  
+--- mask
+    Wl WWllWW  
+WWWlWWWWlWWl lW
+llWWWWWWWWWWWWW
+WlWWWWWWWWWWWWW
+ WlWWWWWWlWWl  
+  llWWllWll l  

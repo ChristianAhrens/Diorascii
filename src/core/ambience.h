@@ -11,9 +11,9 @@ namespace dio {
 class World;
 
 /// What a scene sounds like.
-enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon };
+enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains };
 /// Number of AmbientKind values.
-inline constexpr int kAmbientKinds = 5;
+inline constexpr int kAmbientKinds = 6;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
 struct AmbientParams {
@@ -35,6 +35,8 @@ struct AmbientParams {
   float tornado = 0;
   /// Counts meteorite strikes (World::impactCount()); each one thuds through the ground.
   unsigned impacts = 0;
+  /// How loud an avalanche is, from 0 to 1 (World::avalancheLevel()): it cracks, rumbles and roars.
+  float avalanche = 0;
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -42,7 +44,7 @@ AmbientParams ambientFor(const World& world);
 
 /// Generates ambient sound: wind, rain, thunder and crickets at night in the forest, the deep
 /// hum, bubbles and passing whales of the aquarium, the dry wind, sandstorms and tornadoes of
-/// the desert. Pure
+/// the desert, the wind, stream and avalanches of the mountains. Pure
 /// computation without I/O, deterministic per seed, so it is testable without a sound device.
 /// Parameter changes are smoothed, so switching scenes or muting never clicks.
 class Ambience {
@@ -75,6 +77,8 @@ class Ambience {
   void desertSample(const AmbientParams& p, float out[2]);
   /// One sample of the moon's sound for both ears.
   void moonSample(const AmbientParams& p, float out[2]);
+  /// One sample of the mountains' sound for both ears.
+  void mountainSample(const AmbientParams& p, float out[2]);
   /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
   void thunderLevels(float& crack, float& rumble, float& snap) const;
 
@@ -136,6 +140,28 @@ class Ambience {
   float moonLow_[2][2] = {};    ///< the dull rumble of an impact, per ear
   float debrisBand_[2] = {}, debrisLow_[2] = {};  ///< resonator that rings the pattering debris, per ear
   float lowMoon_;               ///< moon filter coefficient
+
+  float mountLow_[2][2] = {};   ///< two low-pass stages of the thin mountain wind, per ear
+  float iceLow_[2] = {};        ///< low end of the hiss of ice crystals, per ear
+  float streamLow_[2][2] = {};  ///< band limits of the stream (high cut, low cut), per ear
+  float slideLow_[2][2] = {};   ///< the deep rumble of an avalanche, per ear
+  float slideMid_[2] = {};      ///< the roar and crackle of tumbling snow and rock, per ear
+  float avalanche_ = 0;         ///< smoothed avalanche level
+  double whistlePhase_ = 0;     ///< phase of the whistle of an icy wind
+  float crackLowAv_[2] = {}, crackBandAv_[2] = {};  ///< resonator that the clicks of tumbling rock ring, per ear
+  float breakEnv_ = 0;          ///< how hard the slab is still breaking up (crackling), 0 to 1
+  bool slideBroke_ = false;     ///< the current avalanche has already broken loose
+  float thumpEnv_ = 0, thumpFreq_ = 80;  ///< a tree or boulder knocked down: a dull thump
+  double thumpPhase_ = 0;
+  double nextCry_ = 0;          ///< when an eagle cries next (0 = not planned)
+  double cryStart_ = -10;       ///< when the current eagle cry began
+  float cryPan_ = 0.5f, cryPitch_ = 1;
+  double cryPhase_ = 0;
+  double nextPeck_ = 0;         ///< when a woodpecker drums next (0 = not planned)
+  double peckStart_ = -10;      ///< when the current drumming began
+  int peckKnocks_ = 0;          ///< how many knocks it has
+  float peckPan_ = 0.5f, peckPitch_ = 1;
+  float lowSlide_, lowSlideMid_, lowStreamTop_, lowStreamBottom_, lowIce_;  ///< mountain filter coefficients
   unsigned seenImpacts_ = 0;
   bool impactsSynced_ = false;
 };

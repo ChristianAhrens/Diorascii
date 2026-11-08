@@ -1,0 +1,16 @@
+name: cloud_wisp
+facing: right
+habitat: sky
+zone: sky
+solid: yes
+speed: 0.8..2
+depth: 28..30
+behaviors: swim
+--- art
+  _.-._
+ (     )_
+(        )
+--- mask
+  WWWWW
+ WWWWWWWW
+WWWWWWWWWW

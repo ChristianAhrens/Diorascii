@@ -112,6 +112,10 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->starDensity = static_cast<int>(p.num("stars", 0));
   sc->gravity = p.num("gravity", sc->gravity);
   sc->dustSettle = std::max(p.num("dust-settle", sc->dustSettle), 1.0);
+  sc->mountains = p.str("mountains", "no") == "yes";
+  sc->peakHeight = std::clamp(p.num("peak-height", sc->peakHeight), 0.3, 1.0);
+  sc->treeline = std::clamp(p.num("treeline", sc->treeline), 0.1, 0.9);
+  sc->snowline = std::clamp(p.num("snowline", sc->snowline), sc->treeline + 0.05, 0.95);
   sc->riverRows = std::max(static_cast<int>(p.num("river-rows", 0)), 0);
   sc->riverFlow = p.num("river-flow", sc->riverFlow);
   sc->weatherDuration = std::max(p.num("weather-duration", sc->weatherDuration), 1.0);
@@ -150,6 +154,9 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   sc->rareFirst = p.range("rare-first", sc->rareFirst);
   sc->rareInterval = p.range("rare-interval", sc->rareInterval);
   if (p.has("ground-glyphs")) sc->groundGlyphs = decodeUtf8(p.str("ground-glyphs"));
+  if (p.has("forest-glyphs")) sc->forestGlyphs = decodeUtf8(p.str("forest-glyphs"));
+  if (p.has("rock-glyphs")) sc->rockGlyphs = decodeUtf8(p.str("rock-glyphs"));
+  if (p.has("snow-glyphs")) sc->snowGlyphs = decodeUtf8(p.str("snow-glyphs"));
   if (p.has("surface-glyphs")) {
     sc->surfaceGlyphs = decodeUtf8(p.str("surface-glyphs"));
     if (!sc->surfaceGlyphs.empty() && sc->surfaceGlyphs.size() != 3) {
@@ -160,7 +167,16 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
 
   Rgb sky[2] = {sc->skyTop, sc->skyLow}, med[2] = {sc->mediumTop, sc->mediumDeep},
       gnd[2] = {sc->groundA, sc->groundB}, sur[1] = {sc->surfaceFg},
-      riv[2] = {sc->riverTop, sc->riverDeep};
+      riv[2] = {sc->riverTop, sc->riverDeep}, forest[2] = {sc->forestA, sc->forestB},
+      rock[2] = {sc->rockA, sc->rockB}, snow[2] = {sc->snowA, sc->snowB};
+  if (!colors(p, "forest-colors", forest, 2) || !colors(p, "rock-colors", rock, 2) ||
+      !colors(p, "snow-colors", snow, 2)) {
+    err = "'forest-colors', 'rock-colors' and 'snow-colors' need two '#rrggbb' values";
+    return nullptr;
+  }
+  sc->forestA = forest[0]; sc->forestB = forest[1];
+  sc->rockA = rock[0]; sc->rockB = rock[1];
+  sc->snowA = snow[0]; sc->snowB = snow[1];
   if (!colors(p, "sky", sky, 2) || !colors(p, "medium-colors", med, 2) ||
       !colors(p, "ground-colors", gnd, 2) || !colors(p, "surface-color", sur, 1) ||
       !colors(p, "river-colors", riv, 2)) {

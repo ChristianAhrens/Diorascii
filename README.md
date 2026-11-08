@@ -5,13 +5,45 @@
 [![Windows](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml/badge.svg)](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml)
 
 Animated ASCII scenes for your terminal: an underwater aquarium, a forest with a
-river, a desert with an oasis, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
+river, a desert with an oasis, a mountain range from the meadow up to the snow, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
 **[Download the latest release](https://github.com/ChristianAhrens/Diorascii/releases/latest)**
 &middot; [Project page](https://christianahrens.github.io/Diorascii/)
 &middot; [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html)
+
+## Screenshots
+
+Every scene by day and by night (the moon has no day and night cycle).
+
+<table>
+  <tr><th></th><th>Day</th><th>Night</th></tr>
+  <tr>
+    <th>Aquarium</th>
+    <td align="center"><img src="Resources/Diorascii_Sea_Day.png" alt="Aquarium by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Sea_Night.png" alt="Aquarium by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Forest</th>
+    <td align="center"><img src="Resources/Diorascii_Forest_Day.png" alt="Forest by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Forest_Night.png" alt="Forest by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Desert</th>
+    <td align="center"><img src="Resources/Diorascii_Desert_Day.png" alt="Desert by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Desert_Night.png" alt="Desert by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Mountains</th>
+    <td align="center"><img src="Resources/Diorascii_Mountains_Day.png" alt="Mountains by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Mountains_Night.png" alt="Mountains by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Moon</th>
+    <td colspan="2" align="center"><img src="Resources/Diorascii_Moon.png" alt="The moon" width="400"></td>
+  </tr>
+</table>
 
 ## Download
 
@@ -55,13 +87,42 @@ actions (up, down, left, right, select, back), so any input device can use it.
 | Aquarium | Feed the fish | a clump of eight twinkling flakes of food sinks from the surface (at most 30 at once); fish swim over and eat them, and the action's name flashes on screen so you can tell it worked |
 | Forest | Make it rain | it rains for about 18 seconds (pressing again keeps it going): drops streak down at a slant and splash on the bank and in the river, clouds roll in and the light dims, then it clears up again |
 | Desert | Sandstorm or tornado | a coin toss each time. A sandstorm blows grains across the whole screen for about 16 seconds while the sky turns ochre and the sun disappears. A tornado crosses the scene instead, weaving, whirling up sand and **throwing every animal in its path into the air**; they land dazed, and then walk on. Pressing again during a tornado brings the sandstorm on top of it. |
+| Mountains | Snowstorm | an icy wind sweeps snow across the whole screen for about 22 seconds: flakes race sideways while they settle, the peaks and the sun vanish in a pale whiteout, the birds fall silent and the wind howls (see below) |
 | Moon | Meteor strike | a meteorite streaks down and hits the ground: it wrecks everything standing there, digs a crater and throws up debris and dust that drift back down slowly under the moon's low gravity. Dust then fills the crater gradually, shallow rim first, until the ground is smooth again. Rovers drive down into the crater and climb out as it fills. |
 
 New scenes define their own action in their `*.scene` file (see below).
 
+### The mountains
+
+Unlike the other scenes, which are mostly ground or mostly sky or mostly sea, the mountains use
+the **whole height of the terminal**. From the bottom up: a green meadow with a small stream, a belt of
+forest and bushes, bare rock with crags and dwarf pines, and snow and ice on the peaks, with the sky above
+them. The peaks (a different range every run) are tall and the zones are bands of altitude whose edges
+wobble from column to column, so the tree line and the snow line are never straight. The far flank of
+every peak lies in shadow, the rock is streaked with gullies, and the sun and the moon set behind the ridges.
+
+Everything lives in its own zone and stays there:
+
+| Who | Where | What they do |
+|---|---|---|
+| Eagles | the sky, down as far as the rock | soar across the screen high up and now and then swoop down, wings folded, towards the rocky parts |
+| Goats | the rock and the snow | leap along the ledges in hops, climb to other ledges and turn round where the rock ends instead of walking into the sky |
+| Deer | the meadow and the forest | stroll about; they are the prey |
+| Bears | the meadow and the forest | stroll about, then run a deer down and feast on it (one kill each, as with the lion) |
+| Small birds | over the forest and the meadow | flit about by day |
+| Trees, crags, spires | forest, rock, snow | firs and bushes in the forest, dwarf pines and crags in the rock, ice spires in the snow |
+
+Things lower on the screen are nearer and drawn in front. Like everywhere, most animals sleep at night.
+
+**Avalanche** (the rare event, `x` summons it): high on a snowy flank the snow starts to creak and trickle, then the slab
+lets go and a powder cloud rips down the mountainside, **cutting a swath through the rock and the forest
+down into the valley and across the stream**. Trees, bushes and animals in its path are buried; birds and
+eagles are above it. The white swath, scattered with rubble, lies over the land and fades after about 40
+seconds, the water coming back last; what was buried grows or walks back in over the next minute.
+
 ### Day and night
 
-The aquarium, the forest and the desert have a day and night cycle (a full day takes four minutes).
+The aquarium, the forest, the desert and the mountains have a day and night cycle (a full day takes four minutes).
 The sun crosses the sky by day and the moon by night, the sky and the water darken and
 turn blue at night with a red glow at sunrise and sunset, and stars come out. Creatures
 can belong to the day or the night: butterflies and birds by day, fireflies by night.
@@ -91,6 +152,7 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 | Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
 | Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale and the growl of the kraken as it nears |
 | Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears |
+| Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way |
 | Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble |
 
 ### Rare events
@@ -105,7 +167,11 @@ to summon it right away instead of waiting.
 | Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and at the middle it **kills every animal**: fish, jellyfish, eels, crabs, shark and whale burst into ink |
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
 | Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **swallows every animal** |
+| Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
 | Moon | Alien | an alien walks across the surface and **destroys the rover and the flagpole**, and nothing else |
+
+The avalanche is the exception to "crosses the scene": it comes down a mountainside (see above) and
+buries what is in its path instead of everything alive.
 
 The dead do not stay dead: they come back one by one over the next minute or so, animals
 walking in from the edges and the flagpole planted again. Sleeping animals die unseen.
@@ -183,6 +249,9 @@ Header keys:
 | `hop-period`, `hop-height` | seconds per hop and hop height in rows, for the `hop` behavior |
 | `destructible: no` | survives meteor strikes (ground sprites are destructible by default) |
 | `solid: yes` | the sprite may paint solid color blocks (see mask rules) |
+| `zone: forest` | on a mountain, where it lives: `meadow`, `forest`, `woods` (both), `rock`, `snow`, `alpine` (both) for things on the ground, `sky`, `air` (down to the rock) and `low-air` (over the forest and the meadow) for flyers. Ground sprites stand in a random place of the zone and never in the sky; give them `habitat: ground` |
+| `fall: 0.5..4` | for a `wind: yes` particle: how fast it also falls, in rows per second (snow) |
+| `density: 1.6` | for a `wind: yes` particle: how many fall per second, relative to sand |
 
 Mask rules: `1`-`9` use the creature's randomized palette, letters are fixed
 colors (`W`hite `R`ed `G`reen `B`lue `C`yan `Y`ellow `M`agenta `O`range blac`K` `T`an `N`brown `P`ink `L`ight gray `S`and;
@@ -214,11 +283,14 @@ Behaviors:
 | `wander` | drifts like `swim` with an organic wobble (butterflies, fireflies, birds) |
 | `hop` | moves in hops: rests, then jumps forward in an arc |
 | `rain` | a raindrop: falls to its landing row, makes a splash and is gone |
+| `ledge` | on a mountain: walks (or hops, with a `hop-period`) along a ledge of its `zone`, turns round where the zone or the mountain ends and now and then climbs to another ledge |
+| `soar` | on a mountain: flies across the scene and swoops up and down within its `zone` band, now and then diving (frames: wings up, wings down, gliding, diving) |
+| `avalanche` | the powder cloud of an avalanche: creaks on a snowy flank, then rips down it, scarring the land and burying what stands in its way |
 
 ## Extending: scenes
 
 A `*.scene` file describes a whole world as data; sprites are shared between
-scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
+scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
 
     name: aquarium
     title: Aquarium
@@ -235,6 +307,14 @@ scenes. See `assets/scenes/aquarium.scene` and `moon.scene`.
     river-rows: 3                   # rows at the bottom of the ground that are a river
     river-colors: #4aa0d8 #1f6aa5   # river colors from the bank down
     river-flow: 2.5                 # cells per second the ripples drift
+    mountains: yes                  # the whole height is a mountain range (see "The mountains")
+    peak-height: 0.86               # altitude of the highest peak, as a share of the height
+    treeline: 0.46                  # altitudes of the tree line and the snow line, as shares of the height
+    snowline: 0.68
+    forest-colors: #3f7d48 #2b5e36  # colors of the forest, rock and snow, from the higher part down
+    rock-colors: #8c8882 #6a6660
+    snow-colors: #f4f8fc #cfdeee    # (ground-colors and ground-glyphs are the meadow; there are also
+                                    #  forest-glyphs, rock-glyphs and snow-glyphs)
     weather-duration: 18            # seconds a rain shower lasts
     overcast-tint: #c98e4c 0.75     # color (and strength) the scene turns towards in heavy weather
     day-night: yes                  # sun, moon, stars and dimming light

@@ -70,6 +70,7 @@ AmbientParams ambientFor(const World& world) {
   else if (name == "aquarium") p.kind = AmbientKind::Aquarium;
   else if (name == "desert") p.kind = AmbientKind::Desert;
   else if (name == "moon") p.kind = AmbientKind::Moon;
+  else if (name == "mountains") p.kind = AmbientKind::Mountains;
   const Light l = world.light();
   p.night = static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));
   p.rain = world.raining() ? 1.0f : 0.0f;
@@ -79,6 +80,7 @@ AmbientParams ambientFor(const World& world) {
   p.whale = static_cast<float>(world.nearness("whale"));
   p.tornado = static_cast<float>(world.nearness("tornado"));
   p.impacts = world.impactCount();
+  p.avalanche = static_cast<float>(world.avalancheLevel());
   return p;
 }
 
@@ -91,6 +93,11 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowSandTop_ = coeff(1.0f / 4000.0f / 6.28f);
   lowTornado_ = coeff(1.0f / 170.0f / 6.28f);
   lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
+  lowSlide_ = coeff(1.0f / 95.0f / 6.28f);
+  lowSlideMid_ = coeff(1.0f / 900.0f / 6.28f);
+  lowStreamTop_ = coeff(1.0f / 1300.0f / 6.28f);
+  lowStreamBottom_ = coeff(1.0f / 380.0f / 6.28f);
+  lowIce_ = coeff(1.0f / 2500.0f / 6.28f);
 }
 
 void Ambience::bubble(double delay, float f0, float dur, float amp) {
@@ -155,6 +162,112 @@ void Ambience::moonSample(const AmbientParams& p, float out[2]) {
     const float high = patter * 6.0f - debrisLow_[ch] - 0.6f * debrisBand_[ch];
     debrisBand_[ch] += debrisF * high;
     out[ch] = pad[ch] + thud * 0.55f + moonLow_[ch][1] * 14.0f * rumble * 0.35f + debrisBand_[ch] * 0.3f + zap;
+  }
+}
+
+void Ambience::mountainSample(const AmbientParams& p, float out[2]) {
+  (void)p;
+  const double dt = 1.0 / rate_;
+  // Thin alpine wind. In a snowstorm it is much stronger and higher, with a whistle that glides
+  // with the gusts and the fine hiss of ice crystals on top.
+  const float cutoffHz = (300.0f + 360.0f * gust_) * (1.0f + 1.3f * rain_);
+  const float lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
+  const float windGain = (0.35f + 0.8f * gust_) * (1.0f + 5.0f * rain_) * 0.075f;
+  whistlePhase_ += kTwoPi * (620.0 + 340.0 * gust_ + 60.0 * std::sin(0.4 * t_)) * dt;
+  const float whistle = rain_ * rain_ * gust_ * 0.02f * static_cast<float>(std::sin(whistlePhase_));
+  const float hiss = rain_ * (0.1f + 0.2f * gust_);
+  // The stream: noise between two low-passes, quietly, that bubbles and gurgles: it is broken up by
+  // a few unrelated fast ripples so that it does not sound like steady brushing.
+  const float babble = std::clamp(0.35f + 0.65f * static_cast<float>(
+      std::sin(kTwoPi * 6.1 * t_ + 2.0 * std::sin(kTwoPi * 0.7 * t_)) *
+      std::sin(kTwoPi * 9.7 * t_ + 1.3 * std::sin(kTwoPi * 1.3 * t_ + 1.0))), 0.0f, 1.0f);
+  // An eagle's cry now and then, by day only and not in a snowstorm: a few shrill, falling notes.
+  const float day = (1.0f - night_) * (1.0f - std::min(1.0f, 2.0f * rain_));
+  if (nextCry_ == 0) nextCry_ = t_ + rng_.range(5.0, 15.0);
+  if (t_ >= nextCry_) {
+    cryStart_ = t_;
+    cryPan_ = static_cast<float>(rng_.range(0.2, 0.8));
+    cryPitch_ = static_cast<float>(rng_.range(0.9, 1.12));
+    nextCry_ = t_ + rng_.range(15.0, 35.0);
+  }
+  float cry = 0;
+  const double ct = t_ - cryStart_;
+  if (ct >= 0 && ct < 1.3) {
+    const double syl = std::fmod(ct, 0.42), n = std::floor(ct / 0.42);  // three notes, 0.42 s apart
+    if (n < 3 && syl < 0.3) {
+      const double x = syl / 0.3;
+      const double f = cryPitch_ * (3400.0 - 1300.0 * x) * (1.0 - 0.05 * n) + 60.0 * std::sin(kTwoPi * 38.0 * syl);
+      cryPhase_ += kTwoPi * f * dt;
+      const double env = std::sin(3.14159265 * x) * (1.0 - 0.18 * n);
+      cry = static_cast<float>((std::sin(cryPhase_) + 0.5 * std::sin(2 * cryPhase_ + 0.4) + 0.3 * noise(rng_)) * env) * 0.09f * day;
+    }
+  }
+  // A woodpecker drums on a tree now and then, as often as the eagle cries: a quick run of dry,
+  // woody knocks that dies away a little. Same rules: by day, not in a snowstorm.
+  if (nextPeck_ == 0) nextPeck_ = t_ + rng_.range(8.0, 20.0);
+  if (t_ >= nextPeck_) {
+    peckStart_ = t_;
+    peckKnocks_ = rng_.rangeInt(7, 13);
+    peckPan_ = static_cast<float>(rng_.range(0.15, 0.85));
+    peckPitch_ = static_cast<float>(rng_.range(0.85, 1.2));
+    nextPeck_ = t_ + rng_.range(15.0, 35.0);
+  }
+  float peck = 0;
+  const double pt = t_ - peckStart_;
+  constexpr double kKnockHz = 16.0;
+  if (pt >= 0 && pt < peckKnocks_ / kKnockHz) {
+    const int k = static_cast<int>(pt * kKnockHz);
+    const double lt = pt - k / kKnockHz;  // time since this knock began
+    const double amp = 1.0 - 0.5 * k / peckKnocks_;
+    peck = static_cast<float>((std::sin(kTwoPi * 1150.0 * peckPitch_ * lt) * std::exp(-lt * 150.0) +
+                               0.5 * std::sin(kTwoPi * 2300.0 * peckPitch_ * lt) * std::exp(-lt * 260.0) +
+                               0.3 * noise(rng_) * std::exp(-lt * 500.0)) * amp) * 0.12f * day;
+  }
+  // An avalanche: when the slab breaks and while it tumbles, snow, rock and trees knock against
+  // each other: a burst of crackling at the start, then clicks and now and then a dull thump with
+  // a crack when something big goes down.
+  if (p.avalanche > 0.7f && !slideBroke_) { slideBroke_ = true; breakEnv_ = 1.0f; thumpEnv_ = 1.0f; thumpFreq_ = 60.0f; }
+  if (p.avalanche < 0.3f) slideBroke_ = false;
+  breakEnv_ -= breakEnv_ * static_cast<float>(dt / 1.1);
+  if (p.avalanche > 0.5f && rng_.chance(1.3 * p.avalanche * dt)) {
+    thumpEnv_ = static_cast<float>(rng_.range(0.4, 0.9));
+    thumpFreq_ = static_cast<float>(rng_.range(55, 120));
+  }
+  thumpEnv_ -= thumpEnv_ * static_cast<float>(dt * 7.0);
+  thumpPhase_ += kTwoPi * thumpFreq_ * dt;
+  const float thump = static_cast<float>(std::sin(thumpPhase_)) * thumpEnv_ * 0.35f;
+  const double clickRate = 220.0 * breakEnv_ + 18.0 * p.avalanche * p.avalanche + 260.0 * thumpEnv_;
+  float click = 0;
+  if (clickRate > 0 && rng_.uniform() < clickRate * dt) click = static_cast<float>(rng_.range(0.4, 1.0)) * (rng_.chance(0.5) ? 1.0f : -1.0f);
+  const float crackF = 2.0f * std::sin(3.14159265f * std::min(1800.0f, static_cast<float>(rate_) / 7.0f) / static_cast<float>(rate_));
+  // An avalanche: a deep rumble that swells as it gets going, and the roar and crackle of tumbling
+  // snow and rock on top of it.
+  const float slide = avalanche_;
+  const float roll = std::clamp(0.7f + 0.3f * roll_, 0.2f, 1.0f);
+
+  for (int ch = 0; ch < 2; ++ch) {
+    const float n = noise(rng_) * noiseScale_;
+    mountLow_[ch][0] += (n - mountLow_[ch][0]) * lowWind;
+    mountLow_[ch][1] += (mountLow_[ch][0] - mountLow_[ch][1]) * lowWind;
+    const float n2 = noise(rng_) * noiseScale_;
+    iceLow_[ch] += (n2 - iceLow_[ch]) * lowIce_;
+    const float n3 = noise(rng_) * noiseScale_;
+    streamLow_[ch][0] += (n3 - streamLow_[ch][0]) * lowStreamTop_;
+    streamLow_[ch][1] += (n3 - streamLow_[ch][1]) * lowStreamBottom_;
+    const float n4 = noise(rng_) * noiseScale_;
+    slideLow_[ch][0] += (n4 - slideLow_[ch][0]) * lowSlide_;
+    slideLow_[ch][1] += (slideLow_[ch][0] - slideLow_[ch][1]) * lowSlide_;
+    const float n5 = noise(rng_) * noiseScale_;
+    slideMid_[ch] += (n5 - slideMid_[ch]) * lowSlideMid_;
+    crackLowAv_[ch] += crackF * crackBandAv_[ch];
+    const float highClick = click * 8.0f - crackLowAv_[ch] - 0.5f * crackBandAv_[ch];
+    crackBandAv_[ch] += crackF * highClick;
+    const float panCry = ch ? std::sin(cryPan_ * 1.5708f) : std::cos(cryPan_ * 1.5708f);
+    out[ch] = mountLow_[ch][1] * 9.0f * windGain + whistle * (ch ? 0.9f : 1.0f) + (n2 - iceLow_[ch]) * 0.6f * hiss +
+              (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
+              cry * panCry * 1.4f +
+              peck * (ch ? std::sin(peckPan_ * 1.5708f) : std::cos(peckPan_ * 1.5708f)) * 1.4f + crackBandAv_[ch] * 0.35f + thump + slideLow_[ch][1] * 14.0f * slide * slide * roll +
+              slideMid_[ch] * 0.7f * slide * slide * slide * roll;
   }
 }
 
@@ -273,7 +386,7 @@ float Ambience::coeff(float seconds) const {
 }
 
 void Ambience::render(const AmbientParams& p, float* out, int frames) {
-  const float kPresence = coeff(0.6f), kRain = coeff(1.5f), kNight = coeff(3.0f), kVolume = coeff(0.05f), kStorm = coeff(2.0f);
+  const float kPresence = coeff(0.6f), kRain = coeff(1.5f), kNight = coeff(3.0f), kVolume = coeff(0.05f), kStorm = coeff(2.0f), kSlide = coeff(0.4f);
   const float lowRoll = coeff(1.0f / 0.35f / 6.28f);
   const float rollScale = 1.0f / (0.577f * std::sqrt(lowRoll / 2.0f));
   const float lowRain = coeff(1.0f / 2500.0f / 6.28f);
@@ -303,6 +416,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(storm_, p.storm, kStorm);
     approach(tornado_, p.kind == AmbientKind::Desert ? p.tornado : 0.0f, kStorm);
     approach(whale_, p.kind == AmbientKind::Aquarium ? p.whale : 0.0f, kStorm);
+    approach(avalanche_, p.kind == AmbientKind::Mountains ? p.avalanche : 0.0f, kSlide);
     approach(volume_, p.volume, kVolume);
 
     // Gusts: slow swells plus a random drift, so they never repeat evenly.
@@ -369,10 +483,11 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenImpacts_ = p.impacts;
     }
-    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0};
+    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
     if (mix_[static_cast<int>(AmbientKind::Moon)] > 1e-3f) moonSample(p, moon);
+    if (mix_[static_cast<int>(AmbientKind::Mountains)] > 1e-3f) mountainSample(p, mountains);
 
     for (int ch = 0; ch < 2; ++ch) {
       // Wind: noise through two low-pass stages (no hiss, no crackle).
@@ -405,7 +520,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       const float sample = (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
                            aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
                            desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
-                           moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)];
+                           moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +
+                           mountains[ch] * mix_[static_cast<int>(AmbientKind::Mountains)];
       out[2 * i + ch] = softClip(sample) * volume_ * 0.8f;
     }
   }

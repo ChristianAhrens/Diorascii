@@ -172,7 +172,9 @@ TEST(embedded_assets_all_load) {
                         "sandspray", "sandpuff", "dustburst", "palm_big", "palm_small", "cactus_big",
                         "cactus_small", "boulder", "tent", "campfire", "camel", "horse", "gazelle",
                         "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
-                        "lightning", "spark", "sandworm", "alien"})
+                        "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
+                        "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
+                        "cloud_wisp", "snowpuff", "snowflake", "pounce", "avalanche"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -2133,6 +2135,415 @@ TEST(ambience_follows_the_world_scene_and_weather) {
   CHECK(ambientFor(forest).rain == 0.0f);
   forest.startRain(10);
   CHECK(ambientFor(forest).rain == 1.0f);
+}
+
+// ----------------------------------------------------------------- mountains ---
+
+// Counts the live entities of a sprite.
+static std::vector<Entity*> allOf(World& w, const std::string& name) {
+  std::vector<Entity*> out;
+  for (auto& e : w.entities()) {
+    if (!e->dead && e->sprite->name() == name) out.push_back(e.get());
+  }
+  return out;
+}
+
+// The mountains without the random avalanches, for tests that start one themselves.
+static std::shared_ptr<const SceneDef> quietMountains(const AssetPack& pack) {
+  auto sc = std::make_shared<SceneDef>(*pack.scene("mountains"));
+  sc->rareFirst = sc->rareInterval = {1e9, 1e9};
+  return sc;
+}
+
+// Zone under the feet of an entity, at the middle column.
+static Zone zoneUnder(const World& w, const Entity& e) {
+  return w.zoneAt(static_cast<int>(std::floor(e.anchorY >= 0 ? e.x + e.width() / 2.0 : e.x)),
+                  static_cast<int>(std::lround(e.anchorY)) + e.height() - 1);
+}
+
+TEST(scene_parses_the_mountain_keys) {
+  std::string err;
+  auto sc = SceneDef::parse(
+      "name: m\nmountains: yes\npeak-height: 0.8\ntreeline: 0.4\nsnowline: 0.7\n"
+      "forest-colors: #102030 #001020\nrock-colors: #111111 #222222\nsnow-colors: #fefefe #eeeeee\n"
+      "rock-glyphs: /\\\n", err);
+  CHECK(sc != nullptr);
+  if (!sc) return;
+  CHECK(sc->mountains && sc->peakHeight == 0.8 && sc->treeline == 0.4 && sc->snowline == 0.7);
+  CHECK(sc->forestA == (Rgb{16, 32, 48}) && sc->rockB == (Rgb{34, 34, 34}) && sc->snowA == (Rgb{254, 254, 254}));
+  CHECK(sc->rockGlyphs.size() == 2);
+  CHECK(!SceneDef::parse("name: m\nrock-colors: #111111\n", err));  // needs two colors
+  auto plain = SceneDef::parse("name: p\n", err);
+  CHECK(plain && !plain->mountains);
+  auto steep = SceneDef::parse("name: s\ntreeline: 0.5\nsnowline: 0.2\n", err);
+  CHECK(steep && steep->snowline > steep->treeline);  // the snow always lies above the trees
+}
+
+TEST(the_mountains_span_the_whole_height_from_a_meadow_and_stream_to_snowy_peaks_and_sky) {
+  AssetPack pack = AssetPack::embedded();
+  auto scene = pack.scene("mountains");
+  CHECK(scene && scene->mountains && scene->riverRows > 0 && scene->dayNight);
+  CHECK(scene->action.kind == SceneDef::Action::Kind::Weather && scene->rare.size() == 1);
+  CHECK(!pack.scene("forest")->mountains);
+  for (int h : {24, 40, 70}) {
+    World world(pack, scene, 140, h, 5);
+    CHECK(world.mountains() && !world.hasMedium());
+    int highest = h, lowest = 0, at = 0;
+    for (int x = 0; x < world.width(); ++x) {
+      if (world.ridgeRow(x) < highest) { highest = world.ridgeRow(x); at = x; }
+      lowest = std::max(lowest, world.ridgeRow(x));
+    }
+    CHECK(highest > 0 && highest <= h * 0.25);  // the tallest peak reaches high up, with sky above it
+    CHECK(lowest >= h * 0.4);                   // the skyline falls away between the peaks
+    CHECK(lowest < world.seabedY());            // but the meadow lies in front of all of it
+    // Going down the tallest peak: snow, rock, forest, meadow, in this order, and nothing but sky above.
+    CHECK(world.zoneAt(at, highest - 1) == Zone::None);
+    int stage = 0;
+    bool seen[4] = {};
+    for (int y = highest; y < h; ++y) {
+      const Zone z = world.zoneAt(at, y);
+      const int now = z == Zone::Snow ? 0 : z == Zone::Rock ? 1 : z == Zone::Forest ? 2 : 3;
+      CHECK(now >= stage);
+      stage = std::max(stage, now);
+      seen[now] = true;
+    }
+    CHECK(seen[0] && seen[1] && seen[2] && seen[3]);
+    Frame f;
+    world.render(f);
+    CHECK(f.at(at, h - 1).bg.b > f.at(at, h - 1).bg.r);              // the stream is blue
+    CHECK(f.at(at, world.seabedY() + 1).bg.g > f.at(at, world.seabedY() + 1).bg.b);  // the meadow green
+  }
+}
+
+TEST(sun_and_stars_are_hidden_behind_the_peaks) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 140, 40, 5);
+  world.setHour(14);
+  Frame f;
+  world.render(f);
+  for (int x = 0; x < world.width(); ++x) {  // the terrain is drawn over everything in the sky
+    CHECK(f.at(x, world.height() - 1).bg.b >= 100 || f.at(x, world.height() - 1).bg.g > 0);
+    const Cell& below = f.at(x, world.ridgeRow(x));
+    CHECK(!below.defaultBg && below.bg.r + below.bg.g + below.bg.b > 150);  // lit ground, not sky
+  }
+  const Cell& sky = f.at(0, 0);
+  const Cell& horizon = f.at(0, 10);
+  CHECK(sky.bg.r + sky.bg.g < horizon.bg.r + horizon.bg.g);  // lighter towards the horizon
+}
+
+TEST(trees_crags_and_spires_grow_in_their_own_zones) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 160, 44, 3);
+  struct Rule { const char* sprite; Zone zone; };
+  for (const Rule& r : {Rule{"fir_big", Zone::Forest}, Rule{"fir_small", Zone::Forest},
+                        Rule{"dwarf_pine", Zone::Rock}, Rule{"crag", Zone::Rock}, Rule{"ice_spire", Zone::Snow}}) {
+    const auto things = allOf(world, r.sprite);
+    CHECK(!things.empty());
+    for (Entity* e : things) {
+      const Zone z = world.zoneAt(static_cast<int>(e->x + e->width() / 2.0), static_cast<int>(e->y) + e->height() - 1);
+      CHECK(z == r.zone);
+      if (z != r.zone) std::printf("    %s at %.1f,%.1f is in zone %d\n", r.sprite, e->x, e->y, static_cast<int>(z));
+      CHECK(world.ridgeRow(static_cast<int>(e->x + e->width() / 2.0)) <= static_cast<int>(e->y));  // never up in the sky
+    }
+  }
+  for (Entity* e : allOf(world, "shrub")) {
+    const Zone z = world.zoneAt(static_cast<int>(e->x + e->width() / 2.0), static_cast<int>(e->y) + e->height() - 1);
+    CHECK(z == Zone::Forest || z == Zone::Meadow);
+  }
+  // Things nearer the bottom of the screen are drawn in front.
+  Entity* high = nullptr;
+  Entity* low = nullptr;
+  for (Entity* e : allOf(world, "fir_small")) {
+    if (!high || e->y < high->y) high = e;
+    if (!low || e->y > low->y) low = e;
+  }
+  CHECK(high && low && high->y < low->y && high->z > low->z);
+}
+
+TEST(goats_deer_and_bears_stay_in_their_zones_birds_and_eagles_in_theirs) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 160, 44, 6);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);  // nobody sleeps
+  CHECK(!allOf(world, "goat").empty() && !allOf(world, "red_deer").empty() && !allOf(world, "bear").empty());
+  double eagleMin = 1e9, eagleMax = -1e9;
+  size_t checks = 0;
+  for (int i = 0; i < 1200; ++i) {  // a minute
+    world.step(0.05);
+    for (Entity* g : allOf(world, "goat")) {
+      if (g->x < 0 || g->x + g->width() > world.width()) continue;
+      const Zone z = zoneUnder(world, *g);
+      CHECK(z == Zone::Rock || z == Zone::Snow);
+      ++checks;
+    }
+    for (const char* name : {"red_deer", "bear"}) {
+      for (Entity* a : allOf(world, name)) {
+        if (a->x < 0 || a->x + a->width() > world.width()) continue;
+        const Zone z = zoneUnder(world, *a);
+        CHECK(z == Zone::Forest || z == Zone::Meadow);
+        ++checks;
+      }
+    }
+    for (Entity* b : allOf(world, "finch")) {  // over the forest and the valley, never up among the peaks
+      CHECK(b->y + b->height() >= world.surfaceY() - 8);
+      CHECK(b->y + b->height() <= world.riverTop() + 3);
+    }
+    for (Entity* e : allOf(world, "golden_eagle")) {
+      CHECK(world.zoneAt(static_cast<int>(std::clamp(e->x + e->width() / 2, 0.0, 159.0)), static_cast<int>(e->y) + e->height() - 1) != Zone::Meadow);
+      CHECK(e->y + e->height() <= world.surfaceY() + 8);  // down as far as the rock and no lower
+      eagleMin = std::min(eagleMin, e->y);
+      eagleMax = std::max(eagleMax, e->y);
+    }
+  }
+  CHECK(checks > 1000);
+  CHECK(eagleMax - eagleMin > 10);  // they soar high and swoop down
+}
+
+TEST(goats_leap_in_hops_and_wander_between_ledges) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 160, 44, 6);
+  world.setTimeMode(World::TimeMode::Day);
+  Entity* goat = allOf(world, "goat").front();
+  const double x0 = goat->x, row0 = goat->anchorY;
+  double lowest = goat->y, highest = goat->y;
+  bool changedLedge = false;
+  for (int i = 0; i < 2400; ++i) {
+    if (goat->x < 3 || goat->x + goat->width() > world.width() - 3) break;  // it would leave and be removed
+    world.step(0.05);
+    lowest = std::max(lowest, goat->y);
+    highest = std::min(highest, goat->y);
+    changedLedge |= std::fabs(goat->anchorY - row0) > 0.9;
+  }
+  CHECK(std::fabs(goat->x - x0) > 1);
+  CHECK(lowest - highest >= goat->hopHeight * 0.7);  // jumps
+  CHECK(changedLedge);                                // and climbs to other ledges
+}
+
+TEST(a_walker_turns_round_where_its_zone_ends) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 160, 44, 2);
+  world.setTimeMode(World::TimeMode::Day);
+  // How many columns a goat can walk along its ledge before it would stand outside the rock and snow.
+  auto reach = [&](const Entity& g, int dir) {
+    for (int d = 1; d < 60; ++d) {
+      const double x = g.x + dir * d;
+      if (x < 4 || x + g.width() > world.width() - 4) return 999;
+      if (!world.fits(g, x, g.anchorY)) return d;
+    }
+    return 999;
+  };
+  Entity* goat = nullptr;
+  int dir = 0;
+  for (Entity* g : allOf(world, "goat")) {
+    if (g->x < 4 || g->x + g->width() > world.width() - 4) continue;
+    for (int d : {-1, 1}) {
+      if (!goat && reach(*g, d) < 30) { goat = g; dir = d; }
+    }
+  }
+  CHECK(goat != nullptr);  // some goat stands near the end of its ledge
+  if (!goat) return;
+  goat->vx = std::fabs(goat->vx) * dir;  // send it that way
+  goat->mirrored = (dir > 0) != goat->facesRight;
+  goat->laneTarget = -1;
+  bool turned = false;
+  for (int i = 0; i < 1200 && !turned; ++i) {
+    if (goat->x < 3 || goat->x + goat->width() > world.width() - 3) break;  // it would leave and be removed
+    world.step(0.05);
+    CHECK(world.fits(*goat, goat->x, goat->anchorY));  // never in the sky or out of its zone
+    turned = (goat->vx > 0) != (dir > 0);
+  }
+  CHECK(turned);
+}
+
+TEST(bears_hunt_deer_in_the_woods_and_the_deer_come_back) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 160, 44, 4);
+  world.setTimeMode(World::TimeMode::Day);
+  const size_t deer = allOf(world, "red_deer").size();
+  CHECK(deer > 3);
+  for (auto& e : world.entities()) {  // one bear, one deer in front of it
+    if (e->sprite->name() == "bear") e->age = 0;
+  }
+  Entity* bear = allOf(world, "bear").front();
+  Entity* prey = allOf(world, "red_deer").front();
+  bear->x = prey->x - 14;
+  bear->vx = std::fabs(bear->vx);
+  bear->mirrored = !bear->facesRight;
+  bool caught = false;
+  for (int i = 0; i < 6000 && !caught; ++i) {  // five minutes
+    world.step(0.05);
+    caught = world.eatenCount() > 0;
+  }
+  CHECK(caught);
+  CHECK(!allOf(world, "pounce").empty() || world.eatenCount() > 0);
+  for (int i = 0; i < 2400; ++i) world.step(0.05);
+  CHECK(allOf(world, "red_deer").size() >= deer - 2);  // replaced
+}
+
+TEST(the_snowstorm_blows_snow_across_the_scene_whites_it_out_and_ends) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 140, 40, 2);
+  CHECK(!world.raining() && world.overcast() == 0);
+  CHECK(world.interact() == 1);
+  CHECK(world.raining());
+  for (int i = 0; i < 60; ++i) world.step(0.05);
+  CHECK(world.countTag("flake") > 80);  // snow all over the screen
+  double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (auto& e : world.entities()) {
+    if (e->tag != "flake") continue;
+    minX = std::min(minX, e->x); maxX = std::max(maxX, e->x);
+    minY = std::min(minY, e->y); maxY = std::max(maxY, e->y);
+    CHECK(std::fabs(e->vx) > 10);  // an icy wind
+    CHECK(e->vy > 0);              // that also lets the snow settle
+  }
+  CHECK(maxX - minX > 40 && maxY - minY > 20);
+  for (int i = 0; i < 100; ++i) world.step(0.05);
+  CHECK(world.overcast() > 0.4);
+  Frame f;
+  world.render(f);
+  const Rgb sky = f.at(0, 0).bg;
+  World clear(pack, pack.scene("mountains"), 140, 40, 2);
+  Frame g;
+  clear.render(g);
+  CHECK(sky.r > g.at(0, 0).bg.r && sky.g > g.at(0, 0).bg.g);  // the whole sky turns pale
+  for (int i = 0; i < 600; ++i) world.step(0.05);              // 30 s: over
+  CHECK(!world.raining() && world.countTag("flake") == 0);
+}
+
+TEST(an_avalanche_rips_down_a_snowy_flank_through_the_forest_into_the_stream) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 140, 40, 7);
+  world.setTimeMode(World::TimeMode::Day);
+  const auto firsBefore = allOf(world, "fir_big").size() + allOf(world, "fir_small").size() + allOf(world, "shrub").size();
+  size_t lifeBefore = 0;
+  for (auto& e : world.entities()) lifeBefore += e->life;
+  CHECK(firsBefore > 10 && lifeBefore > 10);
+  CHECK(world.avalancheLevel() == 0);
+  CHECK(world.triggerRare());
+  CHECK(!world.triggerRare());  // one at a time
+  CHECK(allOf(world, "avalanche").size() == 1);
+
+  bool snow = false, rock = false, forest = false, meadow = false, stream = false;
+  double loudest = 0, beforeSlide = 0;
+  size_t flyers = 0;
+  for (auto& e : world.entities()) flyers += (e->zone == Zone::Air || e->zone == Zone::LowAir);
+  for (int i = 0; i < 1200; ++i) {
+    world.step(0.05);
+    if (i == 20) beforeSlide = world.avalancheLevel();
+    loudest = std::max(loudest, world.avalancheLevel());
+    for (int x = 0; x < world.width(); ++x) {
+      for (int y = world.ridgeRow(x); y < world.height(); ++y) {
+        if (world.scarAt(x, y) < 0.5) continue;
+        const Zone z = world.zoneAt(x, y);
+        snow |= z == Zone::Snow; rock |= z == Zone::Rock; forest |= z == Zone::Forest;
+        meadow |= z == Zone::Meadow && y < world.riverTop();
+        stream |= y >= world.riverTop();
+      }
+    }
+  }
+  CHECK(snow && rock && forest && meadow && stream);  // from the peak all the way to the water
+  CHECK(beforeSlide > 0.1 && beforeSlide < 0.9);     // it creaks and rumbles before it goes
+  CHECK(loudest == 1.0);
+  CHECK(world.killedCount() > 3);                    // trees and animals in the way were buried
+  CHECK(allOf(world, "avalanche").empty() && world.avalancheLevel() == 0);
+  size_t flyersAfter = 0;
+  for (auto& e : world.entities()) flyersAfter += (e->zone == Zone::Air || e->zone == Zone::LowAir);
+  CHECK(flyersAfter + 3 >= flyers);                  // the birds and eagles above it were not buried
+
+  // Later the swath is gone, and the buried trees and animals have come back.
+  for (int i = 0; i < 2400; ++i) world.step(0.05);
+  for (int x = 0; x < world.width(); ++x) {
+    for (int y = world.ridgeRow(x); y < world.height(); ++y) CHECK(world.scarAt(x, y) == 0);
+  }
+  CHECK(world.restockPending() == 0);
+  const auto firsAfter = allOf(world, "fir_big").size() + allOf(world, "fir_small").size() + allOf(world, "shrub").size();
+  CHECK(firsAfter + 3 >= firsBefore);
+}
+
+TEST(the_avalanche_scars_the_picture_and_the_stream_shows_again_when_it_fades) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 140, 40, 7);
+  world.triggerRare();
+  for (int i = 0; i < 240; ++i) world.step(0.05);  // 12 s: it has reached the stream
+  int sx = -1;
+  for (int x = 0; x < world.width() && sx < 0; ++x) {
+    if (world.scarAt(x, world.height() - 1) > 0.8) sx = x;
+  }
+  CHECK(sx >= 0);
+  if (sx < 0) return;
+  Frame f;
+  world.render(f);
+  const Rgb buried = f.at(sx, world.height() - 1).bg;
+  CHECK(buried.r > 200 && buried.g > 200 && buried.b > 200);  // snow where the water ran
+  for (int i = 0; i < 1000; ++i) world.step(0.05);  // and 50 s later
+  world.render(f);
+  const Rgb again = f.at(sx, world.height() - 1).bg;
+  CHECK(again.b > again.r + 40);                              // the stream flows again
+}
+
+TEST(avalanches_survive_tiny_and_odd_sizes) {
+  AssetPack pack = AssetPack::embedded();
+  for (int w : {1, 2, 5, 40, 200}) {
+    for (int h : {1, 2, 4, 9, 24, 90}) {
+      World world(pack, pack.scene("mountains"), w, h, 11);
+      world.triggerRare();
+      world.interact();
+      Frame f;
+      for (int i = 0; i < 500; ++i) world.step(0.05);
+      world.render(f, Style::Mono);
+      CHECK(f.width() == w && f.height() == h);
+    }
+  }
+}
+
+TEST(mountain_populations_come_back_after_being_wiped_by_the_rare_event_timer) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 160, 44, 9);
+  const size_t start = world.entityCount();
+  for (int i = 0; i < 20000; ++i) world.step(0.05);  // 16 minutes: several avalanches
+  CHECK(world.entityCount() > start / 2 && world.entityCount() < start * 2);
+}
+
+TEST(the_mountains_sound_like_wind_a_stream_an_eagle_and_roar_in_a_storm_and_an_avalanche) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Mountains;
+  const double quiet = ambienceRms(calm, 4);
+  CHECK(quiet > 0.003);
+  AmbientParams storm = calm;
+  storm.rain = 1;
+  CHECK(ambienceRms(storm, 8) > quiet * 1.5);
+  AmbientParams slide = calm;
+  slide.avalanche = 1;
+  CHECK(ambienceRms(slide, 4) > quiet * 2);
+  // An eagle cries now and then by day (a shrill burst well above the wind) and never at night.
+  auto loudestBurst = [](AmbientParams p) {
+    constexpr int kRate = 8000;
+    Ambience a(kRate, 3);
+    std::vector<float> buf(static_cast<size_t>(kRate * 120) * 2);
+    a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+    double best = 0;
+    for (size_t i = 0; i + 800 * 2 < buf.size(); i += 800 * 2) {  // 0.1 s windows
+      double sum = 0;
+      for (size_t k = 0; k < 800 * 2; ++k) sum += double(buf[i + k]) * buf[i + k];
+      best = std::max(best, std::sqrt(sum / (800 * 2)));
+    }
+    return best;
+  };
+  AmbientParams night = calm;
+  night.night = 1;
+  CHECK(loudestBurst(calm) > loudestBurst(night) * 1.15);
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 140, 40, 7);
+  CHECK(ambientFor(world).kind == AmbientKind::Mountains);
+  CHECK(ambientFor(world).avalanche == 0.0f);
+  world.triggerRare();
+  float loudest = 0;
+  for (int i = 0; i < 300; ++i) {
+    world.step(0.05);
+    loudest = std::max(loudest, ambientFor(world).avalanche);
+  }
+  CHECK(loudest > 0.9f);
 }
 
 int main() {

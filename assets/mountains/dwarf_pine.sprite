@@ -1,0 +1,14 @@
+name: dwarf_pine
+facing: right
+habitat: ground
+zone: rock
+solid: yes
+speed: 0..0
+--- art
+ .^.
+.^^^.
+  |
+--- mask
+ ggg
+gGGGg
+  n

@@ -1,0 +1,28 @@
+name: goat
+facing: right
+habitat: ground
+zone: alpine
+speed: 1.5..3
+fps: 3
+hop-period: 1.1
+hop-height: 2
+backing: 0.3
+sleeps: 0.7
+life: yes
+behaviors: ledge
+--- art
+    ,\
+ .--(o>
+ ||  ||
+--- mask
+    ss
+ LLLLkL
+ LL  LL
+--- art
+    ,\
+ .--(o>
+ /|  |\
+--- mask
+    ss
+ LLLLkL
+ LL  LL

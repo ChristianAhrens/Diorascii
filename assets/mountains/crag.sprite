@@ -1,0 +1,12 @@
+name: crag
+facing: right
+habitat: ground
+zone: rock
+destructible: no
+solid: yes
+speed: 0..0
+color: #8f8c88
+--- art
+   /\
+ _/  \_
+/______\

@@ -131,6 +131,39 @@ uint32_t hash2(int x, int y) {
   return h ^ (h >> 16);
 }
 
+/// True for the zones that are flying bands.
+bool isAirZone(Zone z) { return z == Zone::Sky || z == Zone::Air || z == Zone::LowAir; }
+
+/// Zone named in a sprite's `zone:` header.
+Zone parseZone(const std::string& name) {
+  static const std::map<std::string, Zone> table = {
+      {"meadow", Zone::Meadow}, {"forest", Zone::Forest}, {"woods", Zone::Woods}, {"rock", Zone::Rock},
+      {"snow", Zone::Snow},     {"alpine", Zone::Alpine}, {"sky", Zone::Sky},     {"air", Zone::Air},
+      {"low-air", Zone::LowAir}};
+  auto it = table.find(name);
+  return it == table.end() ? Zone::None : it->second;
+}
+
+/// True if a place of the zone `actual` belongs to the zone `want`.
+bool zoneHolds(Zone want, Zone actual) {
+  switch (want) {
+    case Zone::Woods: return actual == Zone::Forest || actual == Zone::Meadow;
+    case Zone::Alpine: return actual == Zone::Rock || actual == Zone::Snow;
+    default: return actual == want;
+  }
+}
+
+/// A cell of the stream: ripples that drift with the flow, from the bank (t = 0) to the deepest row (t = 1).
+Cell riverCell(int x, int y, double t, double time, double flow, Rgb top, Rgb deep) {
+  Cell c;
+  c.bg = lerp(top, deep, t);
+  const double f = time * flow;
+  const double v = std::sin(x * 0.6 - f + y * 1.7) + 0.5 * std::sin(x * 0.23 - f * 0.6);
+  c.ch = v > 0.8 ? U'~' : v > 0.2 ? U'-' : (hash2(x, y) % 9 == 0 ? U'.' : U' ');
+  c.fg = scale(c.bg, 1.9);
+  return c;
+}
+
 // -------------------------------------------------------------- behaviors ---
 // Named in a sprite's `behaviors:` header. Order matters (seek_food before swim).
 
@@ -344,6 +377,56 @@ void twister(Entity& e, World& w, double dt) {
   }
 }
 
+/// Walks along a ledge of its mountain zone, in hops if the sprite has a `hop-period`. It turns
+/// round where the zone ends (or the mountain: it never walks into the sky), and now and then
+/// climbs or drops to another ledge.
+void ledge(Entity& e, World& w, double dt) {
+  constexpr double kAirborne = 0.4;  // share of a hop cycle spent in the air
+  const double before = e.x;
+  double lift = 0;
+  if (e.hops) {
+    const double cycle = std::fmod(e.age + e.phase, e.hopPeriod) / e.hopPeriod;
+    if (cycle < kAirborne) {
+      e.x += e.vx * dt / kAirborne;  // all the travel happens in the air, so the average speed is vx
+      lift = e.hopHeight * std::sin(3.14159265358979 * cycle / kAirborne);
+    }
+  } else {
+    e.x += e.vx * dt;
+  }
+  if (e.laneTarget >= 0) {
+    const double d = e.laneTarget - e.anchorY, step = 1.6 * dt;
+    if (std::fabs(d) <= step) { e.anchorY = e.laneTarget; e.laneTarget = -1; }
+    else e.anchorY += d > 0 ? step : -step;
+  } else if (w.rng().chance(0.06 * dt)) {
+    w.pickLane(e);
+  }
+  if (!w.fits(e, e.x, e.anchorY)) {  // the end of its ground: turn round and look for another ledge
+    e.x = before;
+    e.vx = -e.vx;
+    e.mirrored = !e.mirrored;
+    e.laneTarget = -1;
+    if (!w.fits(e, e.x, e.anchorY)) w.placeInZone(e, true, false, e.movingRight());
+  }
+  if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  e.y = e.anchorY - lift;
+  e.z = w.depthFor(e.anchorY + e.height());
+}
+
+/// Flies on across the scene while it soars up and down within its band, now and then diving
+/// deep (eagles). The frames are: wings up, wings down, gliding, diving.
+void soar(Entity& e, World& w, double dt) {
+  swim(e, w, dt);
+  const double span = std::max(e.rowHi - e.rowLo, 0.0);
+  const double a = std::sin(e.age * 0.31 + e.phase), b = std::sin(e.age * 0.12 + 2 * e.phase);
+  const double y = e.rowLo + span * std::pow(0.5 + 0.5 * (0.6 * a + 0.4 * b), 1.7);
+  const bool diving = e.age > 3 * dt && (y - e.y) / dt > 2.0;
+  e.y = e.anchorY = y;
+  e.frame = diving ? 3 : std::sin(e.age * 2.2) > 0.4 ? 2 : std::fmod(e.age * 2.0, 1.0) < 0.5 ? 0 : 1;
+}
+
+/// The avalanche: the powder cloud at the head of the slide (see World::slideStep).
+void avalanche(Entity& e, World& w, double dt) { w.slideStep(e, dt); }
+
 /// Behavior function for a name used in a sprite header, or nullptr.
 BehaviorFn findBehavior(const std::string& name) {
   static const std::map<std::string, BehaviorFn> table = {
@@ -352,7 +435,8 @@ BehaviorFn findBehavior(const std::string& name) {
       {"walk", walk},   {"ballistic", ballistic},      {"meteorite", meteorite},
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
-      {"catastrophe", catastrophe}};
+      {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
+      {"avalanche", avalanche}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -403,6 +487,8 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.hopPeriod = std::max(p.num("hop-period", 1.2), 0.1);
   e.hopHeight = p.num("hop-height", 1.5);
   e.phase = rng.range(0, 6.28);
+  e.zone = parseZone(p.str("zone"));
+  e.hops = p.has("hop-period");
   e.grounded = p.str("habitat", "medium") == "ground";
   e.destructible = p.str("destructible", "yes") != "no";
   e.backing = std::clamp(p.num("backing", 0.0), 0.0, 1.0);
@@ -445,6 +531,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
     if (surfaceY_ >= seabedY_) surfaceY_ = std::max(seabedY_ - 1, 0);
   }
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
+  if (sc.mountains) buildTerrain();
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
   rareTimer_ = sc.rare.empty() ? -1.0 : rng_.range(sc.rareFirst.first, sc.rareFirst.second);
   crater_.assign(static_cast<size_t>(w_), 0.0);
@@ -568,6 +655,8 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     e->frame = rng_.rangeInt(0, static_cast<int>(sprite->frameCount()) - 1);
   }
 
+  if (e->zone != Zone::None && !ridge_.empty()) placeInZone(*e, where && where->hasX, !initial, right);
+
   // `sleeps: 0.7` = about 70% of these animals sleep at night, each from its own sun height.
   const double sleeps = std::clamp(p.num("sleeps", 0.0), 0.0, 1.0);
   if (sleeps > 0 && rng_.chance(sleeps)) e->sleepBelow = rng_.range(0.05, 0.9);
@@ -603,6 +692,7 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
   else e->y = habitatY(p, e->height());
   e->anchorY = e->y;
+  if (e->zone != Zone::None && d.align == "random" && !ridge_.empty()) placeInZone(*e, false, false, true);
   e->restock = [d](World& w) { w.spawnDecor(d); };  // planted again after a catastrophe
   spawn(std::move(e));
 }
@@ -702,27 +792,30 @@ bool World::triggerRare() {
   return true;
 }
 
+void World::claim(Entity& o, const std::string& effect) {
+  if (o.dead) {  // it just left the scene and would be replaced right away: make that replacement wait
+    if (o.onDeath) restock_.push_back({rng_.range(8.0, 45.0), std::move(o.onDeath)});
+    o.onDeath = nullptr;
+    return;
+  }
+  if (!effect.empty() && !isAsleep(o)) {  // a sleeper is gone without a sight
+    spawnEffect(effect, o.x + o.width() / 2.0 - 1, o.y + o.height() / 2.0 - 1, o.z - 1, 0, 0);
+  }
+  std::function<void(World&)> comeBack = o.restock ? o.restock : o.onDeath;
+  if (comeBack) restock_.push_back({rng_.range(8.0, 45.0), std::move(comeBack)});
+  o.onDeath = nullptr;
+  o.restock = nullptr;
+  o.dead = true;
+  ++killed_;
+}
+
 void World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except) {
   const bool all = wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(wipes);
   auto take = [&](Entity& o) {
     if (&o == except || o.isRare) return;
     const bool victim = all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end();
-    if (!victim) return;
-    if (o.dead) {  // it just left the scene and would be replaced right away: make that replacement wait
-      if (o.onDeath) restock_.push_back({rng_.range(8.0, 45.0), std::move(o.onDeath)});
-      o.onDeath = nullptr;
-      return;
-    }
-    if (!effect.empty() && !isAsleep(o)) {  // a sleeper is gone without a sight
-      spawnEffect(effect, o.x + o.width() / 2.0 - 1, o.y + o.height() / 2.0 - 1, o.z - 1, 0, 0);
-    }
-    std::function<void(World&)> comeBack = o.restock ? o.restock : o.onDeath;
-    if (comeBack) restock_.push_back({rng_.range(8.0, 45.0), std::move(comeBack)});
-    o.onDeath = nullptr;
-    o.restock = nullptr;
-    o.dead = true;
-    ++killed_;
+    if (victim) claim(o, effect);
   };
   for (auto& other : entities_) take(*other);
   // Entities spawned during this very step have not joined the world yet, but are just as dead.
@@ -837,14 +930,15 @@ void World::spawnWeather(double dt) {
   auto sprite = pack_->find(particle);
   if (!sprite) return;
   const bool wind = sprite->props().str("wind", "no") == "yes";  // sand blown across, not falling
-  const double want = (wind ? 0.012 * w_ * h_ : 0.45 * w_) * dt;
+  const double want = (wind ? 0.012 * sprite->props().num("density", 1.0) * w_ * h_ : 0.45 * w_) * dt;
   int n = static_cast<int>(want);
   if (rng_.chance(want - n)) ++n;
   for (int i = 0; i < n; ++i) {
     if (wind) {  // grains enter at the upwind edge and sweep across the whole scene
       const auto [vmin, vmax] = sprite->props().range("speed", {22, 38});
+      const auto [fmin, fmax] = sprite->props().range("fall", {-1.5, 1.5});  // snow also settles
       spawnEffect(particle, stormDir_ > 0 ? -1 : w_, rng_.range(0, h_), 1, stormDir_ * rng_.range(vmin, vmax),
-                  rng_.range(-1.5, 1.5));
+                  rng_.range(fmin, fmax));
       continue;
     }
     Entity* e = spawnEffect(particle, rng_.range(-4, w_), -1, 1, 3.0, 14 + rng_.range(-2, 3));
@@ -946,6 +1040,7 @@ void World::flushIncoming() {
 void World::step(double dt) {
   time_ += dt;
   for (double& c : crater_) c = std::max(0.0, c - dt / scene_->dustSettle);  // dust fills craters
+  for (float& c : scar_) c = std::max(0.0f, c - static_cast<float>(dt / 40.0));  // the swath of an avalanche fades
   if (rainLeft_ > 0) {
     rainLeft_ = std::max(0.0, rainLeft_ - dt);
     spawnWeather(dt);
@@ -1019,6 +1114,251 @@ void World::step(double dt) {
   flushIncoming();
 }
 
+// --------------------------------------------------------------- mountains ---
+
+void World::buildTerrain() {
+  const SceneDef& sc = *scene_;
+  const double H = h_;
+  auto rowAt = [&](double climb) { return static_cast<int>(std::lround(H - 1 - climb * H)); };
+  const int floorRow = std::max(seabedY_ - 1, 0);  // lowest row the skyline may have
+  const int minRow = std::clamp(rowAt(sc.peakHeight), 0, floorRow);
+  const int baseRow = std::clamp(rowAt(sc.treeline + 0.05), minRow, floorRow);
+
+  // Peaks of different heights with their own slopes on either side; the skyline follows the
+  // highest of them and falls to the foothills between them.
+  struct Peak { double x, row, left, right; };
+  const int n = std::clamp(w_ / 30, 1, 7);
+  const int tallest = rng_.rangeInt(0, n - 1);
+  std::vector<Peak> peaks;
+  for (int i = 0; i < n; ++i) {
+    const double span = static_cast<double>(w_) / n;
+    peaks.push_back({(i + 0.5) * span + rng_.range(-0.3, 0.3) * span,
+                     i == tallest ? minRow : minRow + (baseRow - minRow) * rng_.range(0.0, 0.65),
+                     rng_.range(0.32, 0.62), rng_.range(0.32, 0.62)});
+  }
+  const double ph[4] = {rng_.range(0, 6.28), rng_.range(0, 6.28), rng_.range(0, 6.28), rng_.range(0, 6.28)};
+  const double amp = std::max(0.8, H * 0.03);
+
+  const size_t cols = static_cast<size_t>(w_);
+  ridge_.assign(cols, baseRow);
+  treeRow_.assign(cols, 0);
+  snowRow_.assign(cols, 0);
+  side_.assign(cols, 1);
+  horizonY_ = 0;
+  for (int x = 0; x < w_; ++x) {
+    double v = baseRow + 1.2 * std::sin(x * 0.07 + ph[0]);
+    const Peak* nearest = &peaks[0];
+    for (const Peak& p : peaks) {
+      const double dx = x - p.x;
+      v = std::min(v, p.row + std::fabs(dx) * (dx < 0 ? p.left : p.right));
+      if (std::fabs(dx) < std::fabs(x - nearest->x)) nearest = &p;
+    }
+    int r = static_cast<int>(std::lround(v));
+    if (r < baseRow - 1) r += static_cast<int>(hash2(x / 2, 91) % 3) - 1;  // ragged rock
+    ridge_[x] = std::clamp(r, minRow, floorRow);
+    side_[x] = x < nearest->x ? -1 : 1;
+    horizonY_ = std::max(horizonY_, ridge_[x]);
+    const int tree = static_cast<int>(std::lround(rowAt(sc.treeline) + amp * (std::sin(x * 0.11 + ph[2]) + 0.6 * std::sin(x * 0.31 + ph[3]))));
+    const int snow = static_cast<int>(std::lround(rowAt(sc.snowline) + amp * (std::sin(x * 0.09 + ph[3]) + 0.6 * std::sin(x * 0.27 + ph[2]))));
+    treeRow_[x] = std::clamp(tree, 0, h_);
+    snowRow_[x] = std::clamp(std::min(snow, treeRow_[x] - 2), 0, h_);
+  }
+  const int treeMin = *std::min_element(treeRow_.begin(), treeRow_.end());
+  const int treeMax = *std::max_element(treeRow_.begin(), treeRow_.end());
+  const int snowMin = *std::min_element(snowRow_.begin(), snowRow_.end());
+  const int snowMax = *std::max_element(snowRow_.begin(), snowRow_.end());
+
+  // The rows each zone spans (feet rows; for the air zones the lowest row of the sprite).
+  auto band = [&](Zone z, int lo, int hi) {
+    lo = std::clamp(lo, 0, std::max(h_ - 1, 0));
+    zoneLo_[static_cast<int>(z)] = lo;
+    zoneHi_[static_cast<int>(z)] = std::clamp(hi, lo, std::max(h_ - 1, 0));
+  };
+  const int streamBank = std::max(riverTopY_ - 1, seabedY_);
+  band(Zone::Meadow, seabedY_, streamBank);
+  band(Zone::Forest, treeMin, seabedY_ - 1);
+  band(Zone::Woods, treeMin, streamBank);
+  band(Zone::Rock, snowMin, treeMax);
+  band(Zone::Snow, minRow, snowMax);
+  band(Zone::Alpine, minRow, treeMax);
+  band(Zone::Sky, 0, snowMax);
+  band(Zone::Air, 0, treeMax);
+  band(Zone::LowAir, treeMin, streamBank);
+  surfaceY_ = std::clamp((treeMin + treeMax) / 2, 0, h_);  // the air above the tree line
+  scar_.assign(cols * static_cast<size_t>(h_), 0.0f);
+}
+
+int World::ridgeRow(int x) const {
+  if (ridge_.empty()) return seabedY_;
+  return ridge_[static_cast<size_t>(std::clamp(x, 0, w_ - 1))];
+}
+
+Zone World::zoneAt(int x, int y) const {
+  if (ridge_.empty() || x < 0 || x >= w_ || y < 0 || y >= h_) return Zone::None;
+  const size_t i = static_cast<size_t>(x);
+  if (y < ridge_[i]) return Zone::None;
+  if (y >= seabedY_) return Zone::Meadow;
+  return y < snowRow_[i] ? Zone::Snow : y < treeRow_[i] ? Zone::Rock : Zone::Forest;
+}
+
+bool World::fits(const Entity& e, double x, double top) const {
+  if (ridge_.empty()) return true;
+  const int col = std::clamp(static_cast<int>(std::floor(x + e.width() / 2.0)), 0, w_ - 1);
+  const int row = static_cast<int>(std::lround(top));
+  return ridge_[static_cast<size_t>(col)] <= row &&
+         zoneHolds(e.zone, zoneAt(col, row + e.height() - 1));
+}
+
+int World::depthFor(double feetRow) const {
+  return 3 + static_cast<int>(std::clamp((h_ - 1 - feetRow) * 20.0 / std::max(h_, 1), 0.0, 20.0));
+}
+
+void World::pickLane(Entity& e) {
+  const int zi = static_cast<int>(e.zone);
+  for (int tries = 0; tries < 10; ++tries) {
+    const double top = rng_.rangeInt(zoneLo_[zi], zoneHi_[zi]) - e.height() + 1;
+    if (fits(e, e.x, top)) { e.laneTarget = top; return; }
+  }
+}
+
+void World::placeInZone(Entity& e, bool keepX, bool enter, bool right) {
+  const int zi = static_cast<int>(e.zone);
+  if (isAirZone(e.zone)) {  // flyers: anywhere in their band
+    e.rowLo = zoneLo_[zi];
+    e.rowHi = std::max<double>(zoneHi_[zi] - e.height() + 1, e.rowLo);
+    e.y = e.anchorY = rng_.rangeInt(static_cast<int>(e.rowLo), static_cast<int>(e.rowHi));
+    return;
+  }
+  const bool walks = e.vx != 0;
+  for (int tries = 0; tries < 80; ++tries) {
+    double x = keepX ? e.x : rng_.range(0, std::max(w_ - e.width(), 0));
+    if (!keepX && enter && walks && tries == 0) x = right ? -e.width() : w_;  // walks in from its side
+    const int feet = rng_.rangeInt(zoneLo_[zi], zoneHi_[zi]);
+    const double top = feet - e.height() + 1;
+    if (!fits(e, x, top)) continue;
+    e.x = x;
+    e.y = e.anchorY = top;
+    e.z = depthFor(feet);
+    return;
+  }
+  // Nothing fitted by luck: take the first row that fits at its column, or the foot of the zone.
+  for (int feet = zoneHi_[zi]; feet >= zoneLo_[zi]; --feet) {
+    if (!fits(e, e.x, feet - e.height() + 1)) continue;
+    e.y = e.anchorY = feet - e.height() + 1;
+    e.z = depthFor(feet);
+    return;
+  }
+  e.y = e.anchorY = zoneHi_[zi] - e.height() + 1;
+  e.z = depthFor(zoneHi_[zi]);
+}
+
+double World::scarAt(int x, int y) const {
+  if (scar_.empty() || x < 0 || x >= w_ || y < 0 || y >= h_) return 0;
+  return scar_[static_cast<size_t>(y) * w_ + x];
+}
+
+void World::slideStep(Entity& e, double dt) {
+  constexpr double kWarn = 3.0;     // seconds of cracking and creaking before the slab goes
+  constexpr double kSettle = 5.0;   // seconds the cloud lingers once the slide has come to rest
+  const double bottom = h_ - 1;
+  if (!slide_.active) {  // starts high on a snowy flank and heads downhill
+    slide_ = Slide{};
+    slide_.active = true;
+    std::vector<int> snowy;
+    for (int x = 2; x < w_ - 2; ++x) {
+      if (ridge_[static_cast<size_t>(x)] < snowRow_[static_cast<size_t>(x)] - 1) snowy.push_back(x);
+    }
+    int x0 = w_ / 2;
+    if (!snowy.empty()) {
+      x0 = snowy[static_cast<size_t>(rng_.rangeInt(0, static_cast<int>(snowy.size()) - 1))];
+    } else {
+      for (int x = 0; x < w_; ++x) if (ridge_[static_cast<size_t>(x)] < ridge_[static_cast<size_t>(x0)]) x0 = x;
+    }
+    const int left = ridgeRow(x0 - 6), right = ridgeRow(x0 + 6);  // the lower side is downhill
+    slide_.dir = left > right ? -1 : right > left ? 1 : (rng_.chance(0.5) ? 1 : -1);
+    slide_.x0 = x0;
+    slide_.y0 = ridgeRow(x0) + 1;
+    slide_.gradient = rng_.range(0.4, 0.9);
+    const double rows = std::max(bottom - slide_.y0, 1.0);
+    const double room = slide_.dir > 0 ? w_ - 4 - x0 : x0 - 3;  // keep the swath on the screen
+    slide_.gradient = std::clamp(room / rows, 0.0, slide_.gradient);
+    slide_.wobble = rng_.range(0, 6.28);
+    slide_.head = slide_.lastHead = slide_.y0;
+  }
+  const double rows = std::max(bottom - slide_.y0, 1.0);
+  // The middle of the swath at a row, and its half width, which grows downhill as the snow fans out.
+  auto middle = [&](double row) {
+    const double prog = std::clamp((row - slide_.y0) / rows, 0.0, 1.0);
+    return slide_.x0 + slide_.dir * slide_.gradient * (row - slide_.y0) +
+           1.8 * std::sin((row - slide_.y0) * 0.33 + slide_.wobble) * (0.4 + prog);
+  };
+  auto halfWidth = [&](double row) { return 1.5 + 5.0 * std::clamp((row - slide_.y0) / rows, 0.0, 1.0); };
+
+  if (e.age < kWarn) {  // the slab cracks: snow trickles and puffs up where it is about to let go
+    slideLevel_ = 0.15 + 0.35 * e.age / kWarn;
+    e.x = slide_.x0 - e.width() / 2.0;
+    e.y = slide_.y0 - e.height() / 2.0;
+    slide_.puffs += 6 * dt;
+    for (; slide_.puffs >= 1; slide_.puffs -= 1) {
+      spawnEffect("snowpuff", slide_.x0 + rng_.range(-3, 3), slide_.y0 + rng_.range(0, 2), 1,
+                  rng_.range(-1.5, 1.5), -rng_.range(0.5, 1.5));
+    }
+    return;
+  }
+  if (slide_.endedAt < 0) {
+    const double speed = std::min(3.5 + 2.5 * (e.age - kWarn), 11.0);
+    slide_.head = std::min(bottom, slide_.head + speed * dt);
+    const double cx = middle(slide_.head), hw = halfWidth(slide_.head);
+    // The swath: every row the head has passed is covered with snow and rubble.
+    for (int row = static_cast<int>(std::floor(slide_.lastHead)); row <= static_cast<int>(std::floor(slide_.head)); ++row) {
+      if (row < 0 || row >= h_) continue;
+      const double c = middle(row), half = halfWidth(row);
+      for (int x = static_cast<int>(std::lround(c - half)); x <= static_cast<int>(std::lround(c + half)); ++x) {
+        if (x >= 0 && x < w_ && row >= ridge_[static_cast<size_t>(x)]) scar_[static_cast<size_t>(row) * w_ + x] = 1.0f;
+      }
+    }
+    // It buries what stands in its way: animals, trees and bushes. Flyers get out of the way.
+    const double top = slide_.lastHead - 1, bot = slide_.head + 1;
+    const double x0 = cx - hw - 1, x1 = cx + hw + 1;
+    for (auto& other : entities_) {
+      Entity& o = *other;
+      if (o.dead || o.isRare || !o.destructible || isAirZone(o.zone)) continue;
+      if (!o.life && o.zone == Zone::None && !o.grounded) continue;  // effects
+      if (o.x + o.width() <= x0 || o.x >= x1 || o.y + o.height() <= top || o.y >= bot) continue;
+      claim(o, "snowpuff");
+    }
+    // Powder billows up around the head, and rock and uprooted trees tumble out of the forest.
+    slide_.puffs += 36 * dt;
+    for (; slide_.puffs >= 1; slide_.puffs -= 1) {
+      spawnEffect("snowpuff", cx + rng_.range(-hw, hw), slide_.head - rng_.range(0, 3), 1,
+                  rng_.range(-3, 3), -rng_.range(0.5, 3));
+    }
+    const Zone here = zoneAt(static_cast<int>(std::lround(cx)), static_cast<int>(slide_.head));
+    if (here != Zone::Snow && rng_.chance(14 * dt)) {
+      spawnEffect("debris", cx + rng_.range(-hw, hw), slide_.head - 1, 1, rng_.range(-5, 5), -rng_.range(1.5, 4));
+    }
+    slide_.lastHead = slide_.head;
+    slideLevel_ = 1.0;
+    e.x = cx - e.width() / 2.0;
+    e.y = slide_.head - e.height() * 0.65;
+    if (slide_.head >= bottom) slide_.endedAt = e.age;
+    return;
+  }
+  // The slide has reached the stream and comes to rest in a billowing cloud that slowly thins.
+  const double since = e.age - slide_.endedAt;
+  slideLevel_ = std::max(0.0, 1.0 - since / kSettle);
+  slide_.puffs += 14 * (1 - since / kSettle) * dt;
+  for (; slide_.puffs >= 1; slide_.puffs -= 1) {
+    spawnEffect("snowpuff", e.x + rng_.range(0, e.width()), bottom - rng_.range(0, 4), 1,
+                rng_.range(-3, 3), -rng_.range(0.5, 2.5));
+  }
+  if (since > kSettle) {
+    slide_.active = false;
+    slideLevel_ = 0;
+    e.dead = true;
+  }
+}
+
 // ---------------------------------------------------------------- render ---
 
 void World::renderBackground(Frame& out, Style style, const Light& light) const {
@@ -1031,24 +1371,25 @@ void World::renderBackground(Frame& out, Style style, const Light& light) const 
   const Rgb surfaceFg = backdrop(sc.surfaceFg, light);
   const Rgb riverTop = backdrop(sc.riverTop, light), riverDeep = backdrop(sc.riverDeep, light);
 
+  // In a mountain scene the sky reaches down to the lowest foothill; the terrain is drawn over it
+  // afterwards, so the sun can set behind the peaks.
+  const int skyEnd = sc.mountains ? horizonY_ : surfaceY_;
   for (int y = 0; y < h_; ++y) {
     for (int x = 0; x < w_; ++x) {
       Cell c;
       const uint32_t h = hash2(x, y);
-      if (y < surfaceY_) {
-        c.bg = lerp(skyTop, skyLow, surfaceY_ > 1 ? double(y) / (surfaceY_ - 1) : 1.0);
+      if (sc.mountains && y >= skyEnd) {
+        c.bg = skyLow;
+      } else if (y < skyEnd) {
+        c.bg = lerp(skyTop, skyLow, skyEnd > 1 ? double(y) / (skyEnd - 1) : 1.0);
         if (sc.starDensity > 0 && light.stars > 0.2 && h % static_cast<uint32_t>(sc.starDensity) == 0) {
           const bool bright = std::sin(time_ * 2.0 + (h >> 8)) > 0;  // twinkling stars
           c.ch = bright ? U'*' : U'.';
           c.fg = lerp(c.bg, bright ? Rgb{250, 250, 220} : Rgb{150, 150, 170}, light.stars);
         }
       } else if (riverRows_ > 0 && y >= riverTopY_) {  // river: flowing ripples
-        const double t = riverRows_ > 1 ? double(y - riverTopY_) / (riverRows_ - 1) : 0.0;
-        c.bg = lerp(riverTop, riverDeep, t);
-        const double flow = time_ * sc.riverFlow;
-        const double v = std::sin(x * 0.6 - flow + y * 1.7) + 0.5 * std::sin(x * 0.23 - flow * 0.6);
-        c.ch = v > 0.8 ? U'~' : v > 0.2 ? U'-' : (h % 9 == 0 ? U'.' : U' ');
-        c.fg = scale(c.bg, 1.9);
+        c = riverCell(x, y, riverRows_ > 1 ? double(y - riverTopY_) / (riverRows_ - 1) : 0.0, time_,
+                      sc.riverFlow, riverTop, riverDeep);
       } else if (y >= seabedY_) {
         const int row = y - seabedY_;
         const int dug = craterRows(x);
@@ -1085,7 +1426,8 @@ void World::renderBackground(Frame& out, Style style, const Light& light) const 
 }
 
 void World::renderCelestial(Frame& out, Style style, const Light& light) const {
-  if (!scene_->dayNight || surfaceY_ <= 0 || overcast_ > 0.6) return;
+  const int skyEnd = scene_->mountains ? horizonY_ : surfaceY_;
+  if (!scene_->dayNight || skyEnd <= 0 || overcast_ > 0.6) return;
   constexpr double kPi = 3.14159265358979;
   const bool byDay = phase_ >= 0.25 && phase_ <= 0.75;
   // How far along its arc the body is: 0 as it rises, 1 as it sets.
@@ -1098,8 +1440,68 @@ void World::renderCelestial(Frame& out, Style style, const Light& light) const {
   body.fg = sprite->props().color("color", {255, 240, 180});
   body.x = u * (w_ - 1) - sprite->width() / 2.0;
   // At the horizon the whole body is just below it; it climbs to the top of the sky at mid-arc.
-  body.y = surfaceY_ * (1 - std::sin(kPi * u));
-  blit(out, body, style, light, surfaceY_);  // rows below the horizon stay hidden
+  body.y = skyEnd * (1 - std::sin(kPi * u));
+  blit(out, body, style, light, skyEnd);  // rows below the horizon stay hidden
+}
+
+void World::renderTerrain(Frame& out, Style style, const Light& light) const {
+  const SceneDef& sc = *scene_;
+  const Rgb groundA = backdrop(sc.groundA, light), groundB = backdrop(sc.groundB, light);
+  const Rgb forestA = backdrop(sc.forestA, light), forestB = backdrop(sc.forestB, light);
+  const Rgb rockA = backdrop(sc.rockA, light), rockB = backdrop(sc.rockB, light);
+  const Rgb snowA = backdrop(sc.snowA, light), snowB = backdrop(sc.snowB, light);
+  const Rgb riverTop = backdrop(sc.riverTop, light), riverDeep = backdrop(sc.riverDeep, light);
+  const Rgb slideSnow = backdrop({244, 248, 252}, light), rubble = backdrop({120, 98, 78}, light);
+  auto glyph = [](const std::u32string& set, uint32_t h) { return set.empty() ? U' ' : set[h % set.size()]; };
+
+  for (int x = 0; x < w_; ++x) {
+    const size_t xi = static_cast<size_t>(x);
+    const int top = ridge_[xi];
+    for (int y = top; y < h_; ++y) {
+      const uint32_t h = hash2(x, y);
+      const Zone z = zoneAt(x, y);
+      Cell c;
+      if (riverRows_ > 0 && y >= riverTopY_) {
+        c = riverCell(x, y, riverRows_ > 1 ? double(y - riverTopY_) / (riverRows_ - 1) : 0.0, time_,
+                      sc.riverFlow, riverTop, riverDeep);
+      } else {
+        if (z == Zone::Meadow) {
+          c.bg = y == seabedY_ ? groundA : groundB;
+          c.ch = glyph(sc.groundGlyphs, h);
+        } else if (z == Zone::Forest) {
+          c.bg = lerp(forestA, forestB, double(y - treeRow_[xi]) / std::max(seabedY_ - treeRow_[xi], 1));
+          c.ch = glyph(sc.forestGlyphs, h);
+        } else if (z == Zone::Rock) {
+          c.bg = lerp(rockA, rockB, double(y - snowRow_[xi]) / std::max(treeRow_[xi] - snowRow_[xi], 1));
+          c.ch = glyph(sc.rockGlyphs, h);
+        } else {
+          c.bg = lerp(snowA, snowB, double(y - top) / std::max(snowRow_[xi] - top, 1));
+          c.ch = glyph(sc.snowGlyphs, h);
+        }
+        if (side_[xi] > 0 && z != Zone::Meadow) c.bg = scale(c.bg, 0.86);  // the far flank is in shadow
+        c.fg = (z == Zone::Rock || z == Zone::Snow) ? scale(c.bg, 0.74) : scale(c.bg, 1.4);
+        if (z == Zone::Rock || z == Zone::Snow) {  // gullies run down the flank from the peak
+          const int diag = side_[xi] < 0 ? x + y : x - y;
+          if (((diag % 8) + 8) % 8 == 0 && h % 3 != 0) c.ch = side_[xi] < 0 ? U'/' : U'\\';
+        }
+        if (y == top && z != Zone::Meadow) {  // the skyline
+          const int l = ridge_[static_cast<size_t>(std::max(x - 1, 0))], r = ridge_[static_cast<size_t>(std::min(x + 1, w_ - 1))];
+          c.ch = (l > top && r > top) ? U'^' : l > r ? U'/' : r > l ? U'\\' : U'-';
+          c.fg = scale(c.bg, z == Zone::Snow ? 0.62 : 0.55);
+        }
+      }
+      if (const double s = scarAt(x, y); s > 0.01) {  // an avalanche has been through
+        const double t = std::min(1.0, s * 1.3);
+        const uint32_t q = hash2(x * 3, y * 7);
+        c.bg = lerp(c.bg, slideSnow, t);
+        c.fg = lerp(c.fg, q % 5 == 0 ? rubble : scale(slideSnow, 0.72), t);
+        c.ch = q % 5 == 0 ? U'o' : q % 3 == 0 ? U'*' : q % 2 == 0 ? U':' : U'.';
+      }
+      if (style != Style::Full) c.defaultBg = true;
+      if (style == Style::Mono) c.defaultFg = true;
+      out.at(x, y) = c;
+    }
+  }
 }
 
 void World::render(Frame& out, Style style) const {
@@ -1107,6 +1509,7 @@ void World::render(Frame& out, Style style) const {
   const Light l = light();
   renderBackground(out, style, l);
   renderCelestial(out, style, l);
+  if (scene_->mountains) renderTerrain(out, style, l);
 
   std::vector<const Entity*> order;
   order.reserve(entities_.size());

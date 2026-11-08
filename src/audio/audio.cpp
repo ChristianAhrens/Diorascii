@@ -28,7 +28,7 @@ struct AudioOutput::Impl {
   std::atomic<int> kind{0};
   std::atomic<float> night{0}, rain{0}, volume{1};
   std::atomic<unsigned> flashes{0};
-  std::atomic<float> storm{0}, whale{0}, tornado{0};
+  std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
   std::atomic<unsigned> nibbles{0}, impacts{0};
 };
 
@@ -44,6 +44,7 @@ void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   p.storm = impl->storm.load();
   p.whale = impl->whale.load();
   p.tornado = impl->tornado.load();
+  p.avalanche = impl->avalanche.load();
   p.nibbles = impl->nibbles.load();
   p.impacts = impl->impacts.load();
   impl->ambience.render(p, static_cast<float*>(output), static_cast<int>(frames));
@@ -99,6 +100,7 @@ void AudioOutput::setParams(const AmbientParams& p) {
   impl_->storm = p.storm;
   impl_->whale = p.whale;
   impl_->tornado = p.tornado;
+  impl_->avalanche = p.avalanche;
   impl_->nibbles = p.nibbles;
   impl_->impacts = p.impacts;
 }

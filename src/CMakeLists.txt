@@ -41,18 +41,25 @@ if(DIORASCII_TERMINAL)
   diorascii_warnings(diorascii_term)
 endif()
 
-# Ambient sound. The vendored miniaudio is its own library, built without our warnings.
-add_library(diorascii_miniaudio STATIC audio/miniaudio_impl.cpp)
-target_include_directories(diorascii_miniaudio SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/third_party/miniaudio")
-if(APPLE)
-  target_link_libraries(diorascii_miniaudio PUBLIC "-framework CoreFoundation"
-    "-framework CoreAudio" "-framework AudioToolbox")
-elseif(UNIX)
-  target_link_libraries(diorascii_miniaudio PUBLIC ${CMAKE_DL_LIBS} pthread m)
-endif()
+# Ambient sound. Desktop builds play through the vendored miniaudio, built as its own library
+# without our warnings; tvOS and iOS use AVAudioEngine (miniaudio would need Objective-C there).
+if(CMAKE_SYSTEM_NAME MATCHES "^(tvOS|iOS)$")
+  add_library(diorascii_audio STATIC audio/audio_apple.mm)
+  target_link_libraries(diorascii_audio PUBLIC diorascii_core "-framework AVFoundation")
+  target_compile_options(diorascii_audio PRIVATE -fobjc-arc)
+else()
+  add_library(diorascii_miniaudio STATIC audio/miniaudio_impl.cpp)
+  target_include_directories(diorascii_miniaudio SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/third_party/miniaudio")
+  if(APPLE)
+    target_link_libraries(diorascii_miniaudio PUBLIC "-framework CoreFoundation"
+      "-framework CoreAudio" "-framework AudioToolbox")
+  elseif(UNIX)
+    target_link_libraries(diorascii_miniaudio PUBLIC ${CMAKE_DL_LIBS} pthread m)
+  endif()
 
-add_library(diorascii_audio STATIC audio/audio.cpp)
-target_link_libraries(diorascii_audio PUBLIC diorascii_core PRIVATE diorascii_miniaudio)
+  add_library(diorascii_audio STATIC audio/audio.cpp)
+  target_link_libraries(diorascii_audio PUBLIC diorascii_core PRIVATE diorascii_miniaudio)
+endif()
 diorascii_warnings(diorascii_audio)
 
 # The interactive state (scene, menu, style, time of day, toasts), shared by every frontend.

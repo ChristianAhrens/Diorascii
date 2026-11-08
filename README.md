@@ -194,6 +194,19 @@ Switch with `--style`, the `c` key or the menu.
 Needs only CMake 3.21 or newer and a C++20 compiler. `scripts/build.sh dev` makes a
 debug build and runs the tests. Assets are embedded into the binary at build time.
 `-DDIORASCII_VERSION=x.y.z` sets the version the binary reports.
+tvOS (macOS with Xcode only): the Apple TV app is generated and built by CMake, there is no
+hand-made Xcode project.
+
+    cmake -S . -B build/tvos -G Xcode -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator
+    cmake --build build/tvos --target Diorascii -- CODE_SIGNING_ALLOWED=NO
+    xcrun simctl install booted build/tvos/apple/tvOS/Debug-appletvsimulator/Diorascii.app
+
+The generated project serves both the simulator and devices (pick the destination in Xcode);
+configure with `-DCMAKE_OSX_SYSROOT=appletvos -DDIORASCII_APPLE_TEAM=<team id>` to sign for a device. Siri Remote: swipe left/right
+changes the scene, swipe up the time of day, swipe down the sound, click runs the scene's action,
+Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it), Menu closes
+the menu or leaves the app.
+
 With GCC the C++ runtime is linked statically for a single-file binary when the static library
 is installed (Fedora: `dnf install libstdc++-static`); without it the build falls back to the shared one.
 

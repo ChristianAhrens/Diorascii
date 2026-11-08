@@ -137,6 +137,32 @@ synthesis function each. See [findings](findings.md) F-08 about the coupling thi
   `Ambience::render`), and keep miniaudio for the desktop terminal builds. This also settles F-09 for Apple
   mobile targets.
 
+## tvOS app (apple/tvOS, built 2026-11-08)
+
+Objective-C++ (ARC), generated entirely by CMake (`apple/tvOS/CMakeLists.txt`, Xcode generator):
+`AppDelegate.mm` (app + scene delegate; the UIScene lifecycle is mandatory on tvOS 27),
+`SessionViewController.mm` (20 fps `CADisplayLink`, Siri Remote input, sound sync) and
+`GridView.mm` (draws the `Frame`: one filled rect per run of equal background, one cached Core Text
+glyph per cell with no string layout per frame, focusable so the remote's touches and presses arrive, system
+monospaced font 22.4 pt (about 130 columns; 28 pt gave about 100), fractional cell sizes with backgrounds snapped to whole points, cell size snapped to whole points to avoid seams, grid = safe area / cell).
+Audio: `src/audio/audio_apple.mm` (AVAudioEngine + AVAudioSourceNode, standard non-interleaved
+format; the mixer rejects interleaved). Info.plist is a template (`$(...)` placeholders because
+CMake would blank `${...}`); the asset catalog is assembled at configure time from
+`Resources/Icon/tvOS/*.brandassets` (single source of truth for the icon). `SUPPORTED_PLATFORMS="appletvos appletvsimulator"` is set globally so one project offers both devices and simulators as Xcode run destinations (with the default only devices appear and Run builds but launches nothing in a simulator). Only the app target has an Xcode scheme (`CMAKE_XCODE_GENERATE_SCHEME OFF` globally, `XCODE_GENERATE_SCHEME ON` on the app): the generator's default `ALL_BUILD` scheme has nothing to run, so Run built the app and then did nothing. The core, app and audio libraries are compiled with `-O2` even in Xcode's Debug configuration: unoptimised, the sound synthesis dominated the process (~80 % of a core in the simulator, ~15 % now). Deployment target 17.0,
+bundle id `com.ChristianAhrens.Diorascii`, team via `-DDIORASCII_APPLE_TEAM`.
+
+Remote mapping: swipe left/right = scene, up = time of day, down = sound (up/down navigate while the
+menu is open), click = scene action (Select while the menu is open), Play/Pause = pause, long click
+= open menu, Menu = close menu, else leave the app. Sound is on by default on tvOS (owner to confirm). The menu has no Quit entry on tvOS (`Config::quitEntry`), and for the first five launches a toast hint, "Hold the click for the menu", appears 2.5 s after the start.
+Keyboards (the Simulator's, or one attached to a real Apple TV) arrive as presses whose `type` is a raw HID value (2000 + usage, e.g. 2079 right arrow) and whose `key` is set, not as Siri Remote button types; `handleKey:` maps arrows, Return, Space, Escape and the terminal program's letters (m f x c t a i p r). Debug builds log input and focus with the prefix `DIORASCII-INPUT`. Verified in the tvOS 27.2 simulator: launches, draws, animates. **Not verified:** remote input,
+sound by ear, performance on a real Apple TV, the signed device build.
+
+App Store Connect validation (2026-11-08) required, beyond a signed build: the Info.plist key
+`TVTopShelfImage.TVTopShelfPrimaryImageWide` and a **2x image for every layer of the small app icon**. Both come
+from the asset catalog: `Resources/Icon/tvOS/make_rasters.sh` renders the 2x layers and the Top Shelf images
+(standard 1920x720 and wide 2320x720, 1x and 2x; draft crops of the icon art) from the layer SVGs with
+ImageMagick and writes the catalog `Contents.json`; actool then adds the Info.plist keys itself.
+
 ## Apple/tvOS notes gathered so far
 
 - App ID to register: `com.ChristianAhrens.Diorascii` (explicit; select all platforms that might

@@ -10,8 +10,10 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a tvOS app (work in progress): the same scenes drawn on the Apple TV, steered with the Siri Remote, with synthesized sound through AVAudioEngine. It is built entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`); see the README
 
 ### Changed
+- Changed the interactive logic (scene, menu, style, time of day, pause, sound request) to live in a shared `Session` class, which the terminal program and the tvOS app both drive
 
 ### Fixed
 

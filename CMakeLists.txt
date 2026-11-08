@@ -11,7 +11,26 @@ list(GET DIORASCII_CHANGELOG_HEADINGS 0 DIORASCII_CHANGELOG_LATEST)
 string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" DIORASCII_CHANGELOG_VERSION "${DIORASCII_CHANGELOG_LATEST}")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md")
 
+# tvOS apps target tvOS 17 and later (must be set before project()).
+if(CMAKE_SYSTEM_NAME STREQUAL "tvOS" AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0 CACHE STRING "")
+endif()
+
+# One tvOS project for both the device and the simulator, so Xcode's run destinations list the
+# Apple TV simulators as well (without this only devices are offered).
+if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+  set(CMAKE_XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "appletvos appletvsimulator")
+  # Only the app gets a scheme (enabled in apple/tvOS): otherwise Xcode opens on ALL_BUILD, which
+  # has nothing to run, so Run would build and then do nothing.
+  set(CMAKE_XCODE_GENERATE_SCHEME OFF)
+endif()
+
 project(diorascii VERSION ${DIORASCII_CHANGELOG_VERSION} LANGUAGES CXX)
+if(CMAKE_SYSTEM_NAME MATCHES "^(tvOS|iOS)$")
+  enable_language(OBJCXX)
+  set(CMAKE_OBJCXX_STANDARD 20)
+  set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -93,6 +112,9 @@ function(diorascii_warnings target)
 endfunction()
 
 add_subdirectory(src)
+if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+  add_subdirectory(apple/tvOS)
+endif()
 
 if(DIORASCII_BUILD_TESTS AND DIORASCII_TERMINAL)
   enable_testing()

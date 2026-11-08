@@ -160,3 +160,17 @@ behaviors, actions, scenes or formats change, update README, CHANGELOG, `docs/ai
   instead of the shared preset directory; `dist/` is ignored. The stale `0.1.0` in
   `build/release-macos` is a local, ignored leftover: delete that directory once.
 - **tvOS stack decided:** native, CMake-built, no SDL3 (see history, decision 13).
+
+## F-17 tvOS open points (M)
+- Siri Remote input (swipes, click, long click, Menu, Play/Pause) has never been exercised: the
+  simulator could only be launched headless. Test in the Simulator app or on a device.
+- Sound defaults to on on tvOS (terminal: off). Confirm.
+- The Top Shelf images are drafts cropped from the icon art (needed for App Store validation); a dedicated
+  design is still to do.
+- The grid uses the system monospaced font; glyph coverage of the sprites' characters on tvOS is
+  unchecked beyond the aquarium, and the bundled font planned earlier does not exist yet.
+- Performance: the grid is redrawn fully each frame with CoreGraphics and cached glyphs (~15 % of a core in the
+  simulator after optimising the libraries in Debug); unknown on an Apple TV HD/4K. A Metal glyph atlas is the fallback.
+- Remote input: the grid view is focusable and keyboard presses arrive (seen in the log); their handling (keyboard keys, not remote button types) was added afterwards and still needs a run to confirm. The remote's own swipe/click path is untested.
+- Deployment target is tvOS 17.0 (a guess); `connect:to:format:` is deprecated from tvOS 27.
+- iOS is not wired up; the shared pieces (Session, audio_apple) are ready for it.

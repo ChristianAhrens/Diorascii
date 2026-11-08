@@ -52,6 +52,13 @@ endif()
 message(STATUS "Diorascii version ${DIORASCII_VERSION_STRING}")
 
 option(DIORASCII_BUILD_TESTS "Build the test suite" ON)
+# The terminal program and its tests; off on tvOS and iOS, which have no terminal.
+if(CMAKE_SYSTEM_NAME MATCHES "^(tvOS|iOS)$")
+  set(DIORASCII_TERMINAL_DEFAULT OFF)
+else()
+  set(DIORASCII_TERMINAL_DEFAULT ON)
+endif()
+option(DIORASCII_TERMINAL "Build the terminal program" ${DIORASCII_TERMINAL_DEFAULT})
 option(DIORASCII_STATIC_RUNTIME "Link the C/C++ runtime statically (single-file binary)" ON)
 
 if(DIORASCII_STATIC_RUNTIME)
@@ -87,7 +94,7 @@ endfunction()
 
 add_subdirectory(src)
 
-if(DIORASCII_BUILD_TESTS)
+if(DIORASCII_BUILD_TESTS AND DIORASCII_TERMINAL)
   enable_testing()
   add_subdirectory(tests)
 endif()
@@ -102,7 +109,9 @@ if(DOXYGEN_FOUND)
     VERBATIM)
 endif()
 
-install(TARGETS diorascii RUNTIME DESTINATION bin)
+if(DIORASCII_TERMINAL)
+  install(TARGETS diorascii RUNTIME DESTINATION bin)
+endif()
 install(FILES LICENSE README.md DESTINATION share/doc/diorascii)
 
 set(CPACK_PACKAGE_NAME diorascii)

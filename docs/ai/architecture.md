@@ -125,6 +125,18 @@ synthesis function each. See [findings](findings.md) F-08 about the coupling thi
   day/night toggle over `Resources/Diorascii_<Scene>_<Day|Night>.mp4` backgrounds; the choice is
   remembered in the browser. Videos are cropped to terminal content only, 20 fps, 1920 px wide.
 
+## tvOS build notes (spike 2026-11-08)
+
+- `-DDIORASCII_TERMINAL=OFF` is the default when `CMAKE_SYSTEM_NAME` is tvOS or iOS: the terminal
+  library, the `diorascii` executable and the tests are not built there. The core and the
+  `diorascii_app` library (Session) configure and build for the tvOS simulator with plain CMake:
+  `cmake -G Xcode -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator`, then
+  `cmake --build ... --target diorascii_app -- CODE_SIGNING_ALLOWED=NO` (succeeded).
+- miniaudio does not compile as plain C++ for tvOS (it pulls in Objective-C Foundation headers).
+  Plan: on tvOS/iOS implement `AudioOutput` with AVAudioEngine instead (same interface, drives
+  `Ambience::render`), and keep miniaudio for the desktop terminal builds. This also settles F-09 for Apple
+  mobile targets.
+
 ## Apple/tvOS notes gathered so far
 
 - App ID to register: `com.ChristianAhrens.Diorascii` (explicit; select all platforms that might

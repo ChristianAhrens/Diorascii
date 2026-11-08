@@ -41,6 +41,39 @@ int rgbToAnsi16(Rgb c) {
 
 namespace {
 
+/// The Linux console's default palette, which differs from xterm's.
+const Rgb kConsolePal[16] = {{0, 0, 0},       {170, 0, 0},     {0, 170, 0},     {170, 85, 0},
+                             {0, 0, 170},     {170, 0, 170},   {0, 170, 170},   {170, 170, 170},
+                             {85, 85, 85},    {255, 85, 85},   {85, 255, 85},   {255, 255, 85},
+                             {85, 85, 255},   {255, 85, 255},  {85, 255, 255},  {255, 255, 255}};
+
+int dist2(Rgb a, Rgb b) {
+  const int dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b;
+  return dr * dr + dg * dg + db * db;
+}
+
+/// Nearest console palette entry in [first, last).
+int consoleNearest(Rgb c, int first, int last) {
+  int best = first, bestD = 1 << 30;
+  for (int i = first; i < last; ++i) {
+    const int d = dist2(c, kConsolePal[i]);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+/// Rewrites a cell so it only uses colors the Linux console can show: backgrounds snap to
+/// the nearest of the 8 dark colors. Shade glyphs for dithering are not an option, since
+/// console fonts often lack them and draw '#' instead.
+Cell toConsoleCell(Cell c) {
+  if (!c.defaultFg) c.fg = kConsolePal[consoleNearest(c.fg, 1, 16)];
+  if (!c.defaultBg) {
+    // Backdrops are scaled down a little so daylight skies don't glare.
+    c.bg = kConsolePal[consoleNearest(c.reverse ? c.bg : scale(c.bg, 0.8), 0, 8)];
+  }
+  return c;
+}
+
 /// SGR parameter that selects color c as foreground or background in the given mode.
 std::string colorParam(bool fg, Rgb c, ColorMode mode) {
   switch (mode) {
@@ -49,6 +82,10 @@ std::string colorParam(bool fg, Rgb c, ColorMode mode) {
              ';' + std::to_string(c.b);
     case ColorMode::Ansi256:
       return std::string(fg ? "38;5;" : "48;5;") + std::to_string(rgbTo256(c));
+    case ColorMode::Console: {
+      const int i = consoleNearest(c, fg ? 1 : 0, fg ? 16 : 8);
+      return std::to_string((fg ? (i < 8 ? 30 : 90) : 40) + (i & 7));
+    }
     case ColorMode::Ansi16: {
       const int i = rgbToAnsi16(c);
       const int base = fg ? (i < 8 ? 30 : 90) : (i < 8 ? 40 : 100);
@@ -79,8 +116,8 @@ std::string encodeFrame(const Frame* prev, const Frame& cur, ColorMode mode) {
   for (int y = 0; y < cur.height(); ++y) {
     int nextX = -1;  // x the cursor sits at after the last write on this row
     for (int x = 0; x < cur.width(); ++x) {
-      const Cell& c = cur.at(x, y);
-      if (!full && prev->at(x, y) == c) continue;
+      if (!full && prev->at(x, y) == cur.at(x, y)) continue;
+      const Cell c = mode == ColorMode::Console ? toConsoleCell(cur.at(x, y)) : cur.at(x, y);
 
       if (x != nextX) {
         out += "\x1b[" + std::to_string(y + 1) + ';' + std::to_string(x + 1) + 'H';

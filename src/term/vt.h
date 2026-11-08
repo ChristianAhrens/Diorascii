@@ -13,7 +13,9 @@ namespace dio {
 ///   TrueColor - 24-bit
 ///   Ansi256   - xterm 256-color palette
 ///   Ansi16    - the 16 named ANSI colors (follow the user's terminal theme)
-enum class ColorMode { TrueColor, Ansi256, Ansi16 };
+///   Console   - the Linux text console (TERM=linux): 16 colors with only 8 usable
+///               backgrounds, which are snapped to the dark ones
+enum class ColorMode { TrueColor, Ansi256, Ansi16, Console };
 
 /// Encodes `cur` as VT/ANSI output. If `prev` is non-null and the same size, only
 /// changed cells are emitted; otherwise the whole screen is repainted.

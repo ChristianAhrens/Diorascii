@@ -22,6 +22,7 @@ add_library(diorascii_core STATIC
   core/menu.cpp
   core/assets.cpp
   core/world.cpp
+  core/ambience.cpp
   "${EMBED_CPP}")
 target_include_directories(diorascii_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -37,6 +38,20 @@ add_library(diorascii_term STATIC term/vt.cpp ${TERM_PLATFORM})
 target_link_libraries(diorascii_term PUBLIC diorascii_core)
 diorascii_warnings(diorascii_term)
 
+# Ambient sound. The vendored miniaudio is its own library, built without our warnings.
+add_library(diorascii_miniaudio STATIC audio/miniaudio_impl.cpp)
+target_include_directories(diorascii_miniaudio SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/third_party/miniaudio")
+if(APPLE)
+  target_link_libraries(diorascii_miniaudio PUBLIC "-framework CoreFoundation"
+    "-framework CoreAudio" "-framework AudioToolbox")
+elseif(UNIX)
+  target_link_libraries(diorascii_miniaudio PUBLIC ${CMAKE_DL_LIBS} pthread m)
+endif()
+
+add_library(diorascii_audio STATIC audio/audio.cpp)
+target_link_libraries(diorascii_audio PUBLIC diorascii_core PRIVATE diorascii_miniaudio)
+diorascii_warnings(diorascii_audio)
+
 add_executable(diorascii app/main.cpp)
-target_link_libraries(diorascii PRIVATE diorascii_core diorascii_term)
+target_link_libraries(diorascii PRIVATE diorascii_core diorascii_term diorascii_audio)
 diorascii_warnings(diorascii)

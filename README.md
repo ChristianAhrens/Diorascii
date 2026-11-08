@@ -32,6 +32,8 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
     diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
+    diorascii --audio               # ambient sound; a toggles it (see Sound below)
+    diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
@@ -77,6 +79,19 @@ carries over when you switch scenes. The info line (`i`) shows the clock.
 
 In the terminal styles the cycle shows in the stars, the sun and moon and the creatures
 coming and going; the colors themselves stay with your terminal theme.
+
+### Sound
+
+Ambient sound is synthesized at run time (no recordings) and off by default: `--audio`, the `a`
+key or the menu's Sound entry turn it on. Without a sound device the app simply stays silent.
+Every scene has its own soundscape, and the sound follows what happens on screen:
+
+| Scene | What you hear |
+|---|---|
+| Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
+| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale and the growl of the kraken as it nears |
+| Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears |
+| Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble |
 
 ### Rare events
 
@@ -262,12 +277,25 @@ result is in `docs/html`.
 
 ## Releasing
 
+Work happens on `develop`; `main` only receives merges for releases. [CHANGELOG.md](CHANGELOG.md)
+([Keep a Changelog](http://keepachangelog.com/en/1.0.0/) format) is the single source of the
+version and of the release text: new entries go under `## [Unreleased]` as they are made, and CMake
+takes the version from the latest released section (`## [1.2.3] 2026-11-07`). A build that is not
+exactly that release's tagged commit reports `1.2.3-dev+<commit>`. To release:
+
+1. On `develop`, rename `## [Unreleased]` to `## [1.2.3] <date>`, add a fresh empty
+   `## [Unreleased]` above it, and commit. `scripts/release-notes.sh Unreleased` previews the
+   text before, `scripts/release-notes.sh 1.2.3` after.
+2. Merge `develop` into `main` and tag it:
+
+       git tag 1.2.3
+       git push origin main 1.2.3
+
 Pushing a tag in the form `x.y.z` (major.minor.fix, no `v` prefix) builds Diorascii on
 macOS, Linux and Windows, runs the tests and publishes a GitHub release with one
-archive per platform:
-
-    git tag 1.2.3
-    git push origin 1.2.3
+archive per platform. The tag must match the latest released section of the changelog, or
+the workflow stops before building anything; that section, without its empty subsections, is
+the text of the release.
 
 The release is created as a draft and only published once all three platforms built
 and passed their tests. The binaries report the tag as their version. Every push to
@@ -292,9 +320,12 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
 
     src/core   headless simulation, frame buffer, menu (no I/O, deterministic per seed)
     src/term   VT/ANSI encoder and the terminal backends (posix, windows)
+    src/audio  ambient sound playback (the synthesis itself is in src/core/ambience)
     src/app    command line + main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
+    scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
+    CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)
 
 The core only produces a grid of styled cells and consumes abstract actions, so
@@ -332,3 +363,9 @@ asciiquarium is licensed under the GPL. Diorascii deliberately is not derived fr
 and is released under the permissive [MIT license](LICENSE), so it can be used,
 redistributed and shipped (including through app stores) without GPL obligations.
 This is a statement of how the project is made, not legal advice.
+
+Ambient sound is played through [miniaudio](https://miniaud.io) by David Reid, vendored as a
+single header in `third_party/miniaudio` (playback only). It is available under the public
+domain (Unlicense) or MIT No Attribution terms, which are compatible with this project's MIT
+license and with app store distribution; its license text is kept next to it. The sounds
+themselves are synthesized at run time, so no audio recordings are included.

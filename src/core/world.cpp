@@ -733,6 +733,7 @@ void World::wipeOut(const std::string& wipes, const std::string& effect, const E
 void World::flash(double seconds) {
   flashLen_ = seconds;
   flashElapsed_ = 0;
+  ++flashCount_;
 }
 
 bool World::flashing() const {
@@ -866,6 +867,7 @@ double World::deepestCrater() const {
 }
 
 void World::impactAt(double cx) {
+  ++impacts_;
   const int c = static_cast<int>(std::lround(cx));
   const int hw = craterHalfWidth();
   const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
@@ -908,6 +910,19 @@ size_t World::countTag(const std::string& tag) const {
   for (const auto& e : entities_) n += (!e->dead && e->tag == tag);
   return n;
 }
+
+double World::nearness(const std::string& key) const {
+  double best = 0;
+  for (const auto& e : entities_) {
+    if (e->dead || (e->tag != key && e->sprite->name() != key)) continue;
+    const double cx = e->x + e->width() / 2.0;
+    const double reach = w_ / 2.0 + e->width() / 2.0 + w_ * 0.25;  // starts before it is in view
+    best = std::max(best, std::clamp(1.0 - std::fabs(cx - w_ / 2.0) / reach, 0.0, 1.0));
+  }
+  return best;
+}
+
+double World::stormProximity() const { return nearness("gloom"); }
 
 Entity* World::nearest(const std::string& tag, double x, double y, double maxDist) {
   Entity* best = nullptr;

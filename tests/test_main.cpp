@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "core/ambience.h"
 #include "core/assets.h"
 #include "core/menu.h"
 #include "core/world.h"
@@ -1843,12 +1844,295 @@ TEST(vt_ansi16_uses_named_colors_only_and_never_black_text) {
   CHECK(d.find("30") == std::string::npos);   // plain black is never used for text
 }
 
+TEST(vt_console_uses_dark_backgrounds_and_no_shade_glyphs) {
+  Frame a(2, 1), b(2, 1);
+  b.at(0, 0).bg = {0, 0, 110};
+  b.at(1, 0).bg = {200, 220, 255};
+  b.at(1, 0).ch = U'x'; b.at(1, 0).fg = {255, 255, 255};
+  const std::string d = encodeFrame(&a, b, ColorMode::Console);
+  CHECK(d.find("38;") == std::string::npos && d.find("48;") == std::string::npos);
+  CHECK(d.find("\xe2\x96") == std::string::npos);  // no shade glyphs: console fonts lack them
+  CHECK(d.find("10") == std::string::npos);        // bright backgrounds (100-107) are unreliable
+}
+
 TEST(rgb_to_ansi16_maps_to_named_colors) {
   CHECK(rgbToAnsi16({255, 0, 0}) == 9);
   CHECK(rgbToAnsi16({0, 255, 255}) == 14);
   CHECK(rgbToAnsi16({255, 255, 255}) == 15);
   CHECK(rgbToAnsi16({0, 0, 0}) != 0);
   CHECK(rgbToAnsi16({70, 70, 85}) == 8);
+}
+
+// Renders `seconds` of ambience and returns the RMS of the last second, checking every sample.
+static double ambienceRms(const AmbientParams& p, double seconds, uint64_t seed = 1) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, seed);
+  std::vector<float> buf(static_cast<size_t>(kRate * seconds) * 2);
+  a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+  double sum = 0;
+  size_t n = 0;
+  for (size_t i = buf.size() > 2u * kRate ? buf.size() - 2u * kRate : 0; i < buf.size(); ++i) {
+    CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+    sum += double(buf[i]) * buf[i];
+    ++n;
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_is_silent_for_silent_scenes_and_audible_in_the_forest) {
+  AmbientParams p;
+  CHECK(ambienceRms(p, 3) == 0.0);  // unknown scenes are silent
+  p.kind = AmbientKind::Forest;
+  CHECK(ambienceRms(p, 3) > 0.005);
+}
+
+TEST(ambience_rain_makes_the_forest_louder_and_muting_silences_it) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Forest;
+  AmbientParams rainy = calm;
+  rainy.rain = 1;
+  CHECK(ambienceRms(rainy, 6) > ambienceRms(calm, 6) * 1.2);
+  AmbientParams muted = rainy;
+  muted.volume = 0;
+  CHECK(ambienceRms(muted, 3) < 1e-4);
+}
+
+// RMS of seconds [from, to) of a render in which the flash counter rises at second 1.
+static double thunderRms(AmbientKind kind, bool flash, int from, int to) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = kind;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  double sum = 0;
+  size_t n = 0;
+  for (int s = 0; s < to; ++s) {
+    if (s == 1 && flash) p.flashes = 1;  // after a first second at zero
+    a.render(p, buf.data(), kRate);
+    if (s < from) continue;
+    for (float v : buf) { CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f); sum += double(v) * v; ++n; }
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_thunder_rolls_in_after_lightning_in_the_forest_only) {
+  CHECK(thunderRms(AmbientKind::Forest, true, 2, 5) > thunderRms(AmbientKind::Forest, false, 2, 5) * 2);
+  CHECK(thunderRms(AmbientKind::Silent, true, 0, 5) == 0.0);  // no thunder where no scene sounds
+}
+
+TEST(ambience_ignores_a_flash_counter_that_resets_with_a_rebuilt_world) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  p.flashes = 5;  // a world that has had five flashes ...
+  a.render(p, buf.data(), kRate);
+  p.flashes = 0;  // ... is replaced by a fresh one
+  double sum = 0;
+  for (int s = 0; s < 4; ++s) {
+    a.render(p, buf.data(), kRate);
+    for (float v : buf) sum += double(v) * v;
+  }
+  CHECK(std::sqrt(sum / (4.0 * buf.size())) < 0.08);  // no thunder, just the quiet wind
+}
+
+TEST(ambience_a_strike_cracks_sharply_at_once_and_the_rumble_follows_after_it) {
+  constexpr int kRate = 48000;
+  Ambience a(kRate, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+  a.render(p, buf.data(), kRate);  // a second of calm
+  a.render(p, buf.data(), kRate);
+  auto peak = [&](double fromS, double toS) {
+    float pk = 0;
+    for (size_t i = static_cast<size_t>(fromS * kRate) * 2; i < static_cast<size_t>(toS * kRate) * 2; ++i) {
+      pk = std::max(pk, std::fabs(buf[i]));
+    }
+    return pk;
+  };
+  const float calm = peak(0, 0.4);
+  p.flashes = 1;
+  a.render(p, buf.data(), kRate);
+  CHECK(peak(0, 0.15) > 0.5f && peak(0, 0.15) > calm * 5);  // the crack: loud and immediate
+  CHECK(peak(0.22, 0.29) < peak(0, 0.15) * 0.5f);            // it dies away before the second pop
+}
+
+TEST(ambience_rumbles_as_a_storm_approaches_before_any_lightning) {
+  constexpr int kRate = 8000;
+  auto rms = [&](float storm, AmbientKind kind) {
+    Ambience a(kRate, 9);
+    AmbientParams p;
+    p.kind = kind;
+    p.storm = storm;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    double sum = 0;
+    size_t n = 0;
+    for (int s = 0; s < 12; ++s) {
+      a.render(p, buf.data(), kRate);
+      if (s < 4) continue;
+      for (float v : buf) { CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f); sum += double(v) * v; ++n; }
+    }
+    return std::sqrt(sum / double(n));
+  };
+  CHECK(rms(1.0f, AmbientKind::Forest) > rms(0.0f, AmbientKind::Forest) * 1.5);
+  CHECK(rms(0.5f, AmbientKind::Forest) > rms(0.0f, AmbientKind::Forest));
+  CHECK(rms(1.0f, AmbientKind::Silent) == 0.0);
+}
+
+TEST(world_storm_proximity_follows_the_thundercloud_across_the_scene) {
+  AssetPack pack = AssetPack::embedded();
+  World w(pack, pack.scene("forest"), 100, 30, 3);
+  CHECK(w.stormProximity() == 0.0);  // no cloud yet
+  CHECK(w.triggerRare());
+  double lo = 1, hi = 0;
+  for (int i = 0; i < 4000; ++i) {
+    w.step(1.0 / 20);
+    const double s = w.stormProximity();
+    CHECK(s >= 0 && s <= 1);
+    lo = std::min(lo, s);
+    hi = std::max(hi, s);
+  }
+  CHECK(lo < 0.05 && hi > 0.6);  // it comes in, passes overhead and leaves
+  World moon(pack, pack.scene("moon"), 100, 30, 3);
+  CHECK(moon.stormProximity() == 0.0);
+}
+
+// RMS of the seconds [from, to) of an aquarium render; `at` seconds in, the nibble counter rises by 3.
+static double aquariumRms(AmbientParams p, int from, int to, int at = -1, double window = 1.0, int rate = 48000) {
+  Ambience a(rate, 4);
+  std::vector<float> buf(static_cast<size_t>(rate) * 2);
+  double sum = 0;
+  size_t n = 0;
+  for (int s = 0; s < to; ++s) {
+    if (s == at) p.nibbles += 3;
+    a.render(p, buf.data(), rate);
+    if (s < from) continue;
+    const size_t count = static_cast<size_t>(window * rate) * 2;
+    for (size_t i = 0; i < count && i < buf.size(); ++i) {
+      CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+      sum += double(buf[i]) * buf[i];
+      ++n;
+    }
+  }
+  return std::sqrt(sum / double(n));
+}
+
+TEST(ambience_the_aquarium_hums_and_a_whale_or_kraken_nearby_adds_to_it) {
+  AmbientParams p;
+  p.kind = AmbientKind::Aquarium;
+  const double calm = aquariumRms(p, 2, 12);
+  CHECK(calm > 0.01 && calm < 0.08);  // a quiet hum
+  AmbientParams whale = p;
+  whale.whale = 1;
+  CHECK(aquariumRms(whale, 2, 12) > calm * 1.1);
+  AmbientParams kraken = p;
+  kraken.storm = 1;
+  CHECK(aquariumRms(kraken, 4, 8) > calm * 2);
+}
+
+TEST(ambience_fish_nibbling_at_food_make_blips_only_in_the_aquarium) {
+  constexpr int kRate = 48000;
+  auto peakAfter = [&](AmbientKind kind, bool nibble) {
+    Ambience a(kRate, 4);
+    AmbientParams p;
+    p.kind = kind;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    for (int s = 0; s < 3; ++s) a.render(p, buf.data(), kRate);  // the first second synchronises the counter
+    if (nibble) p.nibbles += 3;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = 0; i < static_cast<size_t>(kRate * 0.4) * 2; ++i) pk = std::max(pk, std::fabs(buf[i]));
+    return pk;
+  };
+  CHECK(peakAfter(AmbientKind::Aquarium, true) > peakAfter(AmbientKind::Aquarium, false) * 1.3f);
+  CHECK(peakAfter(AmbientKind::Silent, true) == 0.0f);
+}
+
+TEST(ambience_follows_the_aquarium_world) {
+  AssetPack pack = AssetPack::embedded();
+  World aq(pack, pack.scene("aquarium"), 100, 30, 2);
+  CHECK(ambientFor(aq).kind == AmbientKind::Aquarium);
+  CHECK(ambientFor(aq).whale >= 0.0f && ambientFor(aq).whale <= 1.0f);
+}
+
+TEST(ambience_the_desert_wind_grows_into_a_sandstorm_and_a_tornado_roars) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Desert;
+  const double base = ambienceRms(calm, 8);
+  CHECK(base > 0.003 && base < 0.02);  // barely audible
+  AmbientParams storm = calm;
+  storm.rain = 1;  // a sandstorm
+  CHECK(ambienceRms(storm, 8) > base * 2.5);
+  AmbientParams tornado = calm;
+  tornado.tornado = 1;
+  CHECK(ambienceRms(tornado, 8) > base * 3);
+  AmbientParams worm = calm;
+  worm.storm = 1;  // the sandworm
+  CHECK(ambienceRms(worm, 8) > base * 1.5);
+}
+
+TEST(ambience_follows_the_desert_world) {
+  AssetPack pack = AssetPack::embedded();
+  World desert(pack, pack.scene("desert"), 100, 30, 2);
+  CHECK(ambientFor(desert).kind == AmbientKind::Desert);
+  CHECK(ambientFor(desert).tornado == 0.0f);
+  desert.startRain(10);  // a sandstorm
+  CHECK(ambientFor(desert).rain == 1.0f);
+}
+
+TEST(ambience_the_moon_is_a_faint_drone_with_thuds_and_a_warble) {
+  constexpr int kRate = 48000;
+  auto peakIn = [&](unsigned impacts, unsigned flashes, double from, double to) {
+    Ambience a(kRate, 6);
+    AmbientParams p;
+    p.kind = AmbientKind::Moon;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    a.render(p, buf.data(), kRate);
+    a.render(p, buf.data(), kRate);
+    p.impacts = impacts;
+    p.flashes = flashes;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = static_cast<size_t>(from * kRate) * 2; i < static_cast<size_t>(to * kRate) * 2; ++i) {
+      CHECK(std::isfinite(buf[i]) && std::fabs(buf[i]) <= 1.0f);
+      pk = std::max(pk, std::fabs(buf[i]));
+    }
+    return pk;
+  };
+  const float calm = peakIn(0, 0, 0, 0.6);
+  CHECK(calm > 0.005f && calm < 0.1f);                    // faint, but there
+  CHECK(peakIn(1, 0, 0, 0.6) > calm * 5);                 // a meteorite thuds through the ground
+  CHECK(peakIn(0, 1, 0, 0.9) > calm * 3);                 // the alien warbles
+}
+
+TEST(ambience_follows_the_moon_world_strikes) {
+  AssetPack pack = AssetPack::embedded();
+  World moon(pack, pack.scene("moon"), 100, 30, 2);
+  CHECK(moon.impactCount() == 0);
+  const unsigned before = ambientFor(moon).impacts;
+  moon.impactAt(50);
+  CHECK(ambientFor(moon).impacts == before + 1);
+}
+
+TEST(ambience_is_deterministic_per_seed) {
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  p.night = 1;
+  CHECK(ambienceRms(p, 2, 7) == ambienceRms(p, 2, 7));
+  CHECK(ambienceRms(p, 2, 7) != ambienceRms(p, 2, 8));
+}
+
+TEST(ambience_follows_the_world_scene_and_weather) {
+  AssetPack pack = AssetPack::embedded();
+  World forest(pack, pack.scene("forest"), 80, 24, 1);
+  World moon(pack, pack.scene("moon"), 80, 24, 1);
+  CHECK(ambientFor(forest).kind == AmbientKind::Forest);
+  CHECK(ambientFor(moon).kind == AmbientKind::Moon);
+  CHECK(ambientFor(forest).rain == 0.0f);
+  forest.startRain(10);
+  CHECK(ambientFor(forest).rain == 1.0f);
 }
 
 int main() {

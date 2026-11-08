@@ -185,6 +185,8 @@ class World {
   size_t foodEatenCount() const { return foodEaten_; }  // food flakes eaten by fish
   /// Ground objects wrecked by impacts so far.
   size_t destroyedCount() const { return destroyed_; } // ground objects wrecked by impacts
+  /// Meteorite strikes so far (impactAt() calls); sound follows each one.
+  unsigned impactCount() const { return impacts_; }
   /// First row of the river (equals height() when the scene has no river).
   int riverTop() const { return riverTopY_; }
   /// Number of river rows at the bottom of the ground (0 = no river).
@@ -210,6 +212,8 @@ class World {
   size_t restockPending() const { return restock_.size(); }
   /// Starts a screen flash of the given length (lightning).
   void flash(double seconds);
+  /// How many flashes have been started so far; sound follows each one as thunder.
+  unsigned flashCount() const { return flashCount_; }
   /// True while the screen is lit up by a flash (two quick flashes, then dark again).
   bool flashing() const;
   /// Makes it rain for this many seconds, if the scene's action is a weather action.
@@ -230,6 +234,11 @@ class World {
   Light light() const;
   /// Time of day as hours and minutes, for example 14:30.
   std::string clockText() const;
+  /// How close a "gloom" creature (a thundercloud) is to the middle of the scene, from 0 (far away
+  /// or absent) to 1 (overhead). It starts to count a little before the creature comes into view.
+  double stormProximity() const;
+  /// Like stormProximity() for any creature whose tag or sprite name is `key` (a whale, a tornado).
+  double nearness(const std::string& key) const;
   /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
   double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.
@@ -325,6 +334,8 @@ class World {
   std::vector<Restock> restock_;
   /// Length of the current screen flash and the time since it began.
   double flashLen_ = 0, flashElapsed_ = 0;
+  /// Flashes started so far.
+  unsigned flashCount_ = 0;
   /// How many entities catastrophes have wiped out.
   size_t killed_ = 0;
   /// Seconds of rain or sandstorm left; 0 when it is calm.
@@ -349,6 +360,8 @@ class World {
   double eventTimer_ = 0;
   /// Counters behind eatenCount, foodEatenCount and destroyedCount.
   size_t eaten_ = 0, foodEaten_ = 0, destroyed_ = 0;
+  /// Meteorite strikes so far.
+  unsigned impacts_ = 0;
   std::vector<double> crater_;  ///< per column, in rows; shrinks as dust settles
   /// Entities in the world.
   std::vector<std::unique_ptr<Entity>> entities_;

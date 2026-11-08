@@ -18,6 +18,20 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CHANGELOG.md is the source of the version and of the release text: the tag must be the
+      # latest released section, and that section becomes the notes of the release.
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          latest="$(scripts/release-notes.sh --latest)"
+          if [ "$latest" != "${{ github.ref_name }}" ]; then
+            echo "::error::Tag ${{ github.ref_name }} does not match the latest released section of CHANGELOG.md ($latest). Move the Unreleased entries into a [${{ github.ref_name }}] section first."
+            exit 1
+          fi
+          scripts/release-notes.sh "${{ github.ref_name }}" > release-notes.md
+
       - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -26,7 +40,7 @@ jobs:
           gh release create "${{ github.ref_name }}"
           --repo "${{ github.repository }}"
           --title "${{ github.ref_name }}"
-          --generate-notes
+          --notes-file release-notes.md
           --draft
 
   build-and-upload:

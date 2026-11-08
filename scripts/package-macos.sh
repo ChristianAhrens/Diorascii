@@ -32,7 +32,9 @@ version="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo dev)}"
 out="${2:-dist}"
 profile="${DIORASCII_NOTARY_PROFILE:-APP_NOTARIZATION_CREDENTIALS_PROFILE}"
 name="Diorascii-$version-macOS"
-build="build/release-macos"
+# Its own build directory: the version passed below stays in the CMake cache, which would make
+# later scripts/build.sh builds in a shared directory report the release version.
+build="build/package-macos"
 work="$out/.work-$name"
 dmgroot="$work/dmg"
 
@@ -52,7 +54,8 @@ else
 fi
 
 echo "== build $version"
-cmake --preset release-macos "-DDIORASCII_VERSION=$version"
+cmake -S . -B "$build" -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 "-DDIORASCII_VERSION=$version"
 cmake --build "$build" --config Release --parallel
 ctest --test-dir "$build" -C Release --output-on-failure
 

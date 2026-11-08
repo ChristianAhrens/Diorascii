@@ -15,6 +15,22 @@ the GitHub release (see "Releasing" in the README).
 
 ### Fixed
 
+## [1.2.0] 2026-11-08
+### Added
+- Added a first tvOS app: the five scenes on the Apple TV, steered with the Siri Remote (swipe left and right to switch scene, up for the time of day, down for the sound, click for the scene's action, hold the click for the menu, Play/Pause to pause), with the sound synthesized through AVAudioEngine, a hint about the menu on the first launches and a menu without a Quit entry. A keyboard works as well. It is generated entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`, see the README) and is not part of the release archives
+- Added `scripts/package-tvos.sh`, which builds, signs, validates and uploads the tvOS app to App Store Connect
+- Added the draft app icon art and Top Shelf images for tvOS in `Resources/Icon`, and `tvOS/make_rasters.sh` to render them
+- Added `--mute` to start the terminal program without sound
+- Added PRIVACY.md: Diorascii collects no data, in the terminal program, in the tvOS app and on the project page
+
+### Changed
+- Changed the ambient sound to be on by default, in the terminal program as on tvOS; `--mute` starts without it, and the `a` key and the menu still switch it. A machine without a sound device stays silent without a message unless `--audio` is given
+- Changed the interactive logic (scene, menu, style, time of day, pause, sound request) to live in a shared `Session` class, which the terminal program and the tvOS app both drive
+- Changed the build to skip the terminal program and the tests on tvOS and iOS (`DIORASCII_TERMINAL`)
+
+### Fixed
+- Fixed `scripts/package-macos.sh` leaving the release version in the build directory shared with `scripts/build.sh`, so that later local builds reported it; it now builds in `build/package-macos`
+
 ## [1.1.1] 2026-11-08
 ### Added
 - Added the Mountains scene, which uses the whole height of the terminal: a meadow with a stream, a forest belt, bare rock and snow on the peaks, and the sky above. The ground is a mountain range with a different set of peaks every run; the tree line and snow line wobble, the far flanks lie in shadow, and the sun and moon set behind the ridges

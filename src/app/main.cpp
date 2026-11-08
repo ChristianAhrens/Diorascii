@@ -1,5 +1,5 @@
 /// @file app/main.cpp
-/// @brief Command line, main loop and wiring of core and terminal.
+/// @brief Command line and the terminal main loop around a Session.
 
 #include <algorithm>
 #include <chrono>
@@ -11,9 +11,9 @@
 #include <memory>
 #include <string>
 
+#include "app/session.h"
 #include "audio/audio.h"
 #include "core/assets.h"
-#include "core/menu.h"
 #include "core/utf8.h"
 #include "core/world.h"
 #include "term/terminal.h"
@@ -47,8 +47,10 @@ struct Options {
   double fps = 20;
   /// Force 24-bit, 256-color or Linux console output (--truecolor, --256, --console).
   bool forceTrueColor = false, force256 = false, forceConsole = false;
-  /// Start with ambient sound on (--audio).
+  /// True if --audio was given: a missing sound device is then reported on screen.
   bool audio = false;
+  /// Start without ambient sound (--mute).
+  bool mute = false;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
@@ -68,7 +70,8 @@ void usage() {
       "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
-      "  --audio          play ambient sound (a toggles it)\n"
+      "  --audio          ambient sound is on by default; with --audio a missing device is reported\n"
+      "  --mute           start without ambient sound (a toggles it)\n"
       "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
@@ -108,6 +111,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--256") o.force256 = true;
     else if (a == "--console") o.forceConsole = true;
     else if (a == "--audio") o.audio = true;
+    else if (a == "--mute") o.mute = true;
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -115,34 +119,6 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else return false;
   }
   return true;
-}
-
-/// Draws the info line (version, scene, size, entity count, seed, fps) in row 0.
-void drawInfo(Frame& f, const World& w, bool paused, double fps, Style style) {
-  char line[160];
-  const std::string clock = w.hasDayNight() ? " | " + w.clockText() : "";
-  std::snprintf(line, sizeof(line), " diorascii %s | %s | %dx%d | %zu entities | seed %llu | %.0f fps%s%s ",
-                DIORASCII_VERSION, w.scene().name.c_str(), w.width(), w.height(), w.entityCount(),
-                static_cast<unsigned long long>(w.seed()), fps, clock.c_str(), paused ? " | PAUSED" : "");
-  drawLabel(f, 0, 0, line, style);
-}
-
-/// Draws a short centered message, for example the scene title after a switch.
-void drawToast(Frame& f, const std::string& text, Style style) {
-  const std::string padded = "  " + text + "  ";
-  const int len = static_cast<int>(decodeUtf8(padded).size());
-  drawLabel(f, std::max((f.width() - len) / 2, 0), std::max(f.height() / 2 - 1, 0), padded, style);
-}
-
-/// Menu text for a render style.
-const char* styleName(Style s) {
-  return s == Style::Full ? "Full color" : s == Style::Terminal ? "Terminal colors" : "Monochrome";
-}
-
-/// Options of the menu's time-of-day choice. Scenes without a cycle only have one.
-std::vector<std::string> timeOptions(bool hasCycle) {
-  if (!hasCycle) return {"No cycle"};
-  return {"Cycle", "Dawn", "Day", "Dusk", "Night"};
 }
 
 /// Prints every sprite (first two frames) for art review.
@@ -229,134 +205,41 @@ int main(int argc, char** argv) {
 
   int w = 80, h = 24;
   term.size(w, h);
-  uint64_t seed = opt.seed;
-  Style style = opt.style;
-  // The time of day survives scene switches, restarts and resizes.
-  World::TimeMode timeMode = World::TimeMode::Cycle;
-  double carriedPhase = opt.hour >= 0 ? opt.hour / 24.0 : -1;
-  auto makeWorld = [&]() {
-    auto created = std::make_unique<World>(pack, scenes[sceneIdx], w, h, seed);
-    if (carriedPhase >= 0 && created->hasDayNight()) created->setPhase(carriedPhase);
-    created->setTimeMode(timeMode);
-    return created;
-  };
-  auto world = makeWorld();
-  Frame cur, prev;
-  bool havePrev = false, paused = false, info = false;
-  std::string toast = scenes[sceneIdx]->title;
-  double toastLeft = 2.0;
-
-  Menu menu("DIORASCII");
-  {
-    std::vector<std::string> titles;
-    for (const auto& sc : scenes) titles.push_back(sc->title);
-    menu.addChoice("scene", "Scene", titles, sceneIdx);
-    menu.addChoice("style", "Style",
-                   {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
-                   static_cast<size_t>(style));
-    menu.addChoice("time", "Time of day", timeOptions(scenes[sceneIdx]->dayNight), 0);
-    menu.addChoice("info", "Info line", {"off", "on"}, 0);
-    menu.addChoice("audio", "Sound", {"off", "on"}, 0);
-    menu.addButton("action", scenes[sceneIdx]->action.label);
-    menu.addButton("rare", "Rare event");
-    menu.addButton("resume", "Resume");
-    menu.addButton("quit", "Quit");
-  }
+  Session::Config config;
+  config.seed = opt.seed;
+  config.scene = sceneIdx;
+  config.style = opt.style;
+  config.hour = opt.hour;
+  config.sound = !opt.mute;
+  Session session(pack, scenes, config, w, h);
 
   using clock = std::chrono::steady_clock;
   auto next = clock::now();
   double measuredFps = opt.fps;
   auto lastFrame = clock::now();
+  Frame cur, prev;
+  bool havePrev = false;
 
-  auto switchScene = [&](size_t idx) {
-    sceneIdx = idx % scenes.size();
-    toast = scenes[sceneIdx]->title;
-    toastLeft = 2.0;
-    menu.setValue("scene", sceneIdx);
-    menu.setLabel("action", scenes[sceneIdx]->action.label);
-    menu.setOptions("time", timeOptions(scenes[sceneIdx]->dayNight), static_cast<size_t>(timeMode));
-  };
-
-  // Ambient sound is off until asked for; a machine without a sound device just stays silent.
+  // Ambient sound is on unless muted; a machine without a sound device just stays silent. The
+  // missing device is only announced when the user asked for sound (--audio or the a key).
   AudioOutput audio;
-  bool soundOn = false;
-  auto setSound = [&](bool on) {
-    if (on && !audio.start()) {
-      on = false;
-      toast = "No audio device";
-      toastLeft = 1.5;
+  bool startup = true;
+  auto syncSound = [&]() {
+    if (session.soundWanted() && !audio.running() && !audio.start()) {
+      session.soundUnavailable(!startup || opt.audio);
     }
-    if (!on) audio.stop();
-    soundOn = on;
-    menu.setValue("audio", on ? 1 : 0);
+    if (!session.soundWanted() && audio.running()) audio.stop();
+    startup = false;
   };
-  if (opt.audio) setSound(true);
+  syncSound();
 
-  // Runs the scene's action and confirms it on screen, so it is clear that something happened.
-  auto runAction = [&]() {
-    if (world->interact() > 0) {
-      toast = scenes[sceneIdx]->action.label;
-      toastLeft = 1.2;
-    }
-  };
-
-  while (!term.quitRequested()) {
-    bool quit = false, rebuild = false;
-    for (Action a : term.poll(5)) {
-      if (menu.handle(a)) continue;  // the open menu consumes navigation
-      switch (a) {
-        case Action::Quit: quit = true; break;
-        case Action::Pause: paused = !paused; break;
-        case Action::Info: info = !info; menu.setValue("info", info); break;
-        case Action::Interact: runAction(); break;
-        case Action::Rare: world->triggerRare(); break;
-        case Action::Audio: setSound(!soundOn); break;
-        case Action::Redraw: rebuild = true; ++seed; break;
-        case Action::Style:
-          style = static_cast<Style>((static_cast<int>(style) + 1) % 3);
-          menu.setValue("style", static_cast<size_t>(style));
-          havePrev = false;
-          break;
-        case Action::Time:
-          if (scenes[sceneIdx]->dayNight) {
-            timeMode = static_cast<World::TimeMode>((static_cast<int>(timeMode) + 1) % 5);
-            world->setTimeMode(timeMode);
-            menu.setValue("time", static_cast<size_t>(timeMode));
-            toast = timeOptions(true)[static_cast<size_t>(timeMode)];
-            toastLeft = 1.5;
-          }
-          break;
-        case Action::Left: switchScene(sceneIdx + scenes.size() - 1); rebuild = true; break;
-        case Action::Right: switchScene(sceneIdx + 1); rebuild = true; break;
-        case Action::Menu:
-        case Action::Select:
-        case Action::Back: menu.open(); break;
-        default: break;
-      }
-    }
-    for (const auto& ev : menu.takeEvents()) {
-      if (ev.id == "scene") { switchScene(ev.value); rebuild = true; }
-      else if (ev.id == "style") { style = static_cast<Style>(ev.value); havePrev = false; }
-      else if (ev.id == "time") {
-        timeMode = static_cast<World::TimeMode>(ev.value);
-        world->setTimeMode(timeMode);
-      }
-      else if (ev.id == "info") info = ev.value == 1;
-      else if (ev.id == "audio") setSound(ev.value == 1);
-      else if (ev.id == "action") runAction();
-      else if (ev.id == "rare") world->triggerRare();
-      else if (ev.id == "resume") menu.close();
-      else if (ev.id == "quit") quit = true;
-    }
-    if (quit) break;
+  while (!term.quitRequested() && !session.quitRequested()) {
+    for (Action a : term.poll(5)) session.handle(a);
+    syncSound();
+    if (session.quitRequested()) break;
     if (term.takeResized()) {
       term.size(w, h);
-      rebuild = true;
-    }
-    if (rebuild) {
-      if (world->hasDayNight()) carriedPhase = world->phase();
-      world = makeWorld();
-      havePrev = false;
+      session.resize(w, h);
     }
 
     const auto now = clock::now();
@@ -368,20 +251,13 @@ int main(int argc, char** argv) {
     lastFrame = now;
     if (elapsed > 0) measuredFps = measuredFps * 0.9 + (1.0 / elapsed) * 0.1;
 
-    if (!paused) world->step(dt);
-    if (soundOn) {
-      AmbientParams ap = ambientFor(*world);
-      if (paused) ap.volume = 0;
-      audio.setParams(ap);
-    }
-    world->render(cur, style);
-    if (info) drawInfo(cur, *world, paused, measuredFps, style);
-    if (toastLeft > 0 && !menu.isOpen()) {
-      drawToast(cur, toast, style);
-      toastLeft -= dt;
-    }
-    menu.render(cur, style);
+    session.setMeasuredFps(measuredFps);
+    session.step(dt);
+    if (audio.running()) audio.setParams(session.ambient());
+    session.render(cur);
+    if (session.takeRepaint()) havePrev = false;
     // The terminal style uses the user's 16 ANSI colors so it follows their theme.
+    const Style style = session.style();
     const ColorMode mode = style == Style::Terminal ? ColorMode::Ansi16 : term.colorMode();
     term.write(encodeFrame(havePrev ? &prev : nullptr, cur, mode));
     prev = cur;

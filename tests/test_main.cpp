@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "app/session.h"
 #include "core/ambience.h"
 #include "core/assets.h"
 #include "core/menu.h"
@@ -887,7 +888,8 @@ TEST(sleeping_animals_stay_put_are_not_hunted_and_scenes_without_a_cycle_ignore_
   world.setTimeMode(World::TimeMode::Day);
   sleeper->x = 40;
   for (int i = 0; i < 10; ++i) world.step(0.05);
-  CHECK(sleeper->x > 40 || world.eatenCount() > 0);  // awake: it walks (or is caught)
+  // awake: it walks, or is caught - a caught sleeper is freed, so test that case first
+  CHECK(world.eatenCount() > 0 || sleeper->x > 40);
 
   AssetPack flat = miniPack("medium: no\nsky-fraction: 1\n--- population\nsleeper count 10\n",
                             {"name: sleeper\nhabitat: sky\nspeed: 0..0\nsleeps: 1\n--- art\nZ\n"});
@@ -2544,6 +2546,164 @@ TEST(the_mountains_sound_like_wind_a_stream_an_eagle_and_roar_in_a_storm_and_an_
     loudest = std::max(loudest, ambientFor(world).avalanche);
   }
   CHECK(loudest > 0.9f);
+}
+
+/// A session over the built-in scenes, 100 by 30 cells.
+static Session makeSession(const AssetPack& pack, const Session::Config& config = {}) {
+  return Session(pack, pack.scenes(), config, 100, 30);
+}
+
+TEST(session_starts_in_its_scene_with_the_title_as_a_toast_and_switches_scenes_with_wrapping) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  Session::Config config;
+  config.scene = 1;
+  Session s = makeSession(pack, config);
+  CHECK(s.sceneIndex() == 1);
+  CHECK(s.world().scene().name == scenes[1]->name);
+  Frame f;
+  s.render(f);
+  CHECK(f.toText().find(scenes[1]->title) != std::string::npos);
+  s.handle(Action::Right);
+  s.step(0.05);  // the new world is built on the next step
+  CHECK(s.sceneIndex() == 2);
+  CHECK(s.world().scene().name == scenes[2]->name);
+  for (size_t i = 0; i < scenes.size(); ++i) s.handle(Action::Right);
+  s.step(0.05);
+  CHECK(s.sceneIndex() == 2);  // a full round wraps
+  s.handle(Action::Left);
+  s.handle(Action::Left);
+  s.handle(Action::Left);
+  s.step(0.05);
+  CHECK(s.sceneIndex() == (2 + scenes.size() - 3) % scenes.size());
+}
+
+TEST(session_pause_freezes_the_world_and_mutes_the_sound_and_style_changes_ask_for_a_repaint) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  CHECK(s.takeRepaint());   // the first frame is a full repaint
+  CHECK(!s.takeRepaint());  // and reading it clears the flag
+  s.step(0.05);
+  const double t = s.world().time();
+  CHECK(t > 0);
+  CHECK(s.ambient().volume == 1.0f);
+  s.handle(Action::Pause);
+  CHECK(s.paused());
+  s.step(0.05);
+  CHECK(s.world().time() == t);
+  CHECK(s.ambient().volume == 0.0f);
+  s.handle(Action::Pause);
+  s.step(0.05);
+  CHECK(s.world().time() > t);
+
+  const Style before = s.style();
+  s.handle(Action::Style);
+  CHECK(s.style() != before);
+  CHECK(s.takeRepaint());
+  s.handle(Action::Style);
+  s.handle(Action::Style);
+  CHECK(s.style() == before);  // three styles, then back
+}
+
+TEST(session_sound_is_a_request_the_frontend_can_refuse) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  CHECK(!s.soundWanted());
+  s.handle(Action::Audio);
+  CHECK(s.soundWanted());
+  s.soundUnavailable();  // the frontend found no device
+  CHECK(!s.soundWanted());
+  Frame f;
+  s.render(f);
+  CHECK(f.toText().find("No audio device") != std::string::npos);
+  s.handle(Action::Audio);
+  s.handle(Action::Audio);
+  CHECK(!s.soundWanted());
+
+  Session::Config config;
+  config.sound = true;
+  Session on = makeSession(pack, config);
+  CHECK(on.soundWanted());
+  on.soundUnavailable(false);  // a quiet failure, as at startup without a sound device
+  CHECK(!on.soundWanted());
+  Frame g;
+  on.render(g);
+  CHECK(g.toText().find("No audio device") == std::string::npos);
+}
+
+TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_changes_and_resizes) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  size_t withClock = 0, withoutClock = 0;
+  for (size_t i = 0; i < scenes.size(); ++i) (scenes[i]->dayNight ? withClock : withoutClock) = i;
+  Session::Config config;
+  config.scene = withClock;
+  config.hour = 22;
+  Session s = makeSession(pack, config);
+  CHECK(std::fabs(s.world().phase() - 22.0 / 24.0) < 1e-6);
+  s.handle(Action::Time);  // cycle -> dawn: the clock is frozen at dawn
+  s.step(0.05);
+  CHECK(s.world().timeMode() == World::TimeMode::Dawn);
+  s.resize(120, 40);
+  s.step(0.05);
+  CHECK(s.world().width() == 120 && s.world().height() == 40);
+  CHECK(s.world().timeMode() == World::TimeMode::Dawn);  // kept across the rebuild
+
+  Session m = makeSession(pack, [&] { Session::Config c; c.scene = withoutClock; return c; }());
+  m.handle(Action::Time);
+  CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle on the moon
+}
+
+TEST(session_menu_consumes_navigation_while_open_and_quit_comes_from_keys_or_menu) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  const size_t scene = s.sceneIndex();
+  s.handle(Action::Menu);
+  CHECK(s.menu().isOpen());
+  s.handle(Action::Right);  // changes the menu's first value, the scene, through the menu
+  s.step(0.05);
+  CHECK(s.sceneIndex() != scene);
+  s.handle(Action::Back);  // closes the menu
+  CHECK(!s.menu().isOpen());
+  s.handle(Action::Info);
+  Frame f;
+  s.render(f);
+  CHECK(f.toText().find("entities") != std::string::npos);  // the info line is on
+  CHECK(!s.quitRequested());
+  s.handle(Action::Quit);
+  CHECK(s.quitRequested());
+}
+
+TEST(session_menu_offers_quit_unless_the_frontend_turns_it_off) {
+  AssetPack pack = AssetPack::embedded();
+  auto menuText = [&](bool quitEntry) {
+    Session::Config config;
+    config.quitEntry = quitEntry;
+    Session s = makeSession(pack, config);
+    s.handle(Action::Menu);
+    Frame f;
+    s.render(f);
+    return f.toText();
+  };
+  CHECK(menuText(true).find("Quit") != std::string::npos);
+  CHECK(menuText(false).find("Quit") == std::string::npos);
+  CHECK(menuText(false).find("Resume") != std::string::npos);
+}
+
+TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  config.seed = 5;
+  Session s = makeSession(pack, config);
+  CHECK(s.world().seed() == 5);
+  s.handle(Action::Redraw);
+  s.step(0.05);
+  CHECK(s.world().seed() == 6);
+  size_t before = s.world().entityCount();
+  s.handle(Action::Interact);
+  CHECK(s.world().entityCount() >= before);  // the scene's action ran without a crash
+  s.handle(Action::Rare);
+  s.step(0.05);
 }
 
 int main() {

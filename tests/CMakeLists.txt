@@ -1,5 +1,5 @@
 add_executable(diorascii_tests test_main.cpp)
-target_link_libraries(diorascii_tests PRIVATE diorascii_core diorascii_term)
+target_link_libraries(diorascii_tests PRIVATE diorascii_app diorascii_core diorascii_term)
 diorascii_warnings(diorascii_tests)
 add_test(NAME diorascii_tests COMMAND diorascii_tests)
 

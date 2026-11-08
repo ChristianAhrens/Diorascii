@@ -64,7 +64,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
     diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
-    diorascii --audio               # ambient sound; a toggles it (see Sound below)
+    diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
@@ -143,8 +143,8 @@ coming and going; the colors themselves stay with your terminal theme.
 
 ### Sound
 
-Ambient sound is synthesized at run time (no recordings) and off by default: `--audio`, the `a`
-key or the menu's Sound entry turn it on. Without a sound device the app simply stays silent.
+Ambient sound is synthesized at run time (no recordings) and on by default: `--mute` starts without it, and the `a`
+key or the menu's Sound entry switch it. Without a sound device the app simply stays silent.
 Every scene has its own soundscape, and the sound follows what happens on screen:
 
 | Scene | What you hear |
@@ -194,6 +194,19 @@ Switch with `--style`, the `c` key or the menu.
 Needs only CMake 3.21 or newer and a C++20 compiler. `scripts/build.sh dev` makes a
 debug build and runs the tests. Assets are embedded into the binary at build time.
 `-DDIORASCII_VERSION=x.y.z` sets the version the binary reports.
+tvOS (macOS with Xcode only): the Apple TV app is generated and built by CMake, there is no
+hand-made Xcode project.
+
+    cmake -S . -B build/tvos -G Xcode -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_SYSROOT=appletvsimulator
+    cmake --build build/tvos --target Diorascii -- CODE_SIGNING_ALLOWED=NO
+    xcrun simctl install booted build/tvos/apple/tvOS/Debug-appletvsimulator/Diorascii.app
+
+The generated project serves both the simulator and devices (pick the destination in Xcode);
+configure with `-DCMAKE_OSX_SYSROOT=appletvos -DDIORASCII_APPLE_TEAM=<team id>` to sign for a device. Siri Remote: swipe left/right
+changes the scene, swipe up the time of day, swipe down the sound, click runs the scene's action,
+Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it), Menu closes
+the menu or leaves the app.
+
 With GCC the C++ runtime is linked statically for a single-file binary when the static library
 is installed (Fedora: `dnf install libstdc++-static`); without it the build falls back to the shared one.
 
@@ -381,6 +394,23 @@ The release is created as a draft and only published once all three platforms bu
 and passed their tests. The binaries report the tag as their version. Every push to
 `main` also redeploys the project page and the API documentation to GitHub Pages.
 
+The tvOS app goes to App Store Connect (TestFlight) with one script, which generates the project
+with CMake, archives it, signs it with automatic signing, exports the `.ipa`, validates it and
+uploads it:
+
+    scripts/package-tvos.sh you@example.com [TEAMID]    # DIORASCII_SKIP_UPLOAD=1 to stop after validating
+
+If the App Store distribution profile (`DIORASCII_PROFILE`, default "Diorascii tvOS distribution profile",
+downloaded from the developer portal and installed by double-clicking it once) is installed, the app is
+signed manually with it and its Apple Distribution certificate, which needs no registered Apple TV;
+without it automatic signing is used, which does.
+
+It uses the same keychain item for the app-specific password as the other Apple projects
+(`AppSpecificPW`, stored with `xcrun altool --store-password-in-keychain-item`), takes the team from the
+argument, `DIORASCII_APPLE_TEAM` or your signing certificate, and numbers the build by the commit count
+(`DIORASCII_BUILD_NUMBER`), which App Store Connect needs to grow with every upload. The app record
+`com.ChristianAhrens.Diorascii` for tvOS must exist in App Store Connect first.
+
 The macOS asset is a disk image with the binary, a `usr-local-bin` link to drop it onto
 (`/usr/bin` itself is protected by macOS) and an installer script for `~/.local/bin`. The
 copy CI builds is only ad-hoc signed. To build the same image with your own Developer ID
@@ -401,27 +431,29 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
     src/core   headless simulation, frame buffer, menu (no I/O, deterministic per seed)
     src/term   VT/ANSI encoder and the terminal backends (posix, windows)
     src/audio  ambient sound playback (the synthesis itself is in src/core/ambience)
-    src/app    command line + main loop
+    src/app    interactive session logic (shared by frontends), command line + terminal main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
     scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
     CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)
+    docs/ai/   notes for AI collaborators: history, architecture, conventions, rules, open findings (see CLAUDE.md)
 
 The core only produces a grid of styled cells and consumes abstract actions, so
-other frontends (SDL window, tvOS) can be added without touching it.
+other frontends (such as a tvOS app) can be added without touching it.
 
 ## Status
 
-Four scenes (aquarium, forest, desert, moon) with original sprites; feeding, predation, rain,
-sandstorms and tornadoes, meteor strikes with craters, herds, a hunting lion, a day and night
-cycle with sleeping animals, scheduled events, rare catastrophes (kraken, thunderstorm, sandworm,
-alien), three render styles and an ASCII menu work.
-Planned: a mountain scene with its own action, and windowed and tvOS frontends.
+Five scenes (aquarium, forest, desert, mountains, moon) with original sprites; feeding, predation,
+rain, sandstorms and tornadoes, snowstorms, meteor strikes with craters, avalanches, herds, hunting
+lions and bears, a day and night cycle with sleeping animals, scheduled events, rare catastrophes
+(kraken, thunderstorm, sandworm, avalanche, alien), synthesized ambient sound, three render styles
+and an ASCII menu work.
+A first tvOS app (see Build) shows the same scenes on the Apple TV; it is built from the same repository but not part of the release archives.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) &middot; [Privacy](PRIVACY.md)
 
 ## Credits and legal
 

@@ -10,6 +10,13 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.1.0] 2026-11-08
+### Added
 - Added CHANGELOG.md, which also provides the version for CMake and the text of the GitHub release
 - Added ambient sound, synthesized at run time without audio recordings, played through the vendored miniaudio (playback only, no runtime dependencies); off by default, switched on with `--audio`, the `a` key or the menu, and silent without a sound device
 - Added forest soundscape: soft wind in the trees with slow gusts that deepens in a storm, rain, night crickets, distant rumbling and far-off claps as a thundercloud approaches, and a sharp crack with rolling thunder at every lightning strike

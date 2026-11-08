@@ -78,8 +78,8 @@ class Session {
   /// to match and, if it cannot open one, calls soundUnavailable().
   bool soundWanted() const { return sound_; }
   /// Called by the frontend when ambient sound was requested but no device could be opened:
-  /// switches the request off and says so on screen.
-  void soundUnavailable();
+  /// switches the request off and, if `announce`, says so on screen.
+  void soundUnavailable(bool announce = true);
   /// What the ambient sound should reflect now (muted while paused).
   AmbientParams ambient() const;
 

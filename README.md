@@ -64,7 +64,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
     diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
-    diorascii --audio               # ambient sound; a toggles it (see Sound below)
+    diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
     diorascii --dump 100            # headless: print the scene after 100 steps
@@ -143,8 +143,8 @@ coming and going; the colors themselves stay with your terminal theme.
 
 ### Sound
 
-Ambient sound is synthesized at run time (no recordings) and off by default: `--audio`, the `a`
-key or the menu's Sound entry turn it on. Without a sound device the app simply stays silent.
+Ambient sound is synthesized at run time (no recordings) and on by default: `--mute` starts without it, and the `a`
+key or the menu's Sound entry switch it. Without a sound device the app simply stays silent.
 Every scene has its own soundscape, and the sound follows what happens on screen:
 
 | Scene | What you hear |

@@ -69,10 +69,10 @@ Each rule has a source. "Owner" = Christian Ahrens.
 
 - Core stays headless, I/O-free and deterministic; input is abstract `Action`s.
 - Terminal build: zero dependencies, single binary where possible, truecolor with graceful fallback.
-- Sound is off by default and silent without a device; never print to stderr while the scene is drawn.
+- Sound is on by default (owner decision 2026-11-08, terminal and tvOS), `--mute` opts out, and it stays silent without a device; never print to stderr while the scene is drawn.
 - Do not rely on font glyph coverage beyond what already works (no `░▒▓` on the Linux console).
 - Small and odd terminal sizes must not crash (tested down to 1x1).
-- A terminal app must not surprise users: audio opt-in, no network access, no update check.
+- No network access, no update check. (Audio used to be opt-in; it is now on by default on purpose.)
 - Never use plain black for text.
 
 ## Working with the owner

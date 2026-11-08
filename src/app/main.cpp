@@ -47,8 +47,10 @@ struct Options {
   double fps = 20;
   /// Force 24-bit, 256-color or Linux console output (--truecolor, --256, --console).
   bool forceTrueColor = false, force256 = false, forceConsole = false;
-  /// Start with ambient sound on (--audio).
+  /// True if --audio was given: a missing sound device is then reported on screen.
   bool audio = false;
+  /// Start without ambient sound (--mute).
+  bool mute = false;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
@@ -68,7 +70,8 @@ void usage() {
       "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
-      "  --audio          play ambient sound (a toggles it)\n"
+      "  --audio          ambient sound is on by default; with --audio a missing device is reported\n"
+      "  --mute           start without ambient sound (a toggles it)\n"
       "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
@@ -108,6 +111,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--256") o.force256 = true;
     else if (a == "--console") o.forceConsole = true;
     else if (a == "--audio") o.audio = true;
+    else if (a == "--mute") o.mute = true;
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -206,6 +210,7 @@ int main(int argc, char** argv) {
   config.scene = sceneIdx;
   config.style = opt.style;
   config.hour = opt.hour;
+  config.sound = !opt.mute;
   Session session(pack, scenes, config, w, h);
 
   using clock = std::chrono::steady_clock;
@@ -215,13 +220,17 @@ int main(int argc, char** argv) {
   Frame cur, prev;
   bool havePrev = false;
 
-  // Ambient sound is off until asked for; a machine without a sound device just stays silent.
+  // Ambient sound is on unless muted; a machine without a sound device just stays silent. The
+  // missing device is only announced when the user asked for sound (--audio or the a key).
   AudioOutput audio;
+  bool startup = true;
   auto syncSound = [&]() {
-    if (session.soundWanted() && !audio.running() && !audio.start()) session.soundUnavailable();
+    if (session.soundWanted() && !audio.running() && !audio.start()) {
+      session.soundUnavailable(!startup || opt.audio);
+    }
     if (!session.soundWanted() && audio.running()) audio.stop();
+    startup = false;
   };
-  if (opt.audio) session.handle(Action::Audio);
   syncSound();
 
   while (!term.quitRequested() && !session.quitRequested()) {

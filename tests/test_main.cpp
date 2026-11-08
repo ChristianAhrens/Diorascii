@@ -2622,7 +2622,13 @@ TEST(session_sound_is_a_request_the_frontend_can_refuse) {
 
   Session::Config config;
   config.sound = true;
-  CHECK(makeSession(pack, config).soundWanted());
+  Session on = makeSession(pack, config);
+  CHECK(on.soundWanted());
+  on.soundUnavailable(false);  // a quiet failure, as at startup without a sound device
+  CHECK(!on.soundWanted());
+  Frame g;
+  on.render(g);
+  CHECK(g.toText().find("No audio device") == std::string::npos);
 }
 
 TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_changes_and_resizes) {

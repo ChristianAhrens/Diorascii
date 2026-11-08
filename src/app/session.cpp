@@ -103,9 +103,9 @@ void Session::setSound(bool on) {
   menu_.setValue("audio", on ? 1 : 0);
 }
 
-void Session::soundUnavailable() {
+void Session::soundUnavailable(bool announce) {
   setSound(false);
-  toast("No audio device", 1.5);
+  if (announce) toast("No audio device", 1.5);
 }
 
 void Session::runAction() {

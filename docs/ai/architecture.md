@@ -99,7 +99,7 @@ proximity, nibbles, whale/tornado nearness, impacts, avalanche level, volume). `
 fills a stereo float buffer; everything is smoothed and scenes crossfade, so nothing clicks. The
 audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
-noise). Off by default; `--audio`, key `a`, or the menu; silent when no device exists.
+noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 
 One `AmbientKind` per scene (`Silent, Forest, Aquarium, Desert, Moon, Mountains`) with a hand-written
 synthesis function each. See [findings](findings.md) F-08 about the coupling this implies.
@@ -153,7 +153,7 @@ bundle id `com.ChristianAhrens.Diorascii`, team via `-DDIORASCII_APPLE_TEAM`.
 
 Remote mapping: swipe left/right = scene, up = time of day, down = sound (up/down navigate while the
 menu is open), click = scene action (Select while the menu is open), Play/Pause = pause, long click
-= open menu, Menu = close menu, else leave the app. Sound is on by default on tvOS (owner to confirm). The menu has no Quit entry on tvOS (`Config::quitEntry`), and for the first five launches a toast hint, "Hold the click for the menu", appears 2.5 s after the start.
+= open menu, Menu = close menu, else leave the app. The menu has no Quit entry on tvOS (`Config::quitEntry`), and for the first five launches a toast hint, "Hold the click for the menu", appears 2.5 s after the start.
 Keyboards (the Simulator's, or one attached to a real Apple TV) arrive as presses whose `type` is a raw HID value (2000 + usage, e.g. 2079 right arrow) and whose `key` is set, not as Siri Remote button types; `handleKey:` maps arrows, Return, Space, Escape and the terminal program's letters (m f x c t a i p r). Debug builds log input and focus with the prefix `DIORASCII-INPUT`. Verified in the tvOS 27.2 simulator: launches, draws, animates. **Not verified:** remote input,
 sound by ear, performance on a real Apple TV, the signed device build.
 

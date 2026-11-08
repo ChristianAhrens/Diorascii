@@ -164,7 +164,8 @@ behaviors, actions, scenes or formats change, update README, CHANGELOG, `docs/ai
 ## F-17 tvOS open points (M)
 - Siri Remote input (swipes, click, long click, Menu, Play/Pause) has never been exercised: the
   simulator could only be launched headless. Test in the Simulator app or on a device.
-- Sound defaults to on on tvOS (terminal: off). Confirm.
+- Sound defaults to on, on tvOS and in the terminal (decided).
+- `Resources/Icon/` is now committed (drafts, to be refined).
 - The Top Shelf images are drafts cropped from the icon art (needed for App Store validation); a dedicated
   design is still to do.
 - The grid uses the system monospaced font; glyph coverage of the sprites' characters on tvOS is

@@ -449,7 +449,7 @@ rain, sandstorms and tornadoes, snowstorms, meteor strikes with craters, avalanc
 lions and bears, a day and night cycle with sleeping animals, scheduled events, rare catastrophes
 (kraken, thunderstorm, sandworm, avalanche, alien), synthesized ambient sound, three render styles
 and an ASCII menu work.
-Planned: a tvOS app.
+A first tvOS app (see Build) shows the same scenes on the Apple TV; it is built from the same repository but not part of the release archives.
 
 ## License
 

@@ -407,17 +407,19 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
     scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
     CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)
+    docs/ai/   notes for AI collaborators: history, architecture, conventions, rules, open findings (see CLAUDE.md)
 
 The core only produces a grid of styled cells and consumes abstract actions, so
-other frontends (SDL window, tvOS) can be added without touching it.
+other frontends (such as a tvOS app) can be added without touching it.
 
 ## Status
 
-Four scenes (aquarium, forest, desert, moon) with original sprites; feeding, predation, rain,
-sandstorms and tornadoes, meteor strikes with craters, herds, a hunting lion, a day and night
-cycle with sleeping animals, scheduled events, rare catastrophes (kraken, thunderstorm, sandworm,
-alien), three render styles and an ASCII menu work.
-Planned: a mountain scene with its own action, and windowed and tvOS frontends.
+Five scenes (aquarium, forest, desert, mountains, moon) with original sprites; feeding, predation,
+rain, sandstorms and tornadoes, snowstorms, meteor strikes with craters, avalanches, herds, hunting
+lions and bears, a day and night cycle with sleeping animals, scheduled events, rare catastrophes
+(kraken, thunderstorm, sandworm, avalanche, alien), synthesized ambient sound, three render styles
+and an ASCII menu work.
+Planned: a tvOS app.
 
 ## License
 

@@ -1,0 +1,22 @@
+name: sun_corona
+glow: yes
+solid: yes
+habitat: sky
+--- art
+   .-"""-.
+ .'       '.
+/           \
+|           |
+|           |
+\           /
+ '.       .'
+   '-...-'
+--- mask
+   YYYYYYY
+ YYYYYYYYYYY
+YYYYYYYYYYYYY
+YYYYYYYYYYYYY
+YYYYYYYYYYYYY
+YYYYYYYYYYYYY
+ YYYYYYYYYYY
+   YYYYYYY

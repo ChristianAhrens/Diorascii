@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a day cycle to the moon: a large sun stands high in the sky by lunar day, over a slightly lighter grey ground, and the earth rises by night over a darker one; the sky stays black with its stars, and the rest of the scene is as before. The earth is no longer fixed in the corner
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed

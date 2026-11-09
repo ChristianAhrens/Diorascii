@@ -128,6 +128,7 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
     sc->overcastTintAmount = std::clamp(std::atof(t[1].c_str()), 0.0, 1.0);
   }
   sc->dayNight = p.str("day-night", "no") == "yes";
+  sc->airless = p.str("airless", "no") == "yes";
   sc->dayLength = std::max(p.num("day-length", sc->dayLength), 1.0);
   sc->startHour = std::clamp(p.num("start-hour", sc->startHour), 0.0, 24.0);
   sc->sunSprite = p.str("sun-sprite");

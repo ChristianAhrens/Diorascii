@@ -82,7 +82,7 @@ Cross-cutting systems, all in `World`:
 | System | Notes |
 |---|---|
 | Layout | surface/seabed/ground rows, river, `lanes` for depth on a bank; the mountains scene has terrain (`ridgeRow`, `zoneAt`, `Zone` bands with wobbling limits) |
-| Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock); sun/moon arcs; scenes without an atmosphere (moon) have no cycle |
+| Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock); sun/moon arcs; `airless` scenes (the moon) cycle too, but the sky stays black with stars and only the ground brightens and darkens a little; the sun (`sun_corona`) and the earth are its arc bodies |
 | Sleeping | ~70% of most species sleep at night, each with its own bedtime; sleepers do not hunt, eat or get hunted |
 | Events | one scheduled visitor at a time per scene (`--- events`) |
 | Rare catastrophes | separate slow timer, one at a time; strike at `strike-at` progress; wipes `life` or named sprites; dead things restock gradually; screen flash; `x` summons one |

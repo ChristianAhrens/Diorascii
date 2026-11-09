@@ -72,7 +72,7 @@ AmbientParams ambientFor(const World& world) {
   else if (name == "moon") p.kind = AmbientKind::Moon;
   else if (name == "mountains") p.kind = AmbientKind::Mountains;
   const Light l = world.light();
-  p.night = static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));
+  p.night = world.scene().airless ? 0.0f : static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));  // the moon sounds the same all day
   p.rain = world.raining() ? 1.0f : 0.0f;
   p.flashes = world.flashCount();
   p.storm = static_cast<float>(world.stormProximity());

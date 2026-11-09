@@ -14,6 +14,13 @@ action: impact meteorite
 action-label: Meteor strike
 gravity: 2.5
 dust-settle: 40
+# A lunar day: the sun high in the sky and a lighter ground, then the earth rising over a darker one.
+day-night: yes
+airless: yes
+day-length: 240
+start-hour: 10
+sun-sprite: sun_corona
+moon-sprite: earth
 event-first: 3..7
 event-interval: 6..14
 
@@ -21,7 +28,6 @@ event-interval: 6..14
 rover        count       1
 
 --- decor
-earth        right       8     y 2
 lander       left        10
 flag         center      12
 rock         random      0

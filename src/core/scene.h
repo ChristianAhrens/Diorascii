@@ -112,6 +112,9 @@ struct SceneDef {
   Rgb overcastTint{0, 0, 0};
   /// How strongly the scene turns towards overcastTint at full cloud cover, 0 to 1 (0 = no tint).
   double overcastTintAmount = 0;
+  /// True for a scene without an atmosphere (the moon): the cycle then only brightens and darkens
+  /// the ground a little, while the sky stays black and the stars stay out, and there is no glow.
+  bool airless = false;
   /// True if the scene has a day and night cycle (sun, moon, stars, dimming light).
   bool dayNight = false;
   double dayLength = 180;  ///< seconds one full day takes

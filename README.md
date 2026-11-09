@@ -15,7 +15,7 @@ terminal-themed look that follows your own colors.
 
 ## Screenshots
 
-Every scene by day and by night (the moon has no day and night cycle).
+Every scene by day and by night (on the moon: by lunar day and by earthrise).
 
 <table>
   <tr><th></th><th>Day</th><th>Night</th></tr>
@@ -127,7 +127,7 @@ The aquarium, the forest, the desert and the mountains have a day and night cycl
 The sun crosses the sky by day and the moon by night, the sky and the water darken and
 turn blue at night with a red glow at sunrise and sunset, and stars come out. Creatures
 can belong to the day or the night: butterflies and birds by day, fireflies by night.
-Clouds from the forest's rain dim the day, too. The moon has no atmosphere and no cycle.
+Clouds from the forest's rain dim the day, too. The moon has a cycle of its own: it has no atmosphere, so the sky stays black with its stars all the time. By day a large sun stands high in the sky over a slightly lighter grey ground; by night the earth rises over a darker, cooler one.
 
 At night **most animals sleep**: a share of every species (about 70% for most) disappears
 and stays frozen where it is, each at its own bedtime, so herds and schools thin out
@@ -334,6 +334,7 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     weather-duration: 18            # seconds a rain shower lasts
     overcast-tint: #c98e4c 0.75     # color (and strength) the scene turns towards in heavy weather
     day-night: yes                  # sun, moon, stars and dimming light
+    airless: yes                    # no atmosphere (moon): black sky and stars all day, only the ground shifts a little
     day-length: 240                 # seconds for one full day
     start-hour: 10                  # time of day at the start
     sun-sprite: sun_big             # sprites that cross the sky by day and by night

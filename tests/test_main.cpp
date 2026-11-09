@@ -687,16 +687,51 @@ TEST(time_modes_freeze_the_clock_and_cycle_resumes_from_there) {
 }
 
 TEST(scenes_without_a_cycle_ignore_the_time_of_day) {
-  AssetPack pack = AssetPack::embedded();
-  World moon(pack, pack.scene("moon"), 60, 24, 1);
-  CHECK(!moon.hasDayNight());
-  const double before = moon.phase();
-  moon.setTimeMode(World::TimeMode::Night);
-  CHECK(moon.timeMode() == World::TimeMode::Cycle);  // unchanged
-  for (int i = 0; i < 200; ++i) moon.step(0.05);
-  CHECK(moon.phase() == before);
-  const Light l = moon.light();
+  AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\n", {});
+  World still(pack, pack.scene("t"), 60, 24, 1);
+  CHECK(!still.hasDayNight());
+  const double before = still.phase();
+  still.setTimeMode(World::TimeMode::Night);
+  CHECK(still.timeMode() == World::TimeMode::Cycle);  // unchanged
+  for (int i = 0; i < 200; ++i) still.step(0.05);
+  CHECK(still.phase() == before);
+  const Light l = still.light();
   CHECK(l.day == 1 && l.sun == 1 && l.glow == 0 && l.stars == 1);
+}
+
+TEST(the_moon_follows_a_cycle_of_sun_and_earth_with_a_black_sky_and_a_ground_that_changes_a_little) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("moon"), 100, 30, 1);
+  CHECK(world.hasDayNight() && world.scene().airless);
+  Frame day, night;
+  world.setPhase(0.5);
+  world.render(day);
+  const Light noon = world.light();
+  world.setPhase(0.0);
+  world.render(night);
+  const Light midnight = world.light();
+  CHECK(noon.stars == 1 && midnight.stars == 1 && midnight.glow == 0);  // stars all the time, no glow
+  CHECK(day.at(3, 0).bg == night.at(3, 0).bg);                          // the sky stays black
+  const int gy = world.seabedY() + 1;
+  auto sum = [](Rgb c) { return c.r + c.g + c.b; };
+  const int d = sum(day.at(3, gy).bg), n = sum(night.at(3, gy).bg);
+  CHECK(n < d && n > d * 0.6);  // darker at night, but only a little: still a grey
+  // The sun by day and the earth by night, high in the sky: yellow cells against blue ones.
+  auto count = [](const Frame& f, int rows, auto pred) {
+    int k = 0;
+    for (int y = 0; y < rows; ++y) for (int x = 0; x < f.width(); ++x) k += pred(f.at(x, y)) ? 1 : 0;
+    return k;
+  };
+  auto yellow = [](const Cell& c) { return c.bg.r > 200 && c.bg.g > 180 && c.bg.b < 120; };
+  auto blue = [](const Cell& c) { return c.bg.b > c.bg.r + 60 && c.bg.b > 120; };
+  CHECK(count(day, world.surfaceY(), yellow) > 20 && count(day, world.surfaceY(), blue) == 0);
+  CHECK(count(night, world.surfaceY(), blue) > 10 && count(night, world.surfaceY(), yellow) == 0);
+}
+
+TEST(the_sun_over_the_moon_is_larger_than_the_earth) {
+  AssetPack pack = AssetPack::embedded();
+  CHECK(pack.find("sun_corona")->width() > pack.find("earth")->width());
+  CHECK(pack.find("sun_corona")->height() > pack.find("earth")->height());
 }
 
 TEST(stars_come_out_only_at_night_in_scenes_with_a_cycle) {
@@ -2659,8 +2694,10 @@ TEST(session_sound_is_a_request_the_frontend_can_refuse) {
 TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_changes_and_resizes) {
   AssetPack pack = AssetPack::embedded();
   const auto scenes = pack.scenes();
-  size_t withClock = 0, withoutClock = 0;
-  for (size_t i = 0; i < scenes.size(); ++i) (scenes[i]->dayNight ? withClock : withoutClock) = i;
+  size_t withClock = 0;
+  for (size_t i = 0; i < scenes.size(); ++i) {
+    if (scenes[i]->dayNight) withClock = i;
+  }
   Session::Config config;
   config.scene = withClock;
   config.hour = 22;
@@ -2674,9 +2711,10 @@ TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_c
   CHECK(s.world().width() == 120 && s.world().height() == 40);
   CHECK(s.world().timeMode() == World::TimeMode::Dawn);  // kept across the rebuild
 
-  Session m = makeSession(pack, [&] { Session::Config c; c.scene = withoutClock; return c; }());
+  AssetPack still = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\n", {});
+  Session m = makeSession(still);
   m.handle(Action::Time);
-  CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle on the moon
+  CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle in a scene without a clock
 }
 
 TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports) {

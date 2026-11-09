@@ -917,6 +917,11 @@ Light World::light() const {
   l.glow = std::exp(-(height / 0.22) * (height / 0.22)) * (1 - 0.6 * overcast_);
   l.stars = (1 - l.sun) * (1 - 0.9 * overcast_);  // clouds and dust hide the stars
   l.hazeColor = scale(scene_->overcastTint, 0.15 + 0.85 * l.sun);  // a night storm stays dark
+  if (scene_->airless) {  // no atmosphere: black sky and stars all day, only the ground changes a little
+    l.day = 0.72 + 0.28 * l.sun;
+    l.glow = 0;
+    l.stars = 1;
+  }
   return l;
 }
 
@@ -1366,8 +1371,9 @@ void World::slideStep(Entity& e, double dt) {
 void World::renderBackground(Frame& out, Style style, const Light& light) const {
   const SceneDef& sc = *scene_;
   // The scene's colors are its daytime look; the light turns them into the current look.
-  const Rgb skyTop = lerp(backdrop(sc.skyTop, light), Rgb{110, 70, 130}, light.glow * 0.3);
-  const Rgb skyLow = lerp(backdrop(sc.skyLow, light), Rgb{255, 150, 80}, light.glow * 0.55);
+  const Light skyLight = sc.airless ? Light{} : light;  // an airless sky does not change with the day
+  const Rgb skyTop = lerp(backdrop(sc.skyTop, skyLight), Rgb{110, 70, 130}, light.glow * 0.3);
+  const Rgb skyLow = lerp(backdrop(sc.skyLow, skyLight), Rgb{255, 150, 80}, light.glow * 0.55);
   const Rgb mediumTop = backdrop(sc.mediumTop, light), mediumDeep = backdrop(sc.mediumDeep, light);
   const Rgb groundA = backdrop(sc.groundA, light), groundB = backdrop(sc.groundB, light);
   const Rgb surfaceFg = backdrop(sc.surfaceFg, light);

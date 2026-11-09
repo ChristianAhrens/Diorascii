@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added the version and the copyright to the bottom of the menu
 - Added a muffled gulping sound for every animal the kraken's tentacles catch
 - Added a tongue to the sandworm: it lashes out at the animals on the ground ahead of it, and each animal is crushed the moment the tongue reaches it. Catastrophe sprites can set `strike-reach` for this
 - Added sound to the sandworm: a very deep, trumpeting bellow every few seconds while it crosses the desert, and a low, grumbling chewing for every animal it crushes

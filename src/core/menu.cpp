@@ -124,8 +124,10 @@ void Menu::render(Frame& f, Style style) const {
   const bool longHint = f.width() >= std::max(boxW, cols(hintLong) + 4);
   const std::string& hint = longHint ? hintLong : hintShort;
   innerW = std::max({innerW, cols(hint)});
+  for (const auto& line : footer_) innerW = std::max(innerW, cols(line));
   const int boxWFinal = innerW + 4;
-  const int boxH = static_cast<int>(rows.size()) + 6;  // border, title, blank, rows, blank, hint, border
+  const int footerRows = footer_.empty() ? 0 : static_cast<int>(footer_.size()) + 1;  // a blank row, then the lines
+  const int boxH = static_cast<int>(rows.size()) + 6 + footerRows;  // border, title, blank, rows, blank, hint, footer, border
 
   const bool plain = style != Style::Full;
   auto base = [&](Rgb fg, Rgb bg) {
@@ -137,6 +139,7 @@ void Menu::render(Frame& f, Style style) const {
   };
   const Cell panel = base({225, 232, 245}, {18, 24, 44});
   const Cell border = base({110, 170, 220}, {18, 24, 44});
+  const Cell faint = base({140, 155, 185}, {18, 24, 44});
   Cell titleCell = base({255, 214, 120}, {18, 24, 44});
   titleCell.bold = true;
   Cell selCell = base({255, 255, 255}, {40, 90, 140});
@@ -187,7 +190,11 @@ void Menu::render(Frame& f, Style style) const {
     }
     text(x0 + 2, y, (sel ? "> " : "  ") + rows[i], sel ? selCell : panel);
   }
-  text(x0 + (boxWFinal - cols(hint)) / 2, y0 + boxH - 2, hint, panel);
+  const int hintY = y0 + boxH - 2 - footerRows;
+  text(x0 + (boxWFinal - cols(hint)) / 2, hintY, hint, panel);
+  for (size_t i = 0; i < footer_.size(); ++i) {
+    text(x0 + (boxWFinal - cols(footer_[i])) / 2, hintY + 2 + static_cast<int>(i), footer_[i], faint);
+  }
 }
 
 }  // namespace dio

@@ -11,6 +11,7 @@
 #include "core/ambience.h"
 #include "core/assets.h"
 #include "core/menu.h"
+#include "version.h"
 #include "core/world.h"
 #include "term/vt.h"
 
@@ -348,6 +349,21 @@ TEST(menu_closes_with_back_and_leaves_other_actions_alone) {
   m.open();
   CHECK(m.handle(Action::Menu));
   CHECK(!m.isOpen());
+}
+
+TEST(menu_shows_its_footer_below_the_hint_and_still_fits) {
+  Menu m = sampleMenu();
+  m.setFooter({"diorascii 9.9.9", "Copyright (c) 2026 Someone"});
+  m.open();
+  Frame f(60, 24);
+  m.render(f, Style::Full);
+  const std::string text = f.toText();
+  const size_t hint = text.find("esc: close"), version = text.find("diorascii 9.9.9"), copy = text.find("Copyright (c) 2026 Someone");
+  CHECK(hint != std::string::npos && version != std::string::npos && copy != std::string::npos);
+  CHECK(hint < version && version < copy);  // in that order, from the top
+  Frame tiny(30, 6);  // too small for the box: the one-line fallback, without small print
+  m.render(tiny, Style::Full);
+  CHECK(tiny.toText().find("Copyright") == std::string::npos);
 }
 
 TEST(menu_set_value_is_silent_and_clamped) {
@@ -2958,6 +2974,17 @@ TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports)
   r.setClockHour(3);
   r.step(0.05);
   CHECK(r.world().timeMode() == World::TimeMode::Realtime && std::fabs(r.world().phase() - 3.0 / 24.0) < 1e-6);
+}
+
+TEST(the_session_menu_shows_the_version_and_the_copyright) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  s.handle(Action::Menu);
+  Frame f;
+  s.render(f);
+  const std::string text = f.toText();
+  CHECK(text.find(std::string("diorascii ") + DIORASCII_VERSION) != std::string::npos);
+  CHECK(text.find("Copyright (c) 2026 Christian Ahrens") != std::string::npos);
 }
 
 TEST(session_menu_consumes_navigation_while_open_and_quit_comes_from_keys_or_menu) {

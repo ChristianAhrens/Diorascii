@@ -71,6 +71,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   menu_.addButton("rare", "Rare event");
   menu_.addButton("resume", "Resume");
   if (config.quitEntry) menu_.addButton("quit", "Quit");
+  menu_.setFooter({"diorascii " DIORASCII_VERSION, "Copyright (c) 2026 Christian Ahrens"});
   rebuild();
   toast(scenes_[sceneIdx_]->title, 2.0);
   if (config.sound) setSound(true);

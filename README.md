@@ -76,7 +76,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
 The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, resume
-and quit. It is drawn into the same cell grid as the scene and driven only by abstract
+and quit, and shows the version and the copyright at the bottom. It is drawn into the same cell grid as the scene and driven only by abstract
 actions (up, down, left, right, select, back), so any input device can use it.
 
 ### Scenes and the action key

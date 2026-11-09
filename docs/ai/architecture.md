@@ -34,7 +34,7 @@ built without project warnings), `diorascii_audio`, executable `diorascii`, test
 any frontend: `handle(Action)`, `resize`, `step(dt)`, `render(Frame&)`, plus `soundWanted()` /
 `soundUnavailable()` / `ambient()` for the frontend's sound device and `takeRepaint()`. The
 terminal `main.cpp` adds only pacing, the terminal and the audio device. Fixed 20 fps (`--fps`), world steps at `dt = 1/fps`; input polled in 5 ms slices; the menu is
-drawn into the same `Frame` as the scene. Frames are encoded by the pure function
+drawn into the same `Frame` as the scene. It shows the version and the copyright as small print (`Menu::setFooter`, set by `Session`). Frames are encoded by the pure function
 `encodeFrame(prev, cur, ColorMode)` which emits only changed cells. `--dump N` runs N steps
 headless and prints the scene as text (also used by CI as a smoke test on Windows).
 

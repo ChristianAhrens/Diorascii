@@ -6,7 +6,8 @@ State as of v1.2.0 plus the unreleased work of 2026-11-09 (see CHANGELOG `[Unrel
 
 ```
 src/core   (no I/O, deterministic per seed; library diorascii_core)
-  Rng, Frame/Cell, Sprite/Props, SceneDef, AssetPack, World + Entity + behaviors, Menu,
+  Rng, Frame/Cell, Sprite/Props, SceneDef, AssetPack, World + Entity + behaviors, shading.h (light and
+  haze applied to colors, shared by renderers), Menu,
   Ambience (sound synth)            + generated embedded_assets.cpp and version.h
         |  Frame = grid of {codepoint, fg, bg, attrs}          ^  Action (input)
         v                                                       |

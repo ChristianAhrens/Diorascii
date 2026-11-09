@@ -1,0 +1,17 @@
+name: barrier
+facing: right
+habitat: ground
+speed: 0..0
+tag: barrier
+depth: 4
+backing: 0.5
+--- art
+_#_
+|=|
+|#|
+ |
+--- mask
+wrw
+wrw
+wrw
+ k

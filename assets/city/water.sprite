@@ -1,0 +1,9 @@
+name: water
+behaviors: fly
+ttl: 0.6
+color: #4a86f0
+depth: 3
+--- art
+█
+--- mask
+B

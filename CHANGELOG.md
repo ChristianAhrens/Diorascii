@@ -10,6 +10,11 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added side streets to the City: on wide enough screens one to three streets run off into the city and meet the main street at a crossing; cars turn off the main road into them and drive away, and others come down them and turn onto the main road. Scene key `avenues`, sprite headers `behaviors: drive` and `turns`
+- Added the soundscape of the City: traffic, passing cars, horns, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it), trains with their clatter and horn, a faint jet for the planes, and the crackle of the fire
+- Added the fire to the City: the rare event (`x`) sets a skyscraper alight, with flames, smoke and a fire engine; when it has burnt out the building is wrapped in scaffolding and renovated with new looks. Sometimes the fire gets out of hand, spreads to 3 to 5 more buildings and burns them to the ground; they are rebuilt from the rubble over the following minute and a half. The fire engine leaves as soon as the last fire is out
+- Added the City scene: skyscrapers (generated to the height of the terminal, lower than the mountains) with lit windows at night, a street with lamps, zebra crossings and traffic (cars, taxis, buses, trucks, cyclists), people, shops, a park, an elevated railway with a station and trains, and planes coming in to land in the background. `f` calls an ambulance through the streets. Scene keys `city` and `skyline`, and the habitat `rail`, are new
+- Added the scene action `summon <sprite>` (a visitor comes through, one at a time) and the sprite headers `feet-rows` and `traffic` (ground sprites on chosen rows, vehicles keeping to their side of the road), as the groundwork for a city
 - Added the version and the copyright to the bottom of the menu
 - Added a muffled gulping sound for every animal the kraken's tentacles catch
 - Added a tongue to the sandworm: it lashes out at the animals on the ground ahead of it, and each animal is crushed the moment the tongue reaches it. Catastrophe sprites can set `strike-reach` for this
@@ -19,6 +24,15 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed the City's plane to a larger drawing in the style of a pictogram: a swept wing behind and above the fuselage, one below it, a tail fin with a blue tip, a row of windows and a blue stripe along the belly
+- Changed the City's skyscrapers to be up to 80% of the sky and the buildings to stand further apart, gave the planes clearer wings, made the traffic thinner overall with rush hours at about 8:00 and 17:30 (vehicle sprites with `rush: yes`), and made the lettering on mirrored sprites (TAXI, FIRE) stay readable
+- Changed the fire engine to stay until the building is renovated, spray solid blue jets of water, and to cordon off a wider site with barriers across the road and the sidewalks
+- Changed the City's fire engine to park in front of the burning building and spray it with water, which puts the fire out sooner; until the building has been renovated the site is cordoned off and other vehicles and people wait at its edge
+- Changed the City's cars, buses, trucks, ambulance, fire engine, train and planes from solid blocks to fine line art on a darkened backing, and made cars in the side streets pass under the viaduct instead of over it
+- Changed the City's side streets to break off at a broad crossing and end quickly behind the buildings instead of running to the horizon, added glimpses of further side streets between the buildings of the front row, spaced the buildings out more, made the cars show side, three-quarter, rear and front views as they turn, made the traffic and the crowds thinner, and made the planes long and slim
+- Changed the train sound from clicking to the regular "klack-klack, klack-klack" of a metro: two woody knocks, a pause, and again, over a deep rumble
+- Changed the City to be less flat: the main street is half as high, the buildings come in three rows, from low offices to towers of up to 70% of the sky, with four kinds of facade and six kinds of roof
+- Changed the City's railway to a clearly visible viaduct (dark deck with bright rails on a concrete beam, pillars, masts and a wire), and redrew the trains, cars, buses, trucks, ambulance and fire engine with solid blocks so that they stand out; the planes are twice the size
 - Changed the kraken to lash out with up to three tentacles at the animals around it while it moves through the sea, instead of killing every animal at once when it is in the middle of the screen; animals out of its reach survive. Catastrophe sprites can set `strike-aim`, `strike-lashes` and `lash-color` for this
 - Changed the sandworm's bellow and chewing to be about half as loud
 - Changed the sandworm to swallow the animals on the ground one by one as its head reaches them (`strike-mode: devour`), instead of all at once when it is in the middle of the screen; flying animals are spared

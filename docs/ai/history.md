@@ -56,6 +56,11 @@ library gathering), extensible rendered items, same-or-better look, and an outlo
 - History was rewritten before pushing: the follow-up fixes (chewing, tongue, loudness, star dimming, gulp) were
   folded into the commits they belong to (backup branch `backup/pre-rewrite-2026-11-09`, tree verified identical).
 
+- The owner asked for an entirely new scene: **City** (skyscrapers lower than the mountains, planes on approach to an
+  off-screen airport, street with lamps, people, shops, park, trains and a station, day/night, honking and car sounds,
+  F = ambulance with siren, x = a burning skyscraper that is quickly renovated). Built as procedural skyline + data
+  sprites, see [architecture](architecture.md) and F-22.
+
 ## What was not done, on purpose
 
 - No classic mode, no curses backend, no scripting layer, no ECS.

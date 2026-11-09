@@ -6,7 +6,8 @@ State as of v1.2.0 plus the unreleased work of 2026-11-09 (see CHANGELOG `[Unrel
 
 ```
 src/core   (no I/O, deterministic per seed; library diorascii_core)
-  Rng, Frame/Cell, Sprite/Props, SceneDef, AssetPack, World + Entity + behaviors, Menu,
+  Rng, Frame/Cell, Sprite/Props, SceneDef, AssetPack, World + Entity + behaviors, shading.h (light and
+  haze applied to colors, shared by renderers), Menu,
   Ambience (sound synth)            + generated embedded_assets.cpp and version.h
         |  Frame = grid of {codepoint, fg, bg, attrs}          ^  Action (input)
         v                                                       |
@@ -76,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -94,6 +95,7 @@ Cross-cutting systems, all in `World`:
 |---|---|
 | Layout | surface/seabed/ground rows, river, `lanes` for depth on a bank; the mountains scene has terrain (`ridgeRow`, `zoneAt`, `Zone` bands with wobbling limits) |
 | Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock; `Realtime` is last in the `t`/menu order and never the default); sun/moon arcs (8x5 sprites; a sky lower than the body cuts it off at the top); `airless` scenes (the moon) cycle too, but the sky stays black with stars and only the ground brightens and darkens a little; the sun (`sun_corona`, bigger than the earth) and the earth are its arc bodies. The haze color is dimmed to the time of day (a night sandstorm stays dark) and the star level follows the overcast (clouds and dust hide the stars) |
+| City | `city: yes` scenes (`src/core/city.cpp`): procedural skyline (`Building`, three layers, rolled to the terminal height between `skyline:` shares (0.18..0.70) with facade and roof kinds, never reaching the top, so always lower than the mountains), a main street of 4 ground rows, elevated viaduct at `railY_` (habitat `rail`, only if the sky is at least 16 rows; drawn as deck, beam, pillars, masts and wire), street rows (sidewalk, road with center line, sidewalk) and lamps drawn by `renderCity`, which `World::render` calls between the far entities (z >= 25: sky, clouds, planes) and the near ones. Lanes come from `feet-rows` and `traffic`; the F key is `action: summon ambulance`. Side streets (`Avenue`, `placeAvenues()`, key `avenues`, placed first so that the front row of buildings (`buildCity`) and `spawnDecor` keep out of their mouths) are painted by `renderStreet` (`paintAvenue`: a broad road 13 columns wide that narrows a little and ends after 4-7 rows, hazier with distance) over the skyline and under the viaduct, with a zebra crossing at the mouth. `glimpses_` are further, non-drivable streets painted between the middle and front rows, so that they only show through gaps in the front row. Vehicles use the `drive` behavior (`World::driveStep`, entity fields `driveState`: main road, turning in, up the avenue, down it, turning out; vehicles with five frames show side, rear three-quarter, rear, front three-quarter and front views as they turn): `turns:` is the chance to take the next avenue; `stepCity` sends cars down the avenues. Traffic follows `World::trafficLevel()` (about 0.06 at night, 0.26 by day, 1 at 8:00, 0.95 at 17:30): sprites with `rush: yes` that are (re)spawned join with that chance and otherwise retry after 2-7 s through `restock_`, so the street fills and empties with a lag; the avenue cars use it too. Sprite mirroring puts runs of 3+ letters back in reading order. Vehicles and planes are line art with `backing: 0.55` (the earlier solid-block versions read as blobs). Render order in a city: far entities (z >= 25), skyline + side streets (`renderCityBack`), side-street cars (z 24), viaduct + street + lamps (`renderStreet`), the rest. The fire engine uses the `engine` behavior (`World::engineStep`): it drives to the burning building (the origin of the fire) with tag `wail` and large blinking light bars (like the ambulance's, 12 cells, red/blue swapping), parks (`driveState` 1), sprays `water` effects (solid blue blocks; they shorten the burn) and leaves, tag cleared so the wail stops, as soon as no building is burning any more; from its arrival until the last building is back the site is cordoned (`cordon_`, `cordonHalfWidth()`: at least 18 columns each side, wider once the fire has spread, `fitCordon()`) with `barrier` sprites across road and sidewalks: grounded movers whose body would reach into it freeze at its edge (`pauseLeft`). A fire is decided at its start (`kFireFails` 0.3, `forceFireOutcome` for tests): either the engine beats it (burn 24 s, sped up by the spray, then `Scaffold` 8 s, renovated) or it gets out of hand: `spreadLeft_` 3-5 more buildings ignite one after another (nearest first, every 2.5-4 s after 7-10 s) and every building goes `Burning` -> `Ruin` (collapses over 3.5 s, smouldering rubble `rubbleRows`, 32 s) -> `Scaffold` (`ruined`: grows back from the rubble over 16 s) -> new looks. The `x` catastrophe is the invisible sprite `blaze` (behavior `blaze` -> `World::blazeStep`): a front skyscraper gets `State::Burning` (24 s: flames and glowing windows drawn by `renderSkyline`, smoke effects, a fire engine) and then `State::Scaffold` (8 s: scaffolding and a crane), after which `rollBuilding` gives it new looks; `fireLevel()` feeds the sound |
 | Sleeping | ~70% of most species sleep at night, each with its own bedtime; sleepers do not hunt, eat or get hunted |
 | Events | one scheduled visitor at a time per scene (`--- events`) |
 | Rare catastrophes | separate slow timer, one at a time; strike at `strike-at` progress (`strike-mode`: `centre` all at once, `sweep` each victim as the attacker's middle passes it, `devour` as its front reaches it, preceded by a tongue or tentacles (`World::lash`, `Tongue`, drawn in `renderTongues`; `strike-aim: around` for the kraken) when `strike-reach` is set); wipes `life` or named sprites; dead things restock gradually; screen flash; `x` summons one |
@@ -106,7 +108,7 @@ in-house xoshiro `Rng`, so a seed reproduces a world exactly.
 ## Sound (src/core/ambience.*, src/audio)
 
 `ambientFor(World)` reduces world state to `AmbientParams` (kind, night, rain, flashes, storm
-proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
+proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, siren (ambulance, quick two-tone), wail (fire engine, slow sweep; the engine drops its tag when it leaves, so it drives off silent), train/plane nearness and fire level for the city, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
 fills a stereo float buffer; everything is smoothed and scenes crossfade, so nothing clicks. The
 audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
@@ -114,7 +116,7 @@ noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch 
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals) that only count as events when they increase; the first value seen is the baseline.
 
-One `AmbientKind` per scene (`Silent, Forest, Aquarium, Desert, Moon, Mountains`) with a hand-written
+One `AmbientKind` per scene (`Silent, Forest, Aquarium, Desert, Moon, Mountains, City`) with a hand-written
 synthesis function each. See [findings](findings.md) F-08 about the coupling this implies.
 
 ## Art notes

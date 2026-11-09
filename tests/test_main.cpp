@@ -1,6 +1,7 @@
 // Dependency-free test runner: each TEST registers itself, main() runs them all.
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -2819,6 +2820,123 @@ TEST(the_kraken_gulps_down_what_its_tentacles_catch_with_a_muffled_sound) {
   CHECK(rmsAfterChange(forest, forestGulp, 0.6) < rmsAfterChange(forest, forest, 0.6) * 1.2);  // only the sea hears it
 }
 
+TEST(the_city_hums_with_traffic_honks_now_and_then_and_has_sirens_trains_planes_and_fire) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  const double quiet = ambienceRms(calm, 20);
+  CHECK(quiet > 0.01);
+  AmbientParams night = calm;
+  night.night = 1;
+  CHECK(ambienceRms(night, 20) < quiet * 0.8);  // fewer cars at night
+  AmbientParams siren = calm, train = calm, plane = calm, fire = calm;
+  siren.siren = 1;
+  train.train = 1;
+  plane.plane = 1;
+  fire.fire = 1;
+  CHECK(ambienceRms(siren, 10) > quiet * 1.4);
+  CHECK(ambienceRms(train, 10) > quiet * 1.3);
+  CHECK(ambienceRms(plane, 10) > quiet * 1.2);
+  CHECK(ambienceRms(fire, 10) > quiet * 1.4);
+  // A horn is a short, loud burst above the traffic: the loudest 50 ms of a minute against the average.
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  std::vector<float> buf(static_cast<size_t>(kRate * 60) * 2);
+  a.render(calm, buf.data(), static_cast<int>(buf.size() / 2));
+  double best = 0, sum = 0;
+  for (size_t i = 0; i + 800 < buf.size(); i += 800) {
+    double s = 0;
+    for (size_t k = 0; k < 800; ++k) s += double(buf[i + k]) * buf[i + k];
+    best = std::max(best, std::sqrt(s / 800));
+    sum += s;
+  }
+  CHECK(best > std::sqrt(sum / double(buf.size())) * 1.5);
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  CHECK(ambientFor(world).kind == AmbientKind::City);
+  CHECK(ambientFor(world).siren == 0.0f && ambientFor(world).fire == 0.0f);
+  CHECK(world.interact() == 1);  // the ambulance
+  float nearest = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    nearest = std::max(nearest, ambientFor(world).siren);
+  }
+  CHECK(nearest > 0.9f);
+  world.triggerRare();
+  float blaze = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    blaze = std::max(blaze, ambientFor(world).fire);
+  }
+  CHECK(blaze == 1.0f);
+}
+
+TEST(the_fire_engine_wails_slowly_and_drives_off_without_its_siren) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  AmbientParams wail = calm;
+  wail.wail = 1;
+  CHECK(ambienceRms(wail, 10) > ambienceRms(calm, 10) * 1.4);
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.interact() == 1);  // the ambulance has the quick two-tone siren, the fire engine the slow wail
+  float siren = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    siren = std::max(siren, ambientFor(world).siren);
+    CHECK(ambientFor(world).wail == 0.0f);  // the ambulance does not wail
+  }
+  CHECK(siren > 0.9f);
+  world.triggerRare();
+  float wails = 0;
+  bool left = false, quiet = true;
+  for (int i = 0; i < 20 * 100; ++i) {
+    world.step(0.05);
+    wails = std::max(wails, ambientFor(world).wail);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "firetruck" || e->driveState != 2) continue;
+      left = true;
+      quiet &= e->tag.empty();  // leaving: the siren is off
+    }
+  }
+  CHECK(wails > 0.9f);
+  CHECK(left && quiet);
+  CHECK(ambientFor(world).wail == 0.0f);
+}
+
+TEST(a_train_beats_out_klack_klack_pairs_with_a_pause_between) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  AmbientParams p;
+  p.kind = AmbientKind::City;
+  p.train = 1;
+  std::vector<float> buf(static_cast<size_t>(kRate * 14) * 2);
+  a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+  std::vector<double> env;  // 5 ms envelope of the left ear
+  for (size_t s = 0; s < 14 * 200; ++s) {
+    double e = 0;
+    for (size_t i = 0; i < kRate / 200; ++i) e += double(buf[(s * kRate / 200 + i) * 2]) * buf[(s * kRate / 200 + i) * 2];
+    env.push_back(std::sqrt(e / (kRate / 200)));
+  }
+  double peak = 0;
+  for (size_t i = 1600; i < env.size(); ++i) peak = std::max(peak, env[i]);  // after the horn has sounded
+  std::vector<double> onsets;
+  for (size_t i = 1601; i < env.size(); ++i) {
+    if (env[i] > 0.55 * peak && env[i - 1] <= 0.55 * peak && (onsets.empty() || i / 200.0 - onsets.back() > 0.08)) onsets.push_back(i / 200.0);
+  }
+  CHECK(onsets.size() >= 10);
+  // Intervals alternate: a short one inside a pair (about 0.18 s), a long one between pairs (about 0.35 s).
+  int shortThenLong = 0, pairs = 0;
+  for (size_t i = 1; i + 1 < onsets.size(); ++i) {
+    const double d1 = onsets[i] - onsets[i - 1], d2 = onsets[i + 1] - onsets[i];
+    if (d1 > 0.12 && d1 < 0.26 && d2 > 0.28 && d2 < 0.5) ++shortThenLong;
+    if (d1 > 0.12 && d1 < 0.26) ++pairs;
+  }
+  CHECK(pairs >= 5 && shortThenLong >= 4);
+}
+
 TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
   AmbientParams calm;
   calm.kind = AmbientKind::Mountains;
@@ -2974,6 +3092,483 @@ TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports)
   r.setClockHour(3);
   r.step(0.05);
   CHECK(r.world().timeMode() == World::TimeMode::Realtime && std::fabs(r.world().phase() - 3.0 / 24.0) < 1e-6);
+}
+
+TEST(summon_calls_one_visitor_at_a_time_and_feet_rows_and_traffic_place_vehicles_on_their_side) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 7\naction: summon van\n--- population\ncar count 40\n",
+      {"name: van\nfacing: right\nhabitat: ground\nspeed: 8..8\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nVV\n",
+       "name: car\nfacing: right\nhabitat: ground\nspeed: 4..6\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nCC\nCC\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  CHECK(world.scene().action.kind == SceneDef::Action::Kind::Summon);
+  CHECK(world.interact() == 1 && world.countSprite("van") == 1);
+  CHECK(world.interact() == 0);  // one at a time
+  const int rows = world.height() - world.seabedY();
+  const int mid = (1 + (rows - 2) + 1) / 2;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "car") continue;
+    const int feet = static_cast<int>(e->y) + e->height() - 1 - world.seabedY();  // ground row of the feet
+    CHECK(feet >= 1 && feet <= rows - 2);                                         // on the road, not the sidewalks
+    CHECK(e->movingRight() ? feet >= mid : feet < mid);                           // right: lower half, left: upper
+  }
+  for (int i = 0; i < 400 && world.countSprite("van") > 0; ++i) world.step(0.05);
+  CHECK(world.countSprite("van") == 0);  // it drove through and was not replaced
+  CHECK(world.interact() == 1);          // and may be called again
+  std::string err;
+  CHECK(SceneDef::parse("name: s\naction: summon\n", err) == nullptr);  // needs a sprite
+}
+
+TEST(the_city_has_a_skyline_lower_than_the_mountains_a_street_and_a_railway) {
+  AssetPack pack = AssetPack::embedded();
+  World city(pack, pack.scene("city"), 130, 40, 3);
+  World mountains(pack, pack.scene("mountains"), 130, 40, 3);
+  CHECK(city.city() && city.buildingCount() > 10);
+  int peak = 40;
+  for (int x = 0; x < 130; ++x) peak = std::min(peak, mountains.ridgeRow(x));
+  CHECK(city.skylineTop() > peak);          // no skyscraper reaches as high as the highest peak
+  CHECK(city.skylineTop() <= city.seabedY() - static_cast<int>(city.seabedY() * 0.6));  // but they fill a good part of the sky
+  CHECK(city.railRow() >= 0 && city.railRow() < city.seabedY());
+  Frame f;
+  city.setHour(12);
+  city.render(f);
+  const Rgb road = pack.scene("city")->groundB;
+  int roadCells = 0;
+  for (int y = city.seabedY(); y < 40; ++y) {
+    for (int x = 0; x < 130; ++x) roadCells += (f.at(x, y).bg == road) ? 1 : 0;
+  }
+  CHECK(roadCells > 130);  // asphalt, not the plain ground
+  CHECK(city.height() - city.seabedY() == 4);  // the main road is a narrow street
+  World tiny(pack, pack.scene("city"), 40, 8, 3);  // too small for a skyline or a railway
+  CHECK(tiny.buildingCount() == 0 && tiny.railRow() < 0);
+  CHECK(tiny.countSprite("station") == 0);
+}
+
+TEST(the_railway_is_a_visible_viaduct_and_the_vehicles_and_planes_are_detailed_line_art) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  Frame f;
+  world.setHour(12);
+  world.render(f);
+  const int rail = world.railRow();
+  CHECK(rail > 0);
+  // A dark deck with bright rails, a concrete beam below it, pillars further down and a wire above.
+  int deck = 0, beam = 0, pillars = 0, wire = 0;
+  for (int x = 0; x < 130; ++x) {
+    deck += (f.at(x, rail).ch == U'=' && f.at(x, rail).bg.r < 80) ? 1 : 0;
+    beam += (f.at(x, rail + 1).ch == U'_' && f.at(x, rail + 1).bg.r > 100) ? 1 : 0;
+    pillars += f.at(x, rail + 3).bg.r > 100 && f.at(x, rail + 3).bg.r < 150 && f.at(x, rail + 3).ch == U' ' ? 1 : 0;
+    wire += f.at(x, rail - 5).ch == U'-' ? 1 : 0;
+  }
+  CHECK(deck > 90 && beam > 90 && pillars > 10 && wire > 40);
+  // Vehicles, trains and planes are fine line art with many different glyphs, on a darkened backing
+  // so that they stand out against any background.
+  for (const char* name : {"car_sedan", "car_hatch", "taxi", "bus", "truck", "ambulance", "firetruck", "train", "plane"}) {
+    auto sprite = pack.find(name);
+    CHECK(sprite != nullptr);
+    if (!sprite) continue;
+    std::set<char32_t> glyphs;
+    size_t cells = 0;
+    for (const auto& row : sprite->frame(false, 0).art) {
+      for (char32_t ch : row) {
+        if (ch == U' ') continue;
+        glyphs.insert(ch);
+        ++cells;
+      }
+    }
+    CHECK(glyphs.size() >= 6 && cells > 20);
+    CHECK(sprite->props().num("backing", 0) >= 0.4);
+  }
+  CHECK(pack.find("plane")->width() >= 26 && pack.find("plane")->height() >= 6);  // a fuselage with a wing above and below it
+  CHECK(pack.find("firetruck")->width() >= 16 && pack.find("train")->height() >= 4);
+}
+
+TEST(side_streets_run_off_into_the_city_and_cars_turn_into_and_out_of_them) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  CHECK(world.avenues().size() >= 1);
+  World narrow(pack, pack.scene("city"), 50, 40, 3);
+  CHECK(narrow.avenues().empty());  // no room for a side street
+  World low(pack, pack.scene("city"), 150, 14, 3);
+  CHECK(low.avenues().empty());
+  // Nothing stands in the mouth of a side street, and the street is drawn: dashes up the middle and
+  // a crossing where it meets the main street.
+  for (const auto& a : world.avenues()) {
+    for (auto& e : world.entities()) {
+      if (e->dead || e->life || e->vx != 0 || !e->grounded || e->width() < 2) continue;
+      CHECK(e->x + e->width() <= a.cx - a.halfW - 3 || e->x >= a.cx + a.halfW + 3);
+    }
+  }
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  Frame f;
+  {
+    World bare(pack, pack.scene("city"), 150, 40, 3);  // the same streets with nobody on them
+    bare.entities().clear();
+    bare.setHour(12);
+    bare.setTimeMode(World::TimeMode::Day);
+    bare.render(f);
+  }
+  const auto& a = world.avenues().front();
+  int dashes = 0, crossing = 0;
+  for (int y = world.seabedY() - a.depth; y < world.seabedY() - 1; ++y) dashes += f.at(a.cx, y).ch == U':' ? 1 : 0;
+  for (int x = a.cx - a.halfW; x <= a.cx + a.halfW; ++x) crossing += f.at(x, world.seabedY() - 1).ch == U'=' ? 1 : 0;
+  CHECK(dashes >= 1);              // the dashed middle line up the side street
+  CHECK(crossing >= a.halfW);      // and a wide zebra crossing where it meets the main street
+  CHECK(a.halfW >= 6 && a.depth <= 7);  // a broad crossing, and a street that ends quickly
+  bool turnedIn = false, up = false, down = false, out = false, back = false;
+  for (int i = 0; i < 20 * 150; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->driveState == 1) turnedIn = true;
+      if (e->driveState == 2) {
+        up = true;
+        const int mid = static_cast<int>(e->x + e->width() / 2.0);
+        bool inAvenue = false;
+        for (const auto& av : world.avenues()) inAvenue |= std::abs(mid - av.cx) <= 1;
+        CHECK(inAvenue);                               // up the side street, not across the buildings
+        CHECK(e->y + e->height() - 1 <= world.seabedY());  // out of the main road, heading up
+      }
+      if (e->driveState == 3) down = true;
+      if (e->driveState == 4) out = true;
+      if (e->driveState == 0 && e->driveSpeed > 0 && e->driveAvenue == -1 && e->vx * e->driveDir > 0) back = true;
+    }
+  }
+  CHECK(turnedIn && up && down && out && back);  // in, up, down, out, and on along the main road
+}
+
+TEST(sometimes_the_fire_gets_out_of_hand_spreads_and_burns_buildings_down_which_are_rebuilt_slowly) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 200, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  world.forceFireOutcome(true);
+  CHECK(world.triggerRare());
+  size_t mostTroubled = 0, mostRuined = 0;
+  double engineLeft = -1, lastBurn = -1, allRebuilt = -1;
+  bool cordonedWhileRuined = false, sprayedNoEffect = false;
+  for (int i = 0; i < 20 * 240; ++i) {
+    world.step(0.05);
+    const double t = i * 0.05;
+    mostTroubled = std::max(mostTroubled, world.troubledBuildings());
+    mostRuined = std::max(mostRuined, world.ruinedBuildings());
+    if (world.fireBurning()) lastBurn = t;
+    cordonedWhileRuined |= world.ruinedBuildings() > 0 && world.cordoned();
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "firetruck") continue;
+      sprayedNoEffect |= e->driveState == 1 && world.ruinedBuildings() == 0 && world.fireBurning();
+      if (e->driveState == 2 && engineLeft < 0) {
+        engineLeft = t;
+        CHECK(!world.fireBurning());  // it goes as soon as the last fire is out
+      }
+    }
+    if (allRebuilt < 0 && world.troubledBuildings() == 0 && t > 30) allRebuilt = t;
+  }
+  CHECK(mostTroubled >= 4 && mostTroubled <= 6);  // the first building and 3 to 5 more
+  CHECK(mostRuined >= 3);                         // burnt down, not just burning
+  CHECK(sprayedNoEffect && cordonedWhileRuined);
+  CHECK(engineLeft > 0 && engineLeft >= lastBurn - 0.5 && engineLeft < lastBurn + 3);  // as soon as it is out
+  CHECK(allRebuilt > lastBurn + 40);   // and it takes a long while to rebuild everything
+  CHECK(world.troubledBuildings() == 0 && !world.cordoned() && world.fireLevel() == 0);
+  // The rubble is low: a burnt-down building shows only a few rows.
+  World ruin(pack, pack.scene("city"), 200, 40, 3);
+  ruin.setTimeMode(World::TimeMode::Day);
+  ruin.forceFireOutcome(true);
+  ruin.triggerRare();
+  for (int i = 0; i < 20 * 70 && ruin.ruinedBuildings() == 0; ++i) ruin.step(0.05);
+  CHECK(ruin.ruinedBuildings() > 0);
+  for (int i = 0; i < 20 * 6; ++i) ruin.step(0.05);  // it has fallen in
+  Frame f;
+  ruin.render(f);
+  int rubble = 0;
+  for (int y = 0; y < ruin.height(); ++y) for (int x = 0; x < 200; ++x) rubble += (f.at(x, y).ch == U'#' || f.at(x, y).ch == U'%') && f.at(x, y).bg.r < 80 ? 1 : 0;
+  CHECK(rubble > 6);
+}
+
+TEST(cars_in_the_side_streets_pass_under_the_viaduct) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  bool under = false;
+  for (int i = 0; i < 20 * 150 && !under; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->driveState < 1 || e->driveState > 3) continue;
+      CHECK(e->z == 24);  // drawn after the side street and before the viaduct
+      const int rail = world.railRow();
+      if (e->y <= rail && e->y + e->height() - 1 >= rail) {  // the car is level with the deck
+        Frame f;
+        world.render(f);
+        const int x = static_cast<int>(e->x + e->width() / 2.0);
+        if (x >= 0 && x < 150) {
+          CHECK(f.at(x, rail).ch == U'=');  // the deck is in front of it
+          under = true;
+        }
+      }
+    }
+  }
+  CHECK(under);
+}
+
+TEST(a_fire_engine_parks_at_the_fire_sprays_it_and_the_site_is_cordoned_off_until_it_is_renovated) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  world.forceFireOutcome(false);
+  CHECK(world.triggerRare());
+  CHECK(!world.cordoned());
+  bool parked = false, sprayed = false, left = false, cordonWhileLeft = false, everCordoned = false, barriers = false;
+  size_t waiting = 0;
+  for (int i = 0; i < 20 * 100; ++i) {
+    std::vector<std::pair<Entity*, double>> before;  // left edges before the step
+    for (auto& e : world.entities()) before.push_back({e.get(), e->x});
+    world.step(0.05);
+    if (world.cordoned()) everCordoned = true;
+    const double lo = world.cordonCenter() - world.cordonHalfWidth(), hi = world.cordonCenter() + world.cordonHalfWidth();
+    if (world.cordoned()) barriers |= world.countSprite("barrier") >= 8;  // across road and sidewalks at both ends
+    else CHECK(world.countSprite("barrier") == 0 || !everCordoned);       // and gone when it is open again
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "firetruck") {
+        if (e->driveState == 1) {
+          parked = true;
+          CHECK(e->vx == 0 && world.cordoned());
+          CHECK(std::fabs(e->x + e->width() / 2.0 - world.cordonCenter()) < 3);  // right in front of the building
+          sprayed |= world.countSprite("water") > 0 && world.fireLevel() > 0;
+        }
+        if (e->driveState == 2) {
+          left = true;
+          cordonWhileLeft |= world.cordoned();  // the engine goes as soon as the fire is out; the site stays closed
+          CHECK(!world.fireBurning());
+        }
+        continue;
+      }
+      if (!world.cordoned() || !e->grounded || e->vx == 0 || e->driveState != 0 || e->sprite->name() == "barrier") continue;
+      for (const auto& b : before) {
+        if (b.first != e.get()) continue;
+        const bool was = b.second < hi && b.second + e->width() > lo, now = e->x < hi && e->x + e->width() > lo;
+        if (!was && now) CHECK(false);  // reached into the site
+      }
+    }
+    if (world.cordoned()) {
+      for (auto& e : world.entities()) waiting += (!e->dead && e->grounded && e->pauseLeft > 0 && e->sprite->name() != "firetruck") ? 1 : 0;
+    }
+  }
+  CHECK(parked && sprayed && left && cordonWhileLeft && everCordoned && barriers);
+  CHECK(waiting > 0);  // somebody had to wait at the edge
+  CHECK(!world.cordoned() && world.troubledBuildings() == 0 && world.countSprite("barrier") == 0);
+}
+
+TEST(cars_show_the_side_the_back_or_the_front_depending_on_how_they_face_the_camera) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  std::set<size_t> seen;
+  for (int i = 0; i < 20 * 150; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->frameCount() < 5) continue;
+      seen.insert(e->frame);
+      if (e->driveState == 0 && e->driveAvenue != -2 && e->driveAvenue < 0 && e->vx != 0) CHECK(e->frame == 0);  // side view on the road
+      if (e->driveState == 2) CHECK(e->frame == 2);                       // driving away: from behind
+      if (e->driveState == 1) CHECK(e->frame <= 2);                       // turning away: side, three-quarters, behind
+      if (e->driveState == 3) CHECK(e->frame >= 3);                       // coming: from the front
+      if (e->driveState == 4) CHECK(e->frame == 0 || e->frame == 3);      // turning out: three-quarters, then side
+    }
+  }
+  CHECK(seen.size() == 5);  // every view is used
+}
+
+TEST(traffic_peaks_in_the_morning_and_evening_rush_hours) {
+  AssetPack pack = AssetPack::embedded();
+  auto vehicles = [&](double hour) {
+    World world(pack, pack.scene("city"), 200, 40, 3);
+    world.setTimeMode(World::TimeMode::Realtime);
+    world.setHour(hour);
+    for (int i = 0; i < 20 * 150; ++i) world.step(0.05);  // long enough for the street to fill or empty
+    size_t n = 0;
+    for (auto& e : world.entities()) {
+      const std::string& name = e->sprite->name();
+      n += (!e->dead && (name == "car_sedan" || name == "car_hatch" || name == "taxi" || name == "bus" || name == "truck")) ? 1 : 0;
+    }
+    return n;
+  };
+  const size_t morning = vehicles(8), midday = vehicles(13), evening = vehicles(17.5), night = vehicles(3);
+  CHECK(morning > midday + 2 && evening > midday + 2);  // the rush hours are busier than midday
+  CHECK(midday > night);                                // and midday busier than the night
+  AssetPack p2 = AssetPack::embedded();
+  World world(p2, p2.scene("city"), 200, 40, 3);
+  world.setTimeMode(World::TimeMode::Realtime);
+  world.setHour(8);
+  CHECK(world.trafficLevel() > 0.95);
+  world.setHour(13);
+  CHECK(world.trafficLevel() < 0.5);
+  world.setHour(3);
+  CHECK(world.trafficLevel() < 0.1);
+}
+
+TEST(lettering_on_a_sprite_stays_readable_when_the_sprite_is_mirrored) {
+  std::string err;
+  auto s = Sprite::parse("name: t\n--- art\n<[TAXI]>\n--- mask\nabcdefgh\n", err);
+  CHECK(s != nullptr);
+  CHECK(s->frame(true, 0).art[0] == U"<[TAXI]>");   // not "<[IXAT]>"
+  CHECK(s->frame(true, 0).mask[0] == U"hgfedcba" || s->frame(true, 0).mask[0].size() == 8);
+}
+
+TEST(there_are_not_too_many_vehicles_and_the_front_row_leaves_gaps_with_streets_behind) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  size_t vehicles = 0;
+  for (auto& e : world.entities()) {
+    const std::string& n = e->sprite->name();
+    vehicles += (n == "car_sedan" || n == "car_hatch" || n == "taxi" || n == "bus" || n == "truck") ? 1 : 0;
+  }
+  CHECK(vehicles <= 16);
+  World wide(pack, pack.scene("city"), 220, 40, 3);
+  CHECK(!wide.glimpses().empty());  // a street seen behind a gap in the front row
+  Frame f;
+  {
+    World bare(pack, pack.scene("city"), 220, 40, 3);
+    bare.entities().clear();
+    bare.setHour(12);
+    bare.setTimeMode(World::TimeMode::Day);
+    bare.render(f);
+    for (const auto& g : bare.glimpses()) {
+      int dashes = 0;
+      for (int y = bare.seabedY() - g.depth; y < bare.seabedY(); ++y) dashes += f.at(g.cx, y).ch == U':' ? 1 : 0;
+      CHECK(dashes >= 1);  // it shows between the buildings, and is not hidden by them
+    }
+  }
+}
+
+TEST(emergency_vehicles_have_large_light_bars_that_blink_between_red_and_blue) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"ambulance", "firetruck"}) {
+    auto sprite = pack.find(name);
+    CHECK(sprite != nullptr && sprite->frameCount() == 2);
+    if (!sprite || sprite->frameCount() != 2) continue;
+    auto count = [&](size_t frame, char32_t letter) {
+      size_t n = 0;
+      for (size_t row = 0; row < 2; ++row) {  // the bar is the top two rows
+        for (char32_t m : sprite->frame(false, frame).mask[row]) n += m == letter ? 1 : 0;
+      }
+      return n;
+    };
+    CHECK(count(0, U'r') >= 6 && count(0, U'b') >= 6);  // twelve cells of light, half red and half blue
+    CHECK(count(0, U'r') == count(1, U'b') && count(0, U'b') == count(1, U'r'));  // and they swap
+  }
+  CHECK(pack.find("firetruck")->props().str("tag") == "wail" && pack.find("ambulance")->props().str("tag") == "siren");
+}
+
+TEST(the_skyline_is_varied_in_height_look_and_roof) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 200, 44, 3);
+  Frame f;
+  world.setHour(12);
+  world.render(f);
+  // The silhouette: the highest non-sky row of every column; it should differ a lot between columns.
+  const Rgb sky = pack.scene("city")->skyLow;
+  std::set<int> tops;
+  for (int x = 0; x < 200; ++x) {
+    int top = world.seabedY();
+    for (int y = 0; y < world.seabedY(); ++y) {
+      const Cell& c = f.at(x, y);
+      if (c.bg != sky && c.bg.r < 215 && c.bg.b < 200 && std::abs(c.bg.r - c.bg.b) < 90 && c.ch != U'*') { top = y; break; }
+    }
+    tops.insert(top);
+  }
+  CHECK(tops.size() >= 8);  // many different heights
+}
+
+TEST(the_cities_windows_and_street_lamps_light_up_at_night) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  world.entities().clear();  // nobody in the way of the lamps
+  auto render = [&](double hour) {
+    world.setTimeMode(World::TimeMode::Cycle);
+    world.setHour(hour);
+    Frame f;
+    world.render(f);
+    return f;
+  };
+  auto litWindows = [&](const Frame& f) {
+    int n = 0;
+    for (int y = 0; y < world.seabedY(); ++y) {
+      for (int x = 0; x < 130; ++x) n += f.at(x, y).bg == Rgb{255, 214, 120} ? 1 : 0;
+    }
+    return n;
+  };
+  auto brightness = [](Rgb c) { return c.r + c.g + c.b; };
+  const Frame day = render(12), night = render(0);
+  CHECK(litWindows(day) == 0);    // by day the windows are just glass
+  CHECK(litWindows(night) > 40);  // by night many are lit
+  // The cell under the first street lamp (column 6) against one halfway between two lamps.
+  const int y = world.seabedY() + 2;
+  CHECK(brightness(night.at(6, y).bg) > brightness(night.at(14, y).bg) + 30);  // a pool of light at night
+  CHECK(std::abs(brightness(day.at(6, y).bg) - brightness(day.at(14, y).bg)) < 20);
+}
+
+TEST(trains_run_on_the_railway_and_planes_come_in_to_land_behind_the_skyline) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  CHECK(world.countSprite("station") == 1);
+  bool train = false, plane = false;
+  for (int i = 0; i < 20000 && !(train && plane); ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "train") {
+        train = true;
+        CHECK(e->y + e->height() == world.railRow());  // on the rails
+      }
+      if (e->sprite->name() == "plane") {
+        plane = true;
+        CHECK(e->vy > 0 && e->z >= 25);  // sinking, and drawn behind the skyline
+      }
+    }
+  }
+  CHECK(train && plane);
+}
+
+TEST(a_skyscraper_burns_with_smoke_and_a_fire_engine_then_is_renovated_quickly) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  const size_t buildings = world.buildingCount();
+  CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);
+  world.forceFireOutcome(false);  // the fire engine wins
+  CHECK(world.triggerRare());
+  CHECK(!world.triggerRare());  // one at a time
+  double fiercest = 0;
+  bool smoke = false, engine = false, scaffold = false, flames = false;
+  size_t burning = 0;
+  for (int i = 0; i < 20 * 45; ++i) {  // 45 s
+    world.step(0.05);
+    fiercest = std::max(fiercest, world.fireLevel());
+    smoke |= world.countSprite("smoke") > 0;
+    engine |= world.countSprite("firetruck") > 0;
+    burning = std::max(burning, world.troubledBuildings());
+    if (i % 10 == 0 && world.fireLevel() > 0.9) {
+      Frame f;
+      world.render(f);
+      int fire = 0;  // flame glyphs in yellow-orange
+      for (int y = 0; y < world.seabedY(); ++y) {
+        for (int x = 0; x < 130; ++x) fire += (f.at(x, y).ch != U' ' && f.at(x, y).fg.r == 255 && f.at(x, y).fg.g >= 150 && f.at(x, y).fg.b <= 110) ? 1 : 0;
+      }
+      flames |= fire > 2;
+    }
+    scaffold |= world.fireLevel() == 0 && world.troubledBuildings() == 1 && i > 20 * 8;
+  }
+  CHECK(fiercest == 1.0 && smoke && engine && flames);  // it rages, smokes, the engine comes
+  CHECK(burning == 1);                                  // one building at a time
+  CHECK(scaffold);                                      // then scaffolding goes up
+  CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);  // renovated within the minute
+  CHECK(world.buildingCount() == buildings);
+  CHECK(world.triggerRare());  // and it can happen again
 }
 
 TEST(the_session_menu_shows_the_version_and_the_copyright) {

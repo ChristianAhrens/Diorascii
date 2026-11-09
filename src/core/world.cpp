@@ -8,11 +8,13 @@
 #include <cstdio>
 #include <map>
 
+#include "core/shading.h"
 #include "core/textutil.h"
 
 namespace dio {
 
 namespace {
+
 
 // ---------------------------------------------------------------- colors ---
 
@@ -60,26 +62,6 @@ Rgb maskColor(char32_t m, const Entity& e) {
   return (m >= U'a' && m <= U'z') ? scale(base, 0.6) : base;
 }
 
-/// Backdrop color at the given light: fades towards a dark blue at night and towards the haze
-/// color in a sandstorm.
-Rgb backdrop(Rgb c, const Light& l) {
-  Rgb out = c;
-  if (l.day < 1.0) out = lerp(lerp(c, {6, 9, 30}, 0.82), c, l.day);
-  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze) : out;
-}
-
-/// Color of a thing in the world at the given light: darker and bluer at night, dusty in a
-/// sandstorm (less so than the backdrop, so animals stay visible).
-Rgb shade(Rgb c, const Light& l) {
-  Rgb out = c;
-  if (l.day < 1.0) {
-    const Rgb night{static_cast<uint8_t>(c.r * 0.72), static_cast<uint8_t>(c.g * 0.78),
-                    static_cast<uint8_t>(c.b * 0.95)};
-    out = lerp(night, c, l.day);
-  }
-  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze * 0.6) : out;
-}
-
 /// True if the entity is shown at the given light.
 bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
   if (!hasCycle) return true;
@@ -122,13 +104,6 @@ void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) 
       }
     }
   }
-}
-
-/// Cheap deterministic hash of a cell position, for static noise such as stars.
-uint32_t hash2(int x, int y) {
-  uint32_t h = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
-  h = (h ^ (h >> 13)) * 1274126177u;
-  return h ^ (h >> 16);
 }
 
 /// True for the zones that are flying bands.
@@ -446,6 +421,15 @@ void soar(Entity& e, World& w, double dt) {
   e.frame = diving ? 3 : std::sin(e.age * 2.2) > 0.4 ? 2 : std::fmod(e.age * 2.0, 1.0) < 0.5 ? 0 : 1;
 }
 
+/// A fire engine: drives to the burning building, parks and sprays (see World::engineStep).
+void engine(Entity& e, World& w, double dt) { w.engineStep(e, dt); }
+
+/// A vehicle of the city: drives along the main road, may turn into a side street (see World::driveStep).
+void drive(Entity& e, World& w, double dt) { w.driveStep(e, dt); }
+
+/// A fire in the city: the skyscraper burns, then is renovated (see World::blazeStep).
+void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
+
 /// The avalanche: the powder cloud at the head of the slide (see World::slideStep).
 void avalanche(Entity& e, World& w, double dt) { w.slideStep(e, dt); }
 
@@ -458,7 +442,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
-      {"avalanche", avalanche}};
+      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -502,6 +486,7 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.life = p.str("life", "no") == "yes";
   e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
   e.strikeReach = std::max(p.num("strike-reach", 0), 0.0);
+  e.turnChance = std::clamp(p.num("turns", 0), 0.0, 1.0);
   e.strikeAround = p.str("strike-aim", "ahead") == "around";
   e.strikeLashes = std::clamp(static_cast<int>(p.num("strike-lashes", 1)), 1, 8);
   e.lashColor = p.color("lash-color", e.lashColor);
@@ -560,6 +545,10 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   }
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
   if (sc.mountains) buildTerrain();
+  if (sc.city) {
+    placeAvenues();  // first: the front row of buildings and the shops and trees keep clear of them
+    buildCity();
+  }
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
   rareTimer_ = sc.rare.empty() ? -1.0 : rng_.range(sc.rareFirst.first, sc.rareFirst.second);
   crater_.assign(static_cast<size_t>(w_), 0.0);
@@ -571,6 +560,7 @@ double World::areaFor(const std::string& habitat) const {
   if (habitat == "sky") return static_cast<double>(w_) * surfaceY_;
   if (habitat == "ground") return static_cast<double>(w_) * std::max(riverTopY_ - seabedY_, 1);
   if (habitat == "river") return static_cast<double>(w_) * riverRows_;
+  if (habitat == "rail") return railY_ >= 0 ? static_cast<double>(w_) : 0.0;
   if (habitat == "surface") return w_;
   return static_cast<double>(w_) * std::max(seabedY_ - surfaceY_ - 1, 0);  // medium
 }
@@ -591,7 +581,10 @@ void World::populate() {
     auto sprite = pack_->find(pop.sprite);
     if (!sprite) continue;
     const std::string habitat = sprite->props().str("habitat", "medium");
-    if ((habitat == "medium" && !hasMedium_) || (habitat == "river" && riverRows_ == 0)) continue;
+    if ((habitat == "medium" && !hasMedium_) || (habitat == "river" && riverRows_ == 0) ||
+        (habitat == "rail" && railY_ < 0)) {
+      continue;
+    }
     want = perCells ? areaFor(habitat) / pop.n : perCols ? w_ / pop.n : pop.n;
     int n = static_cast<int>(want);
     if (pop.kind != SceneDef::Population::Kind::Count && rng_.chance(want - n)) ++n;
@@ -613,6 +606,7 @@ double World::habitatY(const Props& p, int spriteHeight) {
   }
   const std::string habitat = p.str("habitat", "medium");
   if (habitat == "ground") return seabedY_ - spriteHeight;
+  if (habitat == "rail") return railY_ - spriteHeight;  // on the elevated railway
   if (habitat == "river") return rng_.rangeInt(riverTopY_, std::max(h_ - spriteHeight, riverTopY_));
   if (habitat == "surface") return surfaceY_ - p.num("anchor-row", spriteHeight - 1);
   if (habitat == "sky") {
@@ -644,6 +638,13 @@ void World::spawnHerd(const std::shared_ptr<const Sprite>& sprite) {
 void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event,
                           const Placement* where) {
   const Props& p = sprite->props();
+  if (p.str("habitat", "medium") == "rail" && railY_ < 0) return;  // no railway on this screen
+  // Rush-hour traffic: a vehicle only joins the street with the chance the traffic level gives, and
+  // otherwise tries again a few seconds later, so the street fills and empties with the day.
+  if (!event && p.str("rush", "no") == "yes" && scene_->dayNight && !rng_.chance(trafficLevel())) {
+    restock_.push_back({rng_.range(2.0, 7.0), [sprite](World& w) { w.spawnCreature(sprite, false); }});
+    return;
+  }
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
@@ -671,6 +672,25 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     e->y += lane;
     e->anchorY = e->y;
     if (usable > 1) e->z = static_cast<int>(zmax) - lane * static_cast<int>(zmax - zmin) / (usable - 1);
+  }
+
+  // `feet-rows: a..b` puts a ground sprite's feet on those ground rows (0 = the first; negative counts
+  // from the bottom, -1 is the last), and with `traffic: yes` the vehicles keep to their side of the
+  // road: the lower rows of the range for what moves right, the upper rows for what moves left.
+  if (p.has("feet-rows") && p.str("habitat", "medium") == "ground") {
+    const int rows = std::max(h_ - seabedY_, 1);
+    const auto [flo, fhi] = p.range("feet-rows", {0, 0});
+    auto resolve = [&](double v) { return std::clamp(static_cast<int>(v) < 0 ? rows + static_cast<int>(v) : static_cast<int>(v), 0, rows - 1); };
+    int lo = resolve(flo), hi = resolve(fhi);
+    if (lo > hi) std::swap(lo, hi);
+    if (p.str("traffic", "no") == "yes" && hi > lo) {
+      const int mid = (lo + hi + 1) / 2;
+      if (right) lo = mid;
+      else hi = mid - 1;
+    }
+    const int feet = rng_.rangeInt(lo, hi);
+    e->y = e->anchorY = seabedY_ - e->height() + feet + 1;
+    e->z = static_cast<int>(zmax) - feet * static_cast<int>(zmax - zmin) / std::max(rows - 1, 1);
   }
 
   // Members of a herd that left come back from the same side, a little apart, still facing the same way.
@@ -706,6 +726,7 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   auto sprite = pack_->find(d.sprite);
   if (!sprite) return;
   const Props& p = sprite->props();
+  if (p.str("habitat", "ground") == "rail" && railY_ < 0) return;  // no railway on this screen
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
@@ -715,6 +736,22 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   else if (d.align == "right") e->x = w_ - e->width() - d.margin;
   else if (d.align == "center") e->x = (w_ - e->width()) / 2 + d.margin;
   else e->x = rng_.rangeInt(0, std::max(w_ - e->width(), 0));
+  // Things that stand on the sidewalk make room for the side streets: they move aside, or are left out.
+  if (!avenues_.empty() && e->grounded && p.str("habitat", "ground") == "ground") {
+    for (int pass = 0; pass < 4; ++pass) {
+      for (const Avenue& a : avenues_) {
+        const double lo = a.cx - a.halfW - 3, hi = a.cx + a.halfW + 3;
+        if (e->x + e->width() <= lo || e->x >= hi) continue;
+        const double left = lo - e->width(), right = hi;
+        const bool leftOk = left >= 0, rightOk = right + e->width() <= w_;
+        if (!leftOk && !rightOk) return;
+        e->x = (!rightOk || (leftOk && e->x - left < right - e->x)) ? left : right;
+      }
+    }
+    for (const Avenue& a : avenues_) {
+      if (e->x + e->width() > a.cx - a.halfW - 3 && e->x < a.cx + a.halfW + 3) return;  // still in the way
+    }
+  }
 
   if (d.hasY) e->y = d.y >= 0 ? d.y : h_ + d.y;
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
@@ -971,6 +1008,16 @@ void World::renderTongues(Frame& out, Style style, const Light& light) const {
   }
 }
 
+double World::trafficLevel() const {
+  if (!scene_->dayNight) return 1.0;
+  const double h = phase_ * 24.0;
+  auto smooth = [](double a, double b, double x) { const double t = std::clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3 - 2 * t); };
+  const double day = 0.06 + 0.20 * smooth(5, 8, h) * (1.0 - smooth(20, 23, h));
+  const double morning = std::exp(-((h - 8.0) / 1.1) * ((h - 8.0) / 1.1));
+  const double evening = 0.95 * std::exp(-((h - 17.5) / 1.4) * ((h - 17.5) / 1.4));
+  return std::clamp(std::max({day, morning, evening}), 0.0, 1.0);
+}
+
 void World::flash(double seconds) {
   flashLen_ = seconds;
   flashElapsed_ = 0;
@@ -1028,7 +1075,20 @@ int World::interact() {
     rainLeft_ = scene_->weatherDuration;  // pressing again while it lasts keeps it going
     return 1;
   }
+  if (a.kind == SceneDef::Action::Kind::Summon) {
+    auto sprite = pack_->find(a.sprite);
+    if (!sprite || countSprite(a.sprite) > 0) return 0;  // one at a time
+    spawnCreature(sprite, false, true);  // a visitor: it leaves again and is not replaced
+    flushIncoming();
+    return 1;
+  }
   return 0;
+}
+
+size_t World::countSprite(const std::string& name) const {
+  size_t n = 0;
+  for (const auto& e : entities_) n += (!e->dead && e->sprite->name() == name) ? 1 : 0;
+  return n;
 }
 
 void World::setPhase(double phase) {
@@ -1234,12 +1294,24 @@ void World::step(double dt) {
       e->pauseLeft = std::max(0.0, e->pauseLeft - dt);
       continue;
     }
+    // A cordoned-off fire: traffic and people stop short of the site (those already in it clear off).
+    if (cordon_ && e->grounded && e->vx != 0 && e->driveState == 0 && e->sprite->name() != "firetruck") {
+      // Stops short of the barrier with its whole body: it may not reach into the site.
+      const double lo = cordonX_ - cordonHalf_, hi = cordonX_ + cordonHalf_;
+      const double next = e->x + e->vx * dt;
+      const bool inNow = e->x < hi && e->x + e->width() > lo, inNext = next < hi && next + e->width() > lo;
+      if (!inNow && inNext) {
+        e->pauseLeft = std::max(e->pauseLeft, 2 * dt);  // waits at the edge until it is lifted
+        continue;
+      }
+    }
     animate(*e, dt);
     for (BehaviorFn b : e->behaviors) b(*e, *this, dt);
     if (e->ttl > 0 && e->age > e->ttl) e->dead = true;
   }
 
   stepTongues(dt);
+  if (!avenues_.empty()) stepCity(dt);
 
   if (!scene_->events.empty() && !eventAlive) {
     if (eventTimer_ < 0) eventTimer_ = rng_.range(scene_->eventInterval.first, scene_->eventInterval.second);
@@ -1682,7 +1754,25 @@ void World::render(Frame& out, Style style) const {
   }
   std::stable_sort(order.begin(), order.end(),
                    [](const Entity* a, const Entity* b) { return a->z > b->z; });
-  for (const Entity* e : order) blit(out, *e, style, l, h_);
+  // In a city the skyline, the railway and the street come between the far things (sky, clouds,
+  // planes) and the near ones (people, cars, shops).
+  // Vehicles on the side streets (z 24) are drawn between the side streets and the viaduct, so that
+  // they pass under it.
+  constexpr int kCityZ = 25, kStreetZ = 23;
+  bool backDrawn = !scene_->city, streetDrawn = !scene_->city;
+  for (const Entity* e : order) {
+    if (!backDrawn && e->z < kCityZ) {
+      renderCityBack(out, style, l);
+      backDrawn = true;
+    }
+    if (!streetDrawn && e->z < kStreetZ) {
+      renderStreet(out, style, l);
+      streetDrawn = true;
+    }
+    blit(out, *e, style, l, h_);
+  }
+  if (!backDrawn) renderCityBack(out, style, l);
+  if (!streetDrawn) renderStreet(out, style, l);
   renderTongues(out, style, l);
   if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
     for (int y = 0; y < h_; ++y) {

@@ -11,9 +11,9 @@ namespace dio {
 class World;
 
 /// What a scene sounds like.
-enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains };
+enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains, City };
 /// Number of AmbientKind values.
-inline constexpr int kAmbientKinds = 6;
+inline constexpr int kAmbientKinds = 7;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
 /// Every field must also be handed on by the audio backends (src/audio/audio.cpp and
@@ -45,6 +45,17 @@ struct AmbientParams {
   /// Counts things crushed by the sandworm or the kraken (World::crushCount()); in the desert each
   /// one is chewed, in the aquarium it is gulped down.
   unsigned crushes = 0;
+  /// How near a siren is, from 0 to 1 (World::nearness("siren"): the ambulance, the fire engine).
+  float siren = 0;
+  /// How near a fire engine with its siren on is, from 0 to 1 (World::nearness("wail")): a slow, wailing
+  /// siren, unlike the ambulance's quick two-tone one.
+  float wail = 0;
+  /// How near a train is, from 0 to 1 (World::nearness("train")): it rumbles, clatters and sounds its horn.
+  float train = 0;
+  /// How near a plane is, from 0 to 1 (World::nearness("plane")): a faint, distant jet.
+  float plane = 0;
+  /// How fiercely a building burns, from 0 to 1 (World::fireLevel()): it crackles and roars.
+  float fire = 0;
   /// Counts animals buried by an avalanche (World::squealCount()); each one is a muffled squeal.
   unsigned squeals = 0;
 };
@@ -87,6 +98,8 @@ class Ambience {
   void desertSample(const AmbientParams& p, float out[2]);
   /// One sample of the moon's sound for both ears.
   void moonSample(const AmbientParams& p, float out[2]);
+  /// One sample of the city's sound for both ears.
+  void citySample(const AmbientParams& p, float out[2]);
   /// One sample of the mountains' sound for both ears.
   void mountainSample(const AmbientParams& p, float out[2]);
   /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
@@ -213,6 +226,39 @@ class Ambience {
   float lowSqueal_;                   ///< filter coefficient of the squeal
   unsigned seenSqueals_ = 0;
   bool squealsSynced_ = false;
+  /// A car passing by: a swell of engine noise that sinks in pitch, panned across.
+  struct Pass {
+    double start = 0, dur = 1, phase = 0;
+    float pitch = 90, pan = 0.5f, gain = 0;
+  };
+  Pass passes_[4];
+  double nextPass_ = 0;             ///< when the next car passes (0 = not planned)
+  float carLow_[2][2] = {};         ///< traffic rumble, two low-pass stages per ear
+  float carMid_[2][2] = {};         ///< the hiss of tyres: band limits per ear
+  float engineLow_[2] = {};         ///< low-pass over the passing engines, per ear
+  float lowCar_, lowCarMid_, lowCarTop_, lowEngine_;  ///< city filter coefficients
+  /// A car horn: one or two honks.
+  struct Honk {
+    double start = 0, phaseA = 0, phaseB = 0;
+    float pitch = 1, pan = 0.5f, gain = 0, long_ = 0;  ///< long_: 0 = short honks, 1 = one long blast
+    int count = 1;
+  };
+  Honk honks_[3];
+  double nextHonk_ = 0;             ///< when the next horn sounds (0 = not planned)
+  float hornLow_[2] = {};           ///< takes the edge off the horns, per ear
+  float lowHorn_;                   ///< filter coefficient of the horns
+  float sirenNear_ = 0, sirenFreq_ = 700;  ///< smoothed siren proximity, and the pitch it glides to
+  double sirenPhase_ = 0;
+  float wailNear_ = 0;              ///< smoothed proximity of the fire engine's wail
+  double wailPhase_ = 0;            ///< phase of the wail's tone
+  float trainNear_ = 0, planeNear_ = 0, fireNear_ = 0;  ///< smoothed proximity of train and plane, fire level
+  double trainClock_ = 0;           ///< seconds into the current "klack-klack" of the wheels
+  static constexpr double kKlackPeriod = 0.64;  ///< seconds from one "klack-klack" to the next
+  double trainHornStart_ = -10, trainHornPhase_ = 0;  ///< the train's horn
+  bool trainHorned_ = false;        ///< this train has sounded its horn already
+  float trainLow_[2][2] = {}, trainBand_[2][2] = {};  ///< rumble and clatter filters, per ear
+  float fireLow_[2][2] = {}, fireCrack_[2] = {}, planeLow_[2][2] = {};  ///< fire and jet filters
+  float lowTrain_, lowTrainBand_, lowKlack_, lowFire_, lowJet_;  ///< their coefficients
   unsigned seenImpacts_ = 0;
   bool impactsSynced_ = false;
 };

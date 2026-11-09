@@ -26,6 +26,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-19 | M | Audio parameters are copied by hand in two backends | open |
 | F-20 | L | Real-time mode: time zones, DST, tvOS | open |
 | F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
+| F-22 | M | The City scene was never seen or heard by the assistant; page and screenshots lack it | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -207,3 +208,16 @@ Adds to F-08: `strike-mode`, tongues and tentacles, `airless` and the crush/sque
 mechanisms but `ambientFor` still names `"sandworm"` and the synths are per scene. Fixed-seed tests
 depend on the order of the population list: adding the larger clouds changed the random stream and the
 goat test had to move to seed 7. Prefer asserting on properties over particular seeds when touching them.
+
+## F-22 The City scene (M)
+Added 2026-11-09 in six commits (shading header, summon action and lanes, scene, fire, sound, docs). Judged only from
+text renders, tests and measured levels. **Never seen in a real terminal:** the skyline colors and window
+patterns, the street and lamp pools, how people and cars sit on their lanes (cars of different speeds in one lane
+overlap), the shop and park layout at other widths (decor uses fixed margins and may overlap on narrow screens),
+the sprite masks (written quickly; check with `--gallery`), the flames, scaffolding and crane, the train and the
+planes. **Never heard:** traffic, horns, siren, train, jet and fire (levels were tuned relative to the other
+scenes: calm about 0.035 RMS, events up to about 0.08). Decisions to confirm: buildings are generated to
+the terminal height (`skyline: 0.32..0.62` of the sky), the ambulance and fire engine are both `tag: siren`, the
+fire is an invisible `blaze` sprite so that the rare scheduler is reused, headlights are not lit at night, the railway
+needs a sky of at least 16 rows. Revised the same day after the owner's first look: flatter street (4 rows), taller and more varied buildings, a visible viaduct, vehicles and planes drawn with solid block glyphs (`█`; they vanish in no style, unlike solid mask blocks in Mono). Side streets with turning cars were added after that (cars keep their side-view sprite in the avenue; the trapezoid is a flat painting, not perspective). The plane was redrawn after the owner's pictogram (30x7: far wing above, near wing below, blue-tipped fin, window row, blue belly stripe; the first 4-row version with wings was judged unrecognisable), rush-hour traffic, a longer fire-engine stay with barriers and blue water jets were added at the owner's request (the look of all of it is unseen by the assistant). The vehicles, train and planes were redrawn as line art with a darkened backing after the solid blocks read as blobs (owner); the fire engine now fights the fire and cordons the site (owner). After the owner's screenshot the side streets were redone (broad crossing, short, behind the building rows, glimpses through gaps), cars got five views (side, rear and front, with three-quarters in between), the traffic and crowds were thinned and the planes made slim (20x3); still unseen by the assistant in a terminal. The train sound was reworked to a klack-klack rhythm (only the rhythm is tested, not how it sounds). Fires sometimes get out of hand (30%): 3-5 more buildings burn down and are rebuilt after about 1.5 minutes (look and timing unseen by the assistant; the rubble drawing is a first draft). Not done: the landing page (`pages/`), its videos and the README screenshots do not
+show the City yet; no new icon art. Adds to F-08: the city is data plus about 350 lines of C++ in `city.cpp`.

@@ -75,6 +75,7 @@ levels were only measured. Accumulated preferences from the forest iterations:
   an event sound is now a series of soft bites with no sharp start; both worm sounds were too loud at
   first and were halved; keep event sounds well below the storm sounds. Fundamentals below about
   100 Hz are inaudible on small speakers: put the energy in harmonics above 150 Hz.
+- Train (2026-11-09, owner): the first version ticked (high band-passed clicks); a metro is two low, woody knocks (noise below ~1.3 kHz plus a ~100 Hz thump) every 0.64 s, 0.21 s apart, over a quiet rumble. A test finds the onsets in the output and checks the short-long rhythm.
 - A new `AmbientParams` field must also be copied in the audio backends (`audio.cpp`,
   `audio_apple.mm`). Forgetting it passes every test and is silent in the real program.
 

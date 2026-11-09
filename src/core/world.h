@@ -156,6 +156,20 @@ struct Entity {
   double hopPeriod = 1.2, hopHeight = 1.5;
   /// Marked for removal at the end of the step.
   bool dead = false;
+  /// Vehicles of the city: 0 on the main road, 1 turning into a side street, 2 driving up it, 3 coming
+  /// down it, 4 turning out onto the main road (see World::driveStep()).
+  int driveState = 0;
+  /// Which side street it turns into: -2 not decided yet, -1 none, else its index.
+  int driveAvenue = -2;
+  /// Chance (0 to 1) that the vehicle turns off into the next side street it comes to.
+  double turnChance = 0;
+  /// Direction (1 right, -1 left) and speed it takes up on the main road after coming down a side street.
+  int driveDir = 1;
+  double driveSpeed = 0;
+  /// Bookkeeping of a turn: time spent, where it started, and the row it is heading for.
+  double driveT = 0, driveX0 = 0, driveY0 = 0;
+  /// Draw order it takes up again on the main road.
+  int driveZ = 10;
   /// Behaviors, run in order every step.
   std::vector<BehaviorFn> behaviors;
   /// Called after removal, for example to spawn a replacement.
@@ -220,6 +234,8 @@ class World {
   size_t entityCount() const { return entities_.size(); }
   /// All entities, for behaviors and tests.
   std::vector<std::unique_ptr<Entity>>& entities() { return entities_; }
+  /// Number of live entities made from the sprite with this name.
+  size_t countSprite(const std::string& name) const;
   /// Number of live entities carrying the tag.
   size_t countTag(const std::string& tag) const;
   /// Prey caught by predators so far.
@@ -236,6 +252,54 @@ class World {
   int riverRows() const { return riverRows_; }
   /// True while a rain shower (or a snowstorm) is going on.
   bool raining() const { return rainLeft_ > 0; }
+  /// A side street that runs off into the city from the main street.
+  struct Avenue {
+    int cx = 0;       ///< center column
+    int halfW = 6;    ///< half the width of the road at the main street
+    int depth = 6;    ///< rows it runs up before it disappears behind the buildings
+  };
+  /// The side streets of the city.
+  const std::vector<Avenue>& avenues() const { return avenues_; }
+  /// Side streets seen between the buildings of the front row (cars do not drive there).
+  const std::vector<Avenue>& glimpses() const { return glimpses_; }
+  /// Moves a vehicle that may turn off the main road into a side street, or comes down one.
+  /// Called by the `drive` behavior.
+  void driveStep(Entity& e, double dt);
+  /// True for a city scene.
+  bool city() const { return scene_->city; }
+  /// Number of skyscrapers in the skyline (0 in other scenes and where the screen is too small).
+  size_t buildingCount() const { return city_.size(); }
+  /// How fiercely a skyscraper burns right now, from 0 (no fire) to 1; sound follows it.
+  double fireLevel() const { return fireLevel_; }
+  /// Number of skyscrapers that are on fire or being renovated.
+  size_t troubledBuildings() const;
+  /// How busy the traffic is at this time of day, from about 0.06 at night to 1 in the morning (8:00)
+  /// and evening (17:30) rush hours; 1 in scenes without a day and night cycle.
+  double trafficLevel() const;
+  /// Half the width in columns of the site that is cordoned off around a fire (at least 18, more
+  /// when the fire has spread).
+  double cordonHalfWidth() const { return cordonHalf_; }
+  /// For tests: decides whether the next fire is beaten by the fire engine (false) or gets out of
+  /// hand, spreads to 3-5 more buildings and burns them to the ground (true).
+  void forceFireOutcome(bool fails) { forcedOutcome_ = fails ? 1 : 0; }
+  /// Number of skyscrapers that have burnt down and are still ruins.
+  size_t ruinedBuildings() const;
+  /// True while some skyscraper is on fire.
+  bool fireBurning() const;
+  /// True while a fire is being fought: other vehicles and people keep away from the site.
+  bool cordoned() const { return cordon_; }
+  /// Column in the middle of the cordoned site.
+  double cordonCenter() const { return cordonX_; }
+  /// Drives a fire engine to the burning skyscraper, parks it in front, sprays water until the fire is
+  /// out and drives on. Called by the `engine` behavior.
+  void engineStep(Entity& e, double dt);
+  /// Runs the fire that the `blaze` behavior stands for: sets a skyscraper alight, calls the fire
+  /// engine, lets it burn out and renovates the building.
+  void blazeStep(Entity& e, double dt);
+  /// Row of the elevated railway, or -1 where there is none.
+  int railRow() const { return railY_; }
+  /// Top row (smallest) of the tallest skyscraper including its antenna, or the height if none.
+  int skylineTop() const;
   /// True for a mountain scene.
   bool mountains() const { return scene_->mountains; }
   /// First row of the mountain at column x, where the sky ends (seabedY() without mountains).
@@ -374,6 +438,41 @@ class World {
   void noteFoodEaten() { ++foodEaten_; }
 
  private:
+  /// A skyscraper of the city's skyline.
+  struct Building {
+    int x = 0, w = 8, h = 10;  ///< left column, width, and height in rows above the street
+    int layer = 0;             ///< 0 = far (pale), 1 = middle, 2 = front
+    int facade = 0;            ///< 0 grid of windows, 1 glass curtain wall, 2 ribbons, 3 small windows
+    int roof = 0;              ///< 0 flat, 1 antenna, 2 stepped, 3 crown, 4 water tower, 5 helipad
+    int antenna = 0;           ///< rows of antenna above the roof
+    int tint = 0;              ///< index of its wall color
+    uint32_t seed = 0;         ///< decides its window pattern
+    /// Normal, on fire (a catastrophe), burnt down to a ruin, or wrapped in scaffolding while it is
+    /// renovated (or rebuilt, if it burnt down).
+    enum class State { Normal, Burning, Ruin, Scaffold };
+    State state = State::Normal;
+    bool ruined = false;       ///< it burnt down and is being rebuilt from the rubble
+    double timer = 0;          ///< seconds in the state
+  };
+  /// Chooses where the side streets go, clear of the shops and trees on the sidewalk.
+  void placeAvenues();
+  /// Lets cars come down the side streets now and then.
+  void stepCity(double dt);
+  /// Builds the skyline and decides where the railway runs.
+  void buildCity();
+  /// Gives a skyscraper new looks and a new height (the first time, and after a renovation).
+  void rollBuilding(Building& b);
+  /// Draws the skyline and the side streets (behind everything that moves in the city, except what
+  /// drives up and down the side streets).
+  void renderCityBack(Frame& out, Style style, const Light& light) const;
+  /// Draws the skyscrapers.
+  void renderSkyline(Frame& out, Style style, const Light& light) const;
+  /// Paints a side street over what is behind it: a road that narrows a little as it runs back
+  /// between two sidewalk edges, hazier the further it goes.
+  void paintAvenue(Frame& out, const Avenue& a, Style style, const Light& light) const;
+  /// Draws the viaduct, the street rows and the street lamps (in front of the side streets and what
+  /// drives on them, behind the shops and the traffic of the main street).
+  void renderStreet(Frame& out, Style style, const Light& light) const;
   /// Spawns the scene population and decorations.
   void populate();
   /// Builds the mountain range: the skyline, the tree line and the snow line of every column.
@@ -432,6 +531,34 @@ class World {
   int horizonY_ = 0;
   /// Rows (feet) a zone spans: index by Zone.
   int zoneLo_[10] = {}, zoneHi_[10] = {};
+  /// The skyline of a city scene, back layer first, and the row of the railway (-1 = none).
+  std::vector<Building> city_;
+  int railY_ = -1;
+  /// The side streets, and the seconds until the next car comes down each of them.
+  std::vector<Avenue> avenues_;
+  std::vector<double> avenueTimer_;
+  /// Other side streets, seen between the buildings of the front row (cars do not drive there).
+  std::vector<Avenue> glimpses_;
+  /// The fire under way: which building, and how fiercely it burns.
+  /// The buildings of the fire under way (the first is where it started), whether it gets out of hand,
+  /// how many more buildings it will spread to, and when it spreads next.
+  std::vector<int> blazeBuildings_;
+  int blazeOrigin_ = -1;
+  bool blazeFails_ = false;
+  int forcedOutcome_ = -1;  ///< -1 left to chance, 0 beaten, 1 out of hand (tests)
+  int spreadLeft_ = 0;
+  double blazeClock_ = 0, nextSpread_ = 0, cordonHalf_ = 18.0;
+  /// Moves the cordon to cover every building of the fire.
+  void fitCordon();
+  /// The site of the fire is cordoned off from the arrival of the fire engine until the building is
+  /// renovated: its middle column, and seconds of water still being sprayed.
+  bool cordon_ = false;
+  double cordonX_ = 0, sprayTime_ = 0;
+  /// Puts barriers at both ends of the cordoned site, and takes them away again.
+  void raiseBarriers();
+  void liftBarriers();
+  double fireLevel_ = 0;
+  double smokePuffs_ = 0;
   /// Fading trace of the avalanche over every cell, row by row.
   std::vector<float> scar_;
   /// The avalanche under way: where it starts, where it is heading, how far down it has come.

@@ -1,0 +1,35 @@
+name: ambulance
+facing: right
+habitat: ground
+feet-rows: 1..-2
+traffic: yes
+fps: 5
+tag: siren
+depth: 8..12
+backing: 0.55
+behaviors: swim
+speed: 14..18
+--- art
+      ▄▄▄▄▄▄
+     .██████.
+  ____|_____|_____
+ |  [+]  AMBU  |_\_
+'-(O)-------(O)---'
+--- mask
+      rrrbbb
+     WrrrbbbW
+  WWWWWWWWWWWWWWWW
+ W  WrW  rrrr  WWWW
+WWKKKWWWWWWWKKKWWWW
+--- art
+      ▄▄▄▄▄▄
+     .██████.
+  ____|_____|_____
+ |  [+]  AMBU  |_\_
+'-(O)-------(O)---'
+--- mask
+      bbbrrr
+     WbbbrrrW
+  WWWWWWWWWWWWWWWW
+ W  WrW  rrrr  WWWW
+WWKKKWWWWWWWKKKWWWW

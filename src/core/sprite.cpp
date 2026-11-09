@@ -167,14 +167,27 @@ void Sprite::finish() {
     for (auto& l : f.mask) l.resize(w_, U' ');
   }
   mirrored_.clear();
+  auto letter = [](char32_t c) { return (c >= U'A' && c <= U'Z') || (c >= U'a' && c <= U'z'); };
   for (const auto& f : frames_) {
     SpriteFrame m;
-    for (const auto& l : f.art) {
-      std::u32string r(l.rbegin(), l.rend());
+    for (size_t row = 0; row < f.art.size(); ++row) {
+      std::u32string r(f.art[row].rbegin(), f.art[row].rend());
+      std::u32string k(f.mask[row].rbegin(), f.mask[row].rend());
       for (auto& c : r) c = mirrorChar(c);
+      // Lettering (FIRE, TAXI) must stay readable: a run of letters is put back in reading order.
+      for (size_t i = 0; i < r.size();) {
+        if (!letter(r[i])) { ++i; continue; }
+        size_t j = i;
+        while (j < r.size() && letter(r[j])) ++j;
+        if (j - i >= 3) {
+          std::reverse(r.begin() + static_cast<std::ptrdiff_t>(i), r.begin() + static_cast<std::ptrdiff_t>(j));
+          std::reverse(k.begin() + static_cast<std::ptrdiff_t>(i), k.begin() + static_cast<std::ptrdiff_t>(j));
+        }
+        i = j;
+      }
       m.art.push_back(std::move(r));
+      m.mask.push_back(std::move(k));
     }
-    for (const auto& l : f.mask) m.mask.emplace_back(l.rbegin(), l.rend());
     mirrored_.push_back(std::move(m));
   }
 }

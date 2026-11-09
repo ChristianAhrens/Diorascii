@@ -1,0 +1,62 @@
+name: taxi
+facing: right
+habitat: ground
+feet-rows: 1..-2
+traffic: yes
+rush: yes
+pool: any
+backing: 0.55
+behaviors: drive
+turns: 0.3
+speed: 5..8
+depth: 8..12
+--- art
+    [TAXI]
+ _/ [][][] \_
+#|▄▄▄▄▄▄▄▄▄▄▄▄|*
+'-(O)----(O)-'
+--- mask
+    cWWWWc
+ yy cccccc yy
+ryyyyyyyyyyyyyyy
+yyKKKyyyyKKKyy
+--- art
+    [TAXI]
+   /[____]|\_
+  |#▄▄▄▄▄▄|▄▄|
+  '(O)--(O)-'
+--- mask
+    cWWWWc
+   ycyyyycyyy
+  yryyyyyyyyyy
+  yKKKyyKKKyy
+--- art
+    [TAXI]
+   /[_____]\
+  |#▄▄▄▄▄▄#|
+  '(O)---(O)'
+--- mask
+    cWWWWc
+   ycyyyyycy
+  yryyyyyyry
+  yKKKyyyKKKy
+--- art
+   [TAXI]
+  _/|[____]\
+ |▄▄|▄▄▄▄▄*|
+   '-(O)--(O)'
+--- mask
+   cWWWWc
+  yyycyyyycy
+ yyyyyyyyyyy
+   yyKKKyyKKKy
+--- art
+    [TAXI]
+   /[=====]\
+  |*▄▄▄▄▄▄*|
+  '(O)---(O)'
+--- mask
+    cWWWWc
+   ycccccccy
+  yyyyyyyyyy
+  yKKKyyyKKKy

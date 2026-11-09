@@ -1,0 +1,16 @@
+name: station
+facing: right
+habitat: rail
+speed: 0..0
+depth: 21
+solid: yes
+--- art
+  ____________________
+ /====================\
+|  STATION     [] [] |
+|_____________________|
+--- mask
+  llllllllllllllllllll
+ lbbbbbbbbbbbbbbbbbbbl
+ l  oooooo     cc cc l
+lllllllllllllllllllllll

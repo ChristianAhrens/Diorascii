@@ -2906,7 +2906,6 @@ TEST(the_fire_engine_wails_slowly_and_drives_off_without_its_siren) {
   CHECK(ambientFor(world).wail == 0.0f);
 }
 
-
 TEST(a_train_beats_out_klack_klack_pairs_with_a_pause_between) {
   constexpr int kRate = 8000;
   Ambience a(kRate, 4);
@@ -3463,7 +3462,6 @@ TEST(emergency_vehicles_have_large_light_bars_that_blink_between_red_and_blue) {
   }
   CHECK(pack.find("firetruck")->props().str("tag") == "wail" && pack.find("ambulance")->props().str("tag") == "siren");
 }
-
 
 TEST(the_skyline_is_varied_in_height_look_and_roof) {
   AssetPack pack = AssetPack::embedded();

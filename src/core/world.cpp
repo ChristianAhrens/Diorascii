@@ -914,7 +914,8 @@ Light World::light() const {
   l.sun = t * t * (3 - 2 * t);
   l.day = l.sun * (1 - 0.5 * overcast_);
   l.glow = std::exp(-(height / 0.22) * (height / 0.22)) * (1 - 0.6 * overcast_);
-  l.stars = 1 - l.sun;
+  l.stars = (1 - l.sun) * (1 - 0.9 * overcast_);  // clouds and dust hide the stars
+  l.hazeColor = scale(scene_->overcastTint, 0.15 + 0.85 * l.sun);  // a night storm stays dark
   return l;
 }
 

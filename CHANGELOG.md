@@ -14,6 +14,8 @@ the GitHub release (see "Releasing" in the README).
 ### Changed
 
 ### Fixed
+- Fixed the stars staying bright in a night-time sandstorm (or rain): clouds and dust now hide them
+- Fixed the desert sandstorm lighting the scene up at night: the dust now takes on the time of day
 
 ## [1.2.0] 2026-11-08
 ### Added

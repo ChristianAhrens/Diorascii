@@ -154,7 +154,7 @@ struct Light {
   double glow = 0;   ///< strength of the red horizon glow at sunrise and sunset
   double stars = 1;  ///< how visible the stars are
   double haze = 0;   ///< how far things are tinted towards hazeColor (a sandstorm), 0 to 1
-  Rgb hazeColor{0, 0, 0};  ///< color of the haze
+  Rgb hazeColor{0, 0, 0};  ///< color of the haze, already dimmed to the time of day
 };
 
 /// The simulation: owns entities, advances them in fixed-size steps and renders

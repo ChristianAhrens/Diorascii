@@ -1144,6 +1144,31 @@ TEST(a_sandstorm_blows_one_way_across_the_whole_scene_and_tints_the_light) {
   CHECK(world.light().haze < 0.01);
 }
 
+TEST(a_sandstorm_at_night_stays_dark) {
+  AssetPack pack = stormPack("day-night: yes\n");
+  auto bright = [&](double hour) {
+    World world(pack, pack.scene("t"), 80, 30, 1);
+    world.setHour(hour);
+    world.interact();
+    for (int i = 0; i < 80; ++i) world.step(0.05);
+    Frame f;
+    world.render(f);
+    const Rgb c = f.at(5, 0).bg;
+    return c.r + c.g + c.b;
+  };
+  CHECK(bright(0) < bright(12) / 2);  // the storm at midnight is far darker than at noon
+}
+
+TEST(a_storm_at_night_hides_the_stars) {
+  AssetPack pack = stormPack("day-night: yes\nstars: 3\n");
+  World world(pack, pack.scene("t"), 80, 30, 1);
+  world.setHour(0);
+  CHECK(world.light().stars == 1);  // a clear night
+  world.interact();
+  for (int i = 0; i < 60; ++i) world.step(0.05);
+  CHECK(world.light().stars < 0.25);  // the dust hides them
+}
+
 TEST(a_tornado_crosses_the_scene_whirls_up_sand_and_darkens_the_sky) {
   AssetPack pack = stormPack();
   uint64_t seed = 0;

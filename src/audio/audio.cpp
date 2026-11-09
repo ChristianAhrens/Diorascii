@@ -29,7 +29,7 @@ struct AudioOutput::Impl {
   std::atomic<float> night{0}, rain{0}, volume{1};
   std::atomic<unsigned> flashes{0};
   std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
-  std::atomic<float> worm{0};
+  std::atomic<float> worm{0}, siren{0}, wail{0}, train{0}, plane{0}, fire{0};
   std::atomic<unsigned> nibbles{0}, impacts{0}, crushes{0}, squeals{0};
 };
 
@@ -49,6 +49,11 @@ void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   p.nibbles = impl->nibbles.load();
   p.impacts = impl->impacts.load();
   p.worm = impl->worm.load();
+  p.siren = impl->siren.load();
+  p.wail = impl->wail.load();
+  p.train = impl->train.load();
+  p.plane = impl->plane.load();
+  p.fire = impl->fire.load();
   p.crushes = impl->crushes.load();
   p.squeals = impl->squeals.load();
   impl->ambience.render(p, static_cast<float*>(output), static_cast<int>(frames));
@@ -108,6 +113,11 @@ void AudioOutput::setParams(const AmbientParams& p) {
   impl_->nibbles = p.nibbles;
   impl_->impacts = p.impacts;
   impl_->worm = p.worm;
+  impl_->siren = p.siren;
+  impl_->wail = p.wail;
+  impl_->train = p.train;
+  impl_->plane = p.plane;
+  impl_->fire = p.fire;
   impl_->crushes = p.crushes;
   impl_->squeals = p.squeals;
 }

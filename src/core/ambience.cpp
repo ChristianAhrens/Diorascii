@@ -71,6 +71,7 @@ AmbientParams ambientFor(const World& world) {
   else if (name == "desert") p.kind = AmbientKind::Desert;
   else if (name == "moon") p.kind = AmbientKind::Moon;
   else if (name == "mountains") p.kind = AmbientKind::Mountains;
+  else if (name == "city") p.kind = AmbientKind::City;
   const Light l = world.light();
   p.night = world.scene().airless ? 0.0f : static_cast<float>(std::clamp(1.0 - l.sun * 2.0, 0.0, 1.0));  // the moon sounds the same all day
   p.rain = world.raining() ? 1.0f : 0.0f;
@@ -82,6 +83,11 @@ AmbientParams ambientFor(const World& world) {
   p.impacts = world.impactCount();
   p.avalanche = static_cast<float>(world.avalancheLevel());
   p.worm = static_cast<float>(world.nearness("sandworm"));
+  p.siren = static_cast<float>(world.nearness("siren"));
+  p.wail = static_cast<float>(world.nearness("wail"));
+  p.train = static_cast<float>(world.nearness("train"));
+  p.plane = static_cast<float>(world.nearness("plane"));
+  p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
   return p;
@@ -99,6 +105,16 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowRoar_ = coeff(1.0f / 420.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
   lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
+  lowCar_ = coeff(1.0f / 230.0f / 6.28f);
+  lowCarMid_ = coeff(1.0f / 1500.0f / 6.28f);
+  lowCarTop_ = coeff(1.0f / 450.0f / 6.28f);
+  lowEngine_ = coeff(1.0f / 480.0f / 6.28f);
+  lowHorn_ = coeff(1.0f / 2600.0f / 6.28f);
+  lowTrain_ = coeff(1.0f / 130.0f / 6.28f);
+  lowTrainBand_ = coeff(1.0f / 1300.0f / 6.28f);
+  lowKlack_ = coeff(1.0f / 200.0f / 6.28f);
+  lowFire_ = coeff(1.0f / 420.0f / 6.28f);
+  lowJet_ = coeff(1.0f / 700.0f / 6.28f);
   lowSqueal_ = coeff(1.0f / 1800.0f / 6.28f);
   lowSlide_ = coeff(1.0f / 95.0f / 6.28f);
   lowSlideMid_ = coeff(1.0f / 900.0f / 6.28f);
@@ -377,6 +393,133 @@ void Ambience::desertSample(const AmbientParams& p, float out[2]) {
   }
 }
 
+void Ambience::citySample(const AmbientParams& p, float out[2]) {
+  (void)p;
+  const double dt = 1.0 / rate_;
+  const float day = 1.0f - 0.55f * night_;
+  // Cars passing by now and then: an engine swell that sinks in pitch as it goes, panned across.
+  if (nextPass_ == 0) nextPass_ = t_ + rng_.range(0.3, 1.5);
+  if (t_ >= nextPass_) {
+    Pass& v = *std::min_element(std::begin(passes_), std::end(passes_), [](const Pass& a, const Pass& b) { return a.start < b.start; });
+    v.start = t_;
+    v.dur = rng_.range(1.4, 2.6);
+    v.pitch = static_cast<float>(rng_.range(80, 125));
+    v.pan = static_cast<float>(rng_.range(0.1, 0.9));
+    v.gain = static_cast<float>(rng_.range(0.5, 1.0));
+    nextPass_ = t_ + rng_.range(1.2, 4.5) * (1.0 + 2.0 * night_);
+  }
+  float engine[2] = {0, 0};
+  for (Pass& v : passes_) {
+    const double tau = t_ - v.start;
+    if (v.gain <= 0 || tau < 0 || tau > v.dur) continue;
+    const double u = tau / v.dur;
+    const double env = std::sin(3.14159265 * u) * std::sin(3.14159265 * u);
+    v.phase += kTwoPi * v.pitch * (1.3 - 0.55 * u) * dt;  // the pitch sinks as it drives away
+    const float tone = static_cast<float>(std::tanh(1.8 * std::sin(v.phase) + 0.8 * std::sin(2 * v.phase + 0.4) + 0.5 * std::sin(3 * v.phase)) * env * v.gain);
+    engine[0] += tone * std::cos(v.pan * 1.5708f);
+    engine[1] += tone * std::sin(v.pan * 1.5708f);
+  }
+  // Horns: now and then one or two honks, rarer at night.
+  if (nextHonk_ == 0) nextHonk_ = t_ + rng_.range(2.0, 6.0);
+  if (t_ >= nextHonk_) {
+    Honk& h = *std::min_element(std::begin(honks_), std::end(honks_), [](const Honk& a, const Honk& b) { return a.start < b.start; });
+    h.start = t_;
+    h.pitch = static_cast<float>(rng_.range(0.88, 1.18));
+    h.pan = static_cast<float>(rng_.range(0.1, 0.9));
+    h.gain = static_cast<float>(rng_.range(0.6, 1.0));
+    h.long_ = rng_.chance(0.2) ? 1.0f : 0.0f;
+    h.count = (h.long_ > 0 || rng_.chance(0.55)) ? 1 : 2;
+    nextHonk_ = t_ + rng_.range(5.0, 16.0) * (1.0 + 2.5 * night_);
+  }
+  float horn[2] = {0, 0};
+  for (Honk& h : honks_) {
+    const double tau = t_ - h.start;
+    if (h.gain <= 0 || tau < 0 || tau > 1.2) continue;
+    const double len = h.long_ > 0 ? 0.8 : 0.22, gap = 0.34;
+    for (int k = 0; k < h.count; ++k) {
+      const double lt = tau - k * gap;
+      if (lt < 0 || lt > len) continue;
+      const double env = std::min(1.0, lt / 0.01) * std::min(1.0, (len - lt) / 0.04);
+      h.phaseA += kTwoPi * 420.0 * h.pitch * dt;
+      h.phaseB += kTwoPi * 530.0 * h.pitch * dt;  // two notes a third apart, like a car horn
+      const float s = static_cast<float>((std::tanh(3.0 * std::sin(h.phaseA)) + std::tanh(3.0 * std::sin(h.phaseB))) * 0.5 * env * h.gain);
+      horn[0] += s * std::cos(h.pan * 1.5708f);
+      horn[1] += s * std::sin(h.pan * 1.5708f);
+    }
+  }
+  // The siren of an ambulance or a fire engine: two notes, the pitch gliding between them.
+  const float sirenTarget = std::fmod(t_, 1.0) < 0.5 ? 960.0f : 770.0f;
+  sirenFreq_ += (sirenTarget - sirenFreq_) * 0.0025f * 48000.0f / static_cast<float>(rate_);
+  sirenPhase_ += kTwoPi * sirenFreq_ * dt;
+  const float siren = static_cast<float>(std::tanh(1.6 * std::sin(sirenPhase_)) * 0.8 + 0.25 * std::sin(2 * sirenPhase_)) * sirenNear_ * std::sqrt(sirenNear_);
+  // The fire engine's siren is a slow wail: the pitch rises and falls smoothly over about three and a
+  // half seconds ("uuhh-wwiiww-hhuu"), with a little vibrato and a vowel-like roundness, where the
+  // ambulance's is a quick alternation of two notes.
+  const double sweep = 0.5 - 0.5 * std::cos(kTwoPi * t_ / 3.5);
+  const double wailHz = (430.0 + 520.0 * sweep) * (1.0 + 0.012 * std::sin(kTwoPi * 5.5 * t_));
+  wailPhase_ += kTwoPi * wailHz * dt;
+  const float wail = static_cast<float>(std::tanh(1.3 * std::sin(wailPhase_)) * 0.75 + 0.3 * std::sin(2 * wailPhase_ + 0.7) +
+                                        0.15 * std::sin(0.5 * wailPhase_)) *
+                     wailNear_ * std::sqrt(wailNear_) * (0.8f + 0.2f * static_cast<float>(sweep));
+  // A train: a deep rumble and the clatter of wheels over the rail joints, and a horn as it arrives.
+  // The wheels beat out "klack-klack ... klack-klack": two quick knocks, then a pause, over and over
+  // (the two axles of a bogie crossing a rail joint). Each knock is a woody thunk, not a click.
+  trainClock_ += dt * (1.0 + 0.2 * trainNear_);
+  if (trainClock_ >= kKlackPeriod) trainClock_ -= kKlackPeriod;
+  float clack = 0, thunk = 0;
+  for (int k = 0; k < 2; ++k) {
+    const double tau = trainClock_ - k * 0.21;
+    if (tau < 0 || tau > 0.4) continue;
+    const double rise = 1.0 - std::exp(-tau / 0.004);
+    const double gain = k ? 0.8 : 1.0;  // the second knock is a little softer
+    clack += static_cast<float>(gain * rise * std::exp(-tau / 0.05));
+    thunk += static_cast<float>(gain * rise * std::exp(-tau / 0.09) * std::sin(kTwoPi * (k ? 105.0 : 92.0) * tau));
+  }
+  if (trainNear_ > 0.2f && !trainHorned_) { trainHorned_ = true; trainHornStart_ = t_; }
+  if (trainNear_ < 0.03f) trainHorned_ = false;
+  float trainHorn = 0;
+  const double th = t_ - trainHornStart_;
+  if (th >= 0 && th < 1.4) {
+    const double env = std::min(1.0, th / 0.05) * std::min(1.0, (1.4 - th) / 0.25);
+    trainHornPhase_ += kTwoPi * 311.0 * dt;
+    trainHorn = static_cast<float>(env * (std::tanh(2.0 * std::sin(trainHornPhase_)) + 0.7 * std::tanh(2.0 * std::sin(trainHornPhase_ * 1.26)))) * 0.5f;
+  }
+  // A fire: a low roar and crackling.
+  const bool crackle = rng_.uniform() < std::min(1.0, 90.0 * fireNear_ * dt * 4.0);
+  const float spark = crackle ? static_cast<float>(rng_.range(0.4, 1.0)) * (rng_.chance(0.5) ? 1.0f : -1.0f) : 0.0f;
+
+  for (int ch = 0; ch < 2; ++ch) {
+    const float n = noise(rng_) * noiseScale_;
+    carLow_[ch][0] += (n - carLow_[ch][0]) * lowCar_;
+    carLow_[ch][1] += (carLow_[ch][0] - carLow_[ch][1]) * lowCar_;
+    const float n2 = noise(rng_) * noiseScale_;
+    carMid_[ch][0] += (n2 - carMid_[ch][0]) * lowCarMid_;
+    carMid_[ch][1] += (n2 - carMid_[ch][1]) * lowCarTop_;
+    engineLow_[ch] += (engine[ch] - engineLow_[ch]) * lowEngine_;
+    const float n3 = noise(rng_) * noiseScale_;
+    trainLow_[ch][0] += (n3 - trainLow_[ch][0]) * lowTrain_;
+    trainLow_[ch][1] += (trainLow_[ch][0] - trainLow_[ch][1]) * lowTrain_;
+    const float n4 = noise(rng_) * noiseScale_;
+    trainBand_[ch][0] += (n4 - trainBand_[ch][0]) * lowTrainBand_;
+    trainBand_[ch][1] += (n4 - trainBand_[ch][1]) * lowKlack_;
+    const float n5 = noise(rng_) * noiseScale_;
+    fireLow_[ch][0] += (n5 - fireLow_[ch][0]) * lowFire_;
+    fireLow_[ch][1] += (fireLow_[ch][0] - fireLow_[ch][1]) * lowFire_;
+    fireCrack_[ch] += (spark * (ch ? -1.0f : 1.0f) - fireCrack_[ch]) * 0.35f;
+    const float n6 = noise(rng_) * noiseScale_;
+    planeLow_[ch][0] += (n6 - planeLow_[ch][0]) * lowJet_;
+    planeLow_[ch][1] += (planeLow_[ch][0] - planeLow_[ch][1]) * lowJet_;
+    hornLow_[ch] += ((ch ? horn[1] : horn[0]) - hornLow_[ch]) * lowHorn_;
+    const float hornOut = hornLow_[ch];
+    const float traffic = carLow_[ch][1] * 9.0f * 0.075f * day + (carMid_[ch][0] - carMid_[ch][1]) * 0.45f * 0.04f * day;
+    out[ch] = traffic + engineLow_[ch] * 0.16f * day + hornOut * 0.045f + siren * 0.15f + wail * 0.13f +
+              trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ +
+              ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ + trainHorn * 0.05f * trainNear_ +
+              fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + fireCrack_[ch] * 0.3f * fireNear_ +
+              planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+  }
+}
+
 void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
   (void)p;
   const double dt = 1.0 / rate_;
@@ -502,6 +645,11 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(whale_, p.kind == AmbientKind::Aquarium ? p.whale : 0.0f, kStorm);
     approach(avalanche_, p.kind == AmbientKind::Mountains ? p.avalanche : 0.0f, kSlide);
     approach(wormNear_, p.kind == AmbientKind::Desert ? p.worm : 0.0f, kStorm);
+    approach(sirenNear_, p.kind == AmbientKind::City ? p.siren : 0.0f, kRain);
+    approach(wailNear_, p.kind == AmbientKind::City ? p.wail : 0.0f, kRain);
+    approach(trainNear_, p.kind == AmbientKind::City ? p.train : 0.0f, kRain);
+    approach(planeNear_, p.kind == AmbientKind::City ? p.plane : 0.0f, kStorm);
+    approach(fireNear_, p.kind == AmbientKind::City ? p.fire : 0.0f, kRain);
     approach(volume_, p.volume, kVolume);
 
     // Gusts: slow swells plus a random drift, so they never repeat evenly.
@@ -610,11 +758,12 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenImpacts_ = p.impacts;
     }
-    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0};
+    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0}, city[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
     if (mix_[static_cast<int>(AmbientKind::Moon)] > 1e-3f) moonSample(p, moon);
     if (mix_[static_cast<int>(AmbientKind::Mountains)] > 1e-3f) mountainSample(p, mountains);
+    if (mix_[static_cast<int>(AmbientKind::City)] > 1e-3f) citySample(p, city);
 
     for (int ch = 0; ch < 2; ++ch) {
       // Wind: noise through two low-pass stages (no hiss, no crackle).
@@ -648,7 +797,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                            aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
                            desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
                            moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +
-                           mountains[ch] * mix_[static_cast<int>(AmbientKind::Mountains)];
+                           mountains[ch] * mix_[static_cast<int>(AmbientKind::Mountains)] +
+                           city[ch] * mix_[static_cast<int>(AmbientKind::City)];
       out[2 * i + ch] = softClip(sample) * volume_ * 0.8f;
     }
   }

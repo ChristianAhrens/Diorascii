@@ -2820,6 +2820,124 @@ TEST(the_kraken_gulps_down_what_its_tentacles_catch_with_a_muffled_sound) {
   CHECK(rmsAfterChange(forest, forestGulp, 0.6) < rmsAfterChange(forest, forest, 0.6) * 1.2);  // only the sea hears it
 }
 
+TEST(the_city_hums_with_traffic_honks_now_and_then_and_has_sirens_trains_planes_and_fire) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  const double quiet = ambienceRms(calm, 20);
+  CHECK(quiet > 0.01);
+  AmbientParams night = calm;
+  night.night = 1;
+  CHECK(ambienceRms(night, 20) < quiet * 0.8);  // fewer cars at night
+  AmbientParams siren = calm, train = calm, plane = calm, fire = calm;
+  siren.siren = 1;
+  train.train = 1;
+  plane.plane = 1;
+  fire.fire = 1;
+  CHECK(ambienceRms(siren, 10) > quiet * 1.4);
+  CHECK(ambienceRms(train, 10) > quiet * 1.3);
+  CHECK(ambienceRms(plane, 10) > quiet * 1.2);
+  CHECK(ambienceRms(fire, 10) > quiet * 1.4);
+  // A horn is a short, loud burst above the traffic: the loudest 50 ms of a minute against the average.
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  std::vector<float> buf(static_cast<size_t>(kRate * 60) * 2);
+  a.render(calm, buf.data(), static_cast<int>(buf.size() / 2));
+  double best = 0, sum = 0;
+  for (size_t i = 0; i + 800 < buf.size(); i += 800) {
+    double s = 0;
+    for (size_t k = 0; k < 800; ++k) s += double(buf[i + k]) * buf[i + k];
+    best = std::max(best, std::sqrt(s / 800));
+    sum += s;
+  }
+  CHECK(best > std::sqrt(sum / double(buf.size())) * 1.5);
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  CHECK(ambientFor(world).kind == AmbientKind::City);
+  CHECK(ambientFor(world).siren == 0.0f && ambientFor(world).fire == 0.0f);
+  CHECK(world.interact() == 1);  // the ambulance
+  float nearest = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    nearest = std::max(nearest, ambientFor(world).siren);
+  }
+  CHECK(nearest > 0.9f);
+  world.triggerRare();
+  float blaze = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    blaze = std::max(blaze, ambientFor(world).fire);
+  }
+  CHECK(blaze == 1.0f);
+}
+
+TEST(the_fire_engine_wails_slowly_and_drives_off_without_its_siren) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  AmbientParams wail = calm;
+  wail.wail = 1;
+  CHECK(ambienceRms(wail, 10) > ambienceRms(calm, 10) * 1.4);
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.interact() == 1);  // the ambulance has the quick two-tone siren, the fire engine the slow wail
+  float siren = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    siren = std::max(siren, ambientFor(world).siren);
+    CHECK(ambientFor(world).wail == 0.0f);  // the ambulance does not wail
+  }
+  CHECK(siren > 0.9f);
+  world.triggerRare();
+  float wails = 0;
+  bool left = false, quiet = true;
+  for (int i = 0; i < 20 * 100; ++i) {
+    world.step(0.05);
+    wails = std::max(wails, ambientFor(world).wail);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "firetruck" || e->driveState != 2) continue;
+      left = true;
+      quiet &= e->tag.empty();  // leaving: the siren is off
+    }
+  }
+  CHECK(wails > 0.9f);
+  CHECK(left && quiet);
+  CHECK(ambientFor(world).wail == 0.0f);
+}
+
+
+TEST(a_train_beats_out_klack_klack_pairs_with_a_pause_between) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  AmbientParams p;
+  p.kind = AmbientKind::City;
+  p.train = 1;
+  std::vector<float> buf(static_cast<size_t>(kRate * 14) * 2);
+  a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+  std::vector<double> env;  // 5 ms envelope of the left ear
+  for (size_t s = 0; s < 14 * 200; ++s) {
+    double e = 0;
+    for (size_t i = 0; i < kRate / 200; ++i) e += double(buf[(s * kRate / 200 + i) * 2]) * buf[(s * kRate / 200 + i) * 2];
+    env.push_back(std::sqrt(e / (kRate / 200)));
+  }
+  double peak = 0;
+  for (size_t i = 1600; i < env.size(); ++i) peak = std::max(peak, env[i]);  // after the horn has sounded
+  std::vector<double> onsets;
+  for (size_t i = 1601; i < env.size(); ++i) {
+    if (env[i] > 0.55 * peak && env[i - 1] <= 0.55 * peak && (onsets.empty() || i / 200.0 - onsets.back() > 0.08)) onsets.push_back(i / 200.0);
+  }
+  CHECK(onsets.size() >= 10);
+  // Intervals alternate: a short one inside a pair (about 0.18 s), a long one between pairs (about 0.35 s).
+  int shortThenLong = 0, pairs = 0;
+  for (size_t i = 1; i + 1 < onsets.size(); ++i) {
+    const double d1 = onsets[i] - onsets[i - 1], d2 = onsets[i + 1] - onsets[i];
+    if (d1 > 0.12 && d1 < 0.26 && d2 > 0.28 && d2 < 0.5) ++shortThenLong;
+    if (d1 > 0.12 && d1 < 0.26) ++pairs;
+  }
+  CHECK(pairs >= 5 && shortThenLong >= 4);
+}
+
 TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
   AmbientParams calm;
   calm.kind = AmbientKind::Mountains;

@@ -1597,9 +1597,10 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
     for (auto& e : world.entities()) lifeBefore += e->life;
     CHECK(!animals || lifeBefore > 10);
     CHECK(world.triggerRare());
-    // A storm or a kraken strikes everything at once; an alien takes things as it passes them, so
-    // wait for it to have crossed the scene.
-    const bool sweeps = std::string(c.scene) == "moon" || std::string(c.scene) == "desert";
+    // A storm strikes everything at once; an alien, a worm and a kraken take things as they come
+    // to them, so wait for them to have crossed the scene.
+    const bool lashes = std::string(c.scene) == "desert" || std::string(c.scene) == "aquarium";
+    const bool sweeps = std::string(c.scene) == "moon" || lashes;
     const size_t flyers = countSprite(world, "vulture") + countSprite(world, "bat");
     bool struck = false;
     for (int i = 0; i < 3000 && !(struck && (!sweeps || countSprite(world, c.attacker) == 0)); ++i) {
@@ -1611,7 +1612,7 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
     if (sweeps) {
       CHECK(world.killedCount() >= 1 && countSprite(world, "flag") == 0);  // the flag stands still: always taken
     }
-    if (std::string(c.scene) == "desert") {  // the worm swallows what is in its way, one by one, and not what flies
+    if (lashes) {  // the worm and the kraken take what they reach, one by one (the worm not what flies)
       CHECK(world.crushCount() == world.killedCount() && world.crushCount() > 3);
       CHECK(countSprite(world, "vulture") + countSprite(world, "bat") == flyers);
     } else if (animals) {
@@ -2771,7 +2772,7 @@ TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed
     for (int y = 0; y < f.height(); ++y) {
       for (int x = 0; x < f.width(); ++x) {
         const Cell& c = f.at(x, y);  // the tip: a red '@' (the storm dims the colors a little)
-        tongue |= c.ch == U'@' && c.fg.r > c.fg.g * 2 && c.fg.r > c.fg.b * 2;
+        tongue |= c.ch == U'@' && c.fg.r > c.fg.g * 1.6 && c.fg.r > c.fg.b * 1.3;
       }
     }
     drawn |= tongue;
@@ -2787,6 +2788,19 @@ TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed
     moon.step(0.05);
     CHECK(moon.tongueCount() == 0);
   }
+}
+
+TEST(the_kraken_gulps_down_what_its_tentacles_catch_with_a_muffled_sound) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Aquarium;
+  AmbientParams gulp = calm;
+  gulp.crushes = 1;
+  CHECK(rmsAfterChange(calm, gulp, 0.6) > rmsAfterChange(calm, calm, 0.6) * 1.5);
+  AmbientParams forest = calm;
+  forest.kind = AmbientKind::Forest;
+  AmbientParams forestGulp = forest;
+  forestGulp.crushes = 1;
+  CHECK(rmsAfterChange(forest, forestGulp, 0.6) < rmsAfterChange(forest, forest, 0.6) * 1.2);  // only the sea hears it
 }
 
 TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {

@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a muffled gulping sound for every animal the kraken's tentacles catch
 - Added a tongue to the sandworm: it lashes out at the animals on the ground ahead of it, and each animal is crushed the moment the tongue reaches it. Catastrophe sprites can set `strike-reach` for this
 - Added sound to the sandworm: a very deep, trumpeting bellow every few seconds while it crosses the desert, and a low, grumbling chewing for every animal it crushes
 - Added a muffled squeal for every animal an avalanche buries
@@ -17,6 +18,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed the kraken to lash out with up to three tentacles at the animals around it while it moves through the sea, instead of killing every animal at once when it is in the middle of the screen; animals out of its reach survive. Catastrophe sprites can set `strike-aim`, `strike-lashes` and `lash-color` for this
 - Changed the sandworm's bellow and chewing to be about half as loud
 - Changed the sandworm to swallow the animals on the ground one by one as its head reaches them (`strike-mode: devour`), instead of all at once when it is in the middle of the screen; flying animals are spared
 - Changed the alien on the moon to destroy the flagpole and the rover at the moment it passes each of them, instead of both at once when it is in the middle of the screen. The new `strike-mode` header (`centre`, `sweep`, `devour`) of catastrophe sprites selects this; the forest's thunderstorm keeps striking in the middle

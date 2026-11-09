@@ -98,6 +98,7 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
   lowRoar_ = coeff(1.0f / 420.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
+  lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
   lowSqueal_ = coeff(1.0f / 1800.0f / 6.28f);
   lowSlide_ = coeff(1.0f / 95.0f / 6.28f);
   lowSlideMid_ = coeff(1.0f / 900.0f / 6.28f);
@@ -430,6 +431,24 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
 
   // The growl of something huge (the kraken) as it nears.
   const float growl = storm_ * storm_ * 0.5f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
+  // What its tentacles catch is gulped down: two soft glugs, each a tone that sinks in pitch and
+  // wobbles a little, heard through the water (low-passed, so it is muffled).
+  float gulp = 0;
+  for (const Gulp& g : gulps_) {
+    const double tau = t_ - g.start;
+    if (!g.used || tau < 0 || tau > 0.5) continue;
+    for (int k = 0; k < 2; ++k) {  // the second glug follows a moment later, lower
+      const double lt = tau - k * 0.2;
+      if (lt < 0 || lt > 0.17) continue;
+      const double u = lt / 0.17;
+      const double hz = g.pitch * (k ? 0.8 : 1.0) * (250.0 - 120.0 * u) * (1.0 + 0.06 * std::sin(kTwoPi * 24.0 * lt));
+      gulpPhase_ += kTwoPi * hz * dt;
+      const double env = std::sin(3.14159265 * u);
+      gulp += static_cast<float>(env * env * (std::sin(gulpPhase_) + 0.45 * std::sin(2 * gulpPhase_ + 0.5)));
+    }
+  }
+  gulpLow_[0] += (gulp - gulpLow_[0]) * lowGulp_;
+  gulpLow_[1] += (gulpLow_[0] - gulpLow_[1]) * lowGulp_;
 
   for (int ch = 0; ch < 2; ++ch) {
     const float n = noise(rng_) * noiseScale_;
@@ -442,7 +461,7 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
     deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
     const float panSong = ch ? std::sin(song_.pan * 1.5708f) : std::cos(song_.pan * 1.5708f);
     out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell +
-              deepLow_[ch][1] * 20.0f * growl + bub[ch] + song * panSong * 1.4f;
+              deepLow_[ch][1] * 20.0f * growl + bub[ch] + song * panSong * 1.4f + gulpLow_[1] * 0.45f;
   }
 }
 
@@ -554,6 +573,15 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
             c.force[b] = static_cast<float>(rng_.range(0.55, 1.0)) * (1.0f - 0.5f * b / c.bites);
             at += static_cast<float>(rng_.range(0.07, 0.13));
           }
+        }
+      }
+      if (p.crushes > seenCrushes_ && p.kind == AmbientKind::Aquarium) {
+        for (unsigned n = 0; n < std::min(p.crushes - seenCrushes_, 3u); ++n) {
+          Gulp& g = *std::min_element(std::begin(gulps_), std::end(gulps_),
+                                      [](const Gulp& a, const Gulp& b) { return a.start < b.start; });
+          g.start = t_ + n * rng_.range(0.08, 0.3);
+          g.pitch = static_cast<float>(rng_.range(0.85, 1.2));
+          g.used = true;
         }
       }
       seenCrushes_ = p.crushes;

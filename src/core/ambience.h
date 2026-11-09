@@ -42,7 +42,8 @@ struct AmbientParams {
   float avalanche = 0;
   /// How near a sandworm is, from 0 to 1 (World::nearness("sandworm")): it bellows as it crosses.
   float worm = 0;
-  /// Counts things crushed by the sandworm (World::crushCount()); each one is a low crunch.
+  /// Counts things crushed by the sandworm or the kraken (World::crushCount()); in the desert each
+  /// one is chewed, in the aquarium it is gulped down.
   unsigned crushes = 0;
   /// Counts animals buried by an avalanche (World::squealCount()); each one is a muffled squeal.
   unsigned squeals = 0;
@@ -189,6 +190,16 @@ class Ambience {
   Crunch crunches_[4];
   float crunchLow_[2][2] = {};        ///< two low-pass stages of the crunch, per ear
   float lowCrunch_;                   ///< filter coefficient of the crunch
+  /// A muffled gulp of the kraken swallowing something: two glugs in a row.
+  struct Gulp {
+    double start = 0;
+    float pitch = 1;
+    bool used = false;
+  };
+  Gulp gulps_[4];
+  double gulpPhase_ = 0;              ///< phase of the glug's tone
+  float gulpLow_[2] = {};             ///< two low-pass stages that muffle the gulp
+  float lowGulp_;                     ///< filter coefficient of the gulp
   unsigned seenCrushes_ = 0;
   bool crushesSynced_ = false;
   /// A muffled squeal of an animal in an avalanche.

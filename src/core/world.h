@@ -73,8 +73,15 @@ struct Entity {
   bool hasLastPoint = false;
   /// What a catastrophe wipes out when it strikes: "life", or a list of sprite names.
   std::string wipes = "life";
-  /// Devour: how many cells ahead of its front it lashes a tongue out at a victim (0 = no tongue).
+  /// Devour: how many cells it reaches with a tongue or tentacle at a victim (0 = none).
   double strikeReach = 0;
+  /// False: it lashes out only at walking things ahead of its front (the sandworm's tongue). True:
+  /// at any living thing around it, from anywhere along its underside (the kraken's tentacles).
+  bool strikeAround = false;
+  /// How many tongues or tentacles may be out at once.
+  int strikeLashes = 1;
+  /// Color of its tongue or tentacles.
+  Rgb lashColor{232, 96, 128};
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -274,14 +281,14 @@ class World {
   /// @return how many were taken
   size_t wipeOut(const std::string& kills, const std::string& effect, const Entity* except,
                  double from = -1e9, double to = 1e9, bool groundedOnly = false);
-  /// A devouring attacker (see Entity::strikeReach) lashes its tongue out at the nearest victim
-  /// ahead of it: the tongue reaches it, the victim is crushed, the tongue draws back. One tongue
-  /// at a time.
-  /// @return true if a tongue was started
+  /// A devouring attacker (see Entity::strikeReach) lashes a tongue or tentacle out at the nearest
+  /// victim in reach: it reaches the victim, which is crushed, and draws back. Up to
+  /// Entity::strikeLashes at once, each at another victim.
+  /// @return true if one was started
   bool lash(const Entity& attacker);
-  /// Number of tongues currently lashing out.
+  /// Number of tongues and tentacles currently lashing out.
   size_t tongueCount() const { return tongues_.size(); }
-  /// How many things devouring catastrophes (the sandworm) have crushed so far; sound follows each.
+  /// How many things devouring catastrophes (the sandworm, the kraken) have crushed so far; sound follows each.
   unsigned crushCount() const { return crushes_; }
   /// Counts things crushed by a devouring catastrophe. Called by the `catastrophe` behavior.
   void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
@@ -441,7 +448,9 @@ class World {
     double age = 0;
     double reach = 0.28, dur = 0.6;     ///< seconds to reach the victim, and to be done altogether
     bool hit = false;                   ///< the victim has been crushed
-    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the mouth and the tip, in cells
+    double ox = 0;                      ///< where it starts, in columns from the attacker's left edge
+    Rgb color{232, 96, 128};
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the base and the tip, in cells
     std::string effect;                 ///< shown on the victim when it is crushed
     std::string wipes;
   };

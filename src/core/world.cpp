@@ -327,6 +327,7 @@ void catastrophe(Entity& e, World& w, double dt) {
     const double now = point();
     const bool devour = e.strikeMode == Entity::StrikeMode::Devour;  // it only takes what is in its way
     if (devour && e.strikeReach > 0) w.lash(e);
+    if (e.strikeAround) return;  // it takes only what its tentacles reach
     // A cell of leeway each way, so that a victim walking towards it is not stepped over.
     const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
                                    devour);
@@ -501,6 +502,9 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.life = p.str("life", "no") == "yes";
   e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
   e.strikeReach = std::max(p.num("strike-reach", 0), 0.0);
+  e.strikeAround = p.str("strike-aim", "ahead") == "around";
+  e.strikeLashes = std::clamp(static_cast<int>(p.num("strike-lashes", 1)), 1, 8);
+  e.lashColor = p.color("lash-color", e.lashColor);
   e.wipes = p.str("wipes", "life");
   const std::string mode = p.str("strike-mode", "centre");
   e.strikeMode = mode == "sweep" ? Entity::StrikeMode::Sweep : mode == "devour" ? Entity::StrikeMode::Devour : Entity::StrikeMode::Centre;
@@ -861,20 +865,37 @@ Entity* World::findEntity(uint64_t id) {
 }
 
 bool World::lash(const Entity& a) {
-  if (!tongues_.empty() || time_ < nextLash_ || a.strikeReach <= 0) return false;
+  if (time_ < nextLash_ || a.strikeReach <= 0) return false;
+  int out = 0;
+  for (const Tongue& t : tongues_) out += t.attacker == a.id ? 1 : 0;
+  if (out >= a.strikeLashes) return false;
   const bool all = a.wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(a.wipes);
   const int dir = a.vx > 0 ? 1 : -1;
   const double front = dir > 0 ? a.x + a.width() : a.x;
+  const double baseY = a.y + a.mouthRow;
   const Entity* best = nullptr;
-  double bestAhead = 0;
+  double bestD = 0, bestX = 0;
   for (auto& other : entities_) {
     const Entity& o = *other;
-    if (&o == &a || o.dead || o.isRare || !o.grounded || isAsleep(o)) continue;
+    if (&o == &a || o.dead || o.isRare || isAsleep(o)) continue;
     if (!(all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end())) continue;
-    const double ahead = (o.x + o.width() / 2.0 - front) * dir;
-    if (ahead < 1.5 || ahead > a.strikeReach) continue;  // what is at its very mouth is simply swallowed
-    if (!best || ahead < bestAhead) { best = &o; bestAhead = ahead; }
+    bool taken = false;  // another tongue is already after it
+    for (const Tongue& t : tongues_) taken |= t.victim == o.id;
+    if (taken) continue;
+    const double cx = o.x + o.width() / 2.0, cy = o.y + o.height() / 2.0;
+    double d, baseX;
+    if (a.strikeAround) {  // from the underside of the body, straight above the victim if it can
+      baseX = std::clamp(cx, a.x + 3.0, std::max(a.x + a.width() - 4.0, a.x + 3.0));
+      d = std::sqrt((cx - baseX) * (cx - baseX) + 4.0 * (cy - baseY) * (cy - baseY));
+    } else {  // from the mouth, at walking things ahead of it
+      if (!o.grounded) continue;
+      baseX = dir > 0 ? a.x + a.width() - 1.0 : a.x;
+      d = (cx - front) * dir;
+      if (d < 1.5) continue;  // what is at its very mouth is simply swallowed
+    }
+    if (d > a.strikeReach) continue;
+    if (!best || d < bestD) { best = &o; bestD = d; bestX = baseX; }
   }
   if (!best) return false;
   Tongue t;
@@ -882,11 +903,14 @@ bool World::lash(const Entity& a) {
   t.victim = best->id;
   t.effect = a.strikeEffect;
   t.wipes = a.wipes;
-  t.x0 = front - dir;
-  t.y0 = a.y + a.mouthRow;
+  t.color = a.lashColor;
+  t.ox = bestX - a.x;
+  t.x0 = bestX;
+  t.y0 = baseY;
   t.x1 = best->x + best->width() / 2.0;
   t.y1 = best->y + best->height() / 2.0;
   tongues_.push_back(t);
+  nextLash_ = time_ + (a.strikeLashes > 1 ? 0.2 : 0.0);  // tentacles lash one after another
   return true;
 }
 
@@ -899,7 +923,7 @@ void World::stepTongues(double dt) {
       continue;
     }
     t.age += dt;
-    t.x0 = (a->vx > 0 ? a->x + a->width() : a->x) - (a->vx > 0 ? 1 : 0);
+    t.x0 = a->x + t.ox;
     t.y0 = a->y + a->mouthRow;
     Entity* v = findEntity(t.victim);
     const bool alive = v && !v->dead;
@@ -915,7 +939,7 @@ void World::stepTongues(double dt) {
       }
     }
     if (t.age >= t.dur) {
-      nextLash_ = time_ + 0.25;
+      if (a->strikeLashes == 1) nextLash_ = time_ + 0.25;  // a single tongue rests a moment
       tongues_.erase(tongues_.begin() + static_cast<std::ptrdiff_t>(i));
     }
   }
@@ -941,7 +965,7 @@ void World::renderTongues(Frame& out, Style style, const Light& light) const {
       Cell& cell = out.at(cx, cy);
       const bool tip = u + 1.0 / samples > p;
       cell.ch = tip ? U'@' : glyph;
-      cell.fg = shade(tip ? Rgb{196, 48, 84} : Rgb{232, 96, 128}, light);
+      cell.fg = shade(tip ? scale(t.color, 0.8) : t.color, light);
       cell.defaultFg = style == Style::Mono;
     }
   }

@@ -171,7 +171,7 @@ to summon it right away instead of waiting.
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
 | Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **swallows every animal** |
 | Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
-| Moon | Alien | an alien walks across the surface and **destroys the rover and the flagpole**, and nothing else |
+| Moon | Alien | an alien walks across the surface and **destroys the flagpole and the rover each at the moment it passes them** (a rover that drives out of its way is spared), and nothing else |
 
 The avalanche is the exception to "crosses the scene": it comes down a mountainside (see above) and
 buries what is in its path instead of everything alive.
@@ -258,7 +258,7 @@ Header keys:
 | `wind: yes` | a particle that is blown across the whole scene (sand), for a weather action |
 | `life: yes` | a living thing: catastrophes that wipe out life take it |
 | `row: 2` | pinned to this row (a negative number counts from the bottom) |
-| `wipes`, `strike-at`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out, how far across the scene (0 to 1) it strikes, and the sprite shown on every victim |
+| `wipes`, `strike-mode`, `strike-at`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out; how it strikes (`centre`, the default: everything at once when it is `strike-at` (0 to 1) of the way across the scene, like a storm; `sweep`: each victim as the middle of the attacker passes it; `devour`: each victim in its way as its front reaches it); and the sprite shown on every victim |
 | `strike-sprite`, `screen-flash`, `storm-rain` | a bolt that hits the ground under the attacker, seconds of screen flashing (two quick flashes), and seconds of rain it brings (needs a weather action in the scene) |
 | `tag: gloom` | the scene darkens (like heavy weather) while this sprite is around |
 | `backing: 0.5` | darkens the background behind the sprite's glyphs by this share (full style only), so light sprites stay readable on bright and dark backdrops |

@@ -14,6 +14,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed the alien on the moon to destroy the flagpole and the rover at the moment it passes each of them, instead of both at once when it is in the middle of the screen. The new `strike-mode` header (`centre`, `sweep`, `devour`) of catastrophe sprites selects this; the forest's thunderstorm keeps striking in the middle
 - Changed the clouds of the forest, desert and mountains to come in two sizes: half of them are now a larger variant (about 1.5 times)
 - Changed the sun and the moon in the aquarium, forest, desert and mountains from 5x3 to 8x5 cells, so that they read as discs. In a low sky (the aquarium's) they are cut off at the top instead of at the bottom
 

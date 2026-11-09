@@ -315,8 +315,27 @@ void emitDust(Entity& e, World& w, double dt) {
 /// A catastrophe: crosses the scene and, when it is the given way across, strikes once: it wipes
 /// out what its header names (`wipes:`), may light up the screen, bring rain and drop a bolt.
 void catastrophe(Entity& e, World& w, double dt) {
+  // Where it strikes: the middle (sweep), or the front, the side it moves towards (devour).
+  auto point = [&] { return e.strikeMode == Entity::StrikeMode::Devour ? (e.vx > 0 ? e.x + e.width() : e.x) : e.x + e.width() / 2.0; };
+  if (e.strikeMode != Entity::StrikeMode::Centre && !e.hasLastPoint) {
+    e.lastPoint = point();
+    e.hasLastPoint = true;
+  }
   e.x += e.vx * dt;
   if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  if (e.strikeMode != Entity::StrikeMode::Centre) {  // takes each victim as it passes it
+    const double now = point();
+    const bool devour = e.strikeMode == Entity::StrikeMode::Devour;  // it only takes what is in its way
+    // A cell of leeway each way, so that a victim walking towards it is not stepped over.
+    const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
+                                   devour ? std::make_pair(e.y, e.y + e.height()) : std::make_pair(0.0, 0.0));
+    e.lastPoint = now;
+    if (taken > 0) {
+      if (e.flashTime > 0) w.flash(e.flashTime);
+      e.struck = true;
+    }
+    return;
+  }
   if (e.struck) return;
   const double middle = e.x + e.width() / 2.0;
   const double progress = e.vx > 0 ? middle / w.width() : 1.0 - middle / w.width();
@@ -480,6 +499,8 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.life = p.str("life", "no") == "yes";
   e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
   e.wipes = p.str("wipes", "life");
+  const std::string mode = p.str("strike-mode", "centre");
+  e.strikeMode = mode == "sweep" ? Entity::StrikeMode::Sweep : mode == "devour" ? Entity::StrikeMode::Devour : Entity::StrikeMode::Centre;
   e.strikeEffect = p.str("strike-effect", "flash");
   e.strikeSprite = p.str("strike-sprite");
   e.flashTime = p.num("screen-flash", 0);
@@ -809,11 +830,16 @@ void World::claim(Entity& o, const std::string& effect) {
   ++killed_;
 }
 
-void World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except) {
+size_t World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except, double from,
+                      double to, std::pair<double, double> rows) {
+  const size_t before = killed_;
   const bool all = wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(wipes);
   auto take = [&](Entity& o) {
     if (&o == except || o.isRare) return;
+    const double middle = o.x + o.width() / 2.0;
+    if (middle < from || middle > to) return;
+    if (rows.second > rows.first && (o.y + o.height() <= rows.first || o.y >= rows.second)) return;
     const bool victim = all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end();
     if (victim) claim(o, effect);
   };
@@ -821,6 +847,7 @@ void World::wipeOut(const std::string& wipes, const std::string& effect, const E
   // Entities spawned during this very step have not joined the world yet, but are just as dead.
   // (spawnEffect above adds to the same list, and effects are never victims.)
   for (size_t i = 0; i < incoming_.size(); ++i) take(*incoming_[i]);
+  return killed_ - before;
 }
 
 void World::flash(double seconds) {

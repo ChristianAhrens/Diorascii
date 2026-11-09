@@ -1597,13 +1597,19 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
     for (auto& e : world.entities()) lifeBefore += e->life;
     CHECK(!animals || lifeBefore > 10);
     CHECK(world.triggerRare());
+    // A storm or a kraken strikes everything at once; an alien takes things as it passes them, so
+    // wait for it to have crossed the scene.
+    const bool sweeps = std::string(c.scene) == "moon";
     bool struck = false;
-    for (int i = 0; i < 3000 && !struck; ++i) {
+    for (int i = 0; i < 3000 && !(struck && (!sweeps || countSprite(world, c.attacker) == 0)); ++i) {
       world.step(0.05);
       struck = world.killedCount() > 0;
     }
     CHECK(struck);
     if (!struck) continue;
+    if (sweeps) {
+      CHECK(world.killedCount() >= 1 && countSprite(world, "flag") == 0);  // the flag stands still: always taken
+    }
     if (animals) {
       size_t aliveLife = 0;
       for (auto& e : world.entities()) aliveLife += (e->life && !e->dead);
@@ -1611,9 +1617,8 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
       CHECK(world.killedCount() > 0);
       CHECK(world.restockPending() >= lifeBefore);  // and every one of them comes back later, one by one
     } else {
-      CHECK(countSprite(world, "rover") == 0 && countSprite(world, "flag") == 0);  // the alien's targets
-      CHECK(world.killedCount() == 2 + 0 || world.killedCount() >= 1);
-      CHECK(countSprite(world, "alien") == 1);
+      CHECK(countSprite(world, "flag") == 0);  // the alien's stationary target
+      CHECK(countSprite(world, "alien") == 0);  // it has crossed and gone
     }
     if (std::string(c.scene) == "forest") {
       CHECK(world.flashing());                    // lightning
@@ -1628,11 +1633,61 @@ TEST(the_moon_alien_only_destroys_the_rover_and_the_flag_and_both_are_replaced_l
   size_t rocks = countSprite(world, "rock"), landers = countSprite(world, "lander");
   CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
   world.triggerRare();
-  for (int i = 0; i < 3000 && world.killedCount() == 0; ++i) world.step(0.05);
-  CHECK(world.killedCount() == 2);
+  for (int i = 0; i < 3000 && countSprite(world, "alien") > 0; ++i) world.step(0.05);  // until it has crossed
+  // The flag stands still and is always taken; the rover drives about and may slip past the alien.
+  CHECK(world.killedCount() >= 1 && world.killedCount() <= 2);
+  CHECK(countSprite(world, "flag") == 0);
   CHECK(countSprite(world, "rock") == rocks && countSprite(world, "lander") == landers);  // nothing else
   for (int i = 0; i < 1500; ++i) world.step(0.05);  // well over a minute later
   CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
+}
+
+TEST(a_sweeping_catastrophe_takes_each_victim_as_its_middle_passes_it) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\nrare-first: 1000..1000\n--- population\nrover count 1\n"
+      "--- decor\nflag left 10\nflag right 10\n--- rare\nalien 1\n",
+      {"name: alien\nfacing: right\nhabitat: ground\nspeed: 12..12\nwipes: flag\nstrike-effect: puff\n"
+       "strike-mode: sweep\nbehaviors: catastrophe\n--- art\nAAA\nAAA\n",
+       "name: rover\nhabitat: ground\nspeed: 0..0\n--- art\nrr\n",
+       "name: flag\nhabitat: ground\n--- art\n|>\n|\n",
+       "name: puff\ntag: puff\nfps: 8\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 120, 30, 6);
+  std::vector<double> flags;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "flag") flags.push_back(e->x + e->width() / 2.0);
+  }
+  CHECK(flags.size() == 2);
+  std::sort(flags.begin(), flags.end());
+  world.triggerRare();
+  Entity* alien = nullptr;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "alien") alien = e.get();
+  }
+  CHECK(alien != nullptr);
+  if (!alien) return;
+  const bool right = alien->vx > 0;
+  size_t seen = 0;
+  for (int i = 0; i < 600 && countSprite(world, "alien") > 0; ++i) {
+    world.step(0.05);
+    alien = nullptr;  // the world frees it once it has left
+    for (auto& e : world.entities()) {
+      if (e->sprite->name() == "alien") alien = e.get();
+    }
+    if (!alien) break;
+    const double middle = alien->x + alien->width() / 2.0;
+    // Not taken before the alien's middle has reached it...
+    for (double f : flags) {
+      const bool reached = right ? middle >= f - 1.5 : middle <= f + 1.5;
+      if (!reached) {
+        size_t standing = 0;
+        for (auto& e : world.entities()) standing += (e->sprite->name() == "flag" && !e->dead && std::fabs(e->x + e->width() / 2.0 - f) < 0.01);
+        CHECK(standing == 1);
+      }
+    }
+    seen = world.killedCount();
+  }
+  CHECK(seen == 2);  // ...and both in the end, one after the other
+  CHECK(countSprite(world, "rover") == 1);  // not a named victim
 }
 
 TEST(a_wipe_also_takes_what_was_spawned_in_the_same_step) {

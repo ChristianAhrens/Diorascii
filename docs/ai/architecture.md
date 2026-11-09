@@ -85,7 +85,7 @@ Cross-cutting systems, all in `World`:
 | Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock); sun/moon arcs; `airless` scenes (the moon) cycle too, but the sky stays black with stars and only the ground brightens and darkens a little; the sun (`sun_corona`) and the earth are its arc bodies |
 | Sleeping | ~70% of most species sleep at night, each with its own bedtime; sleepers do not hunt, eat or get hunted |
 | Events | one scheduled visitor at a time per scene (`--- events`) |
-| Rare catastrophes | separate slow timer, one at a time; strike at `strike-at` progress; wipes `life` or named sprites; dead things restock gradually; screen flash; `x` summons one |
+| Rare catastrophes | separate slow timer, one at a time; strike at `strike-at` progress (`strike-mode`: `centre` all at once, `sweep` each victim as the attacker's middle passes it, `devour` as its front reaches it); wipes `life` or named sprites; dead things restock gradually; screen flash; `x` summons one |
 | Actions | `Drop` (food), `Impact` (meteor + crater that fills with dust), `Weather` (rain, sandstorm, tornado that flings animals), snowstorm; selected by `action:` in the scene |
 | Hunting | `hunt`/`chase`: predators tagged `hunt` eat `prey`; lion and bear make one kill each |
 

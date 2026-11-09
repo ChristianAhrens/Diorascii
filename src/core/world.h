@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -58,6 +59,16 @@ struct Entity {
   double strikeAt = 0.5;
   /// For catastrophes: true once it has struck.
   bool struck = false;
+  /// How a catastrophe strikes. Centre: once, all victims at the same moment, when its middle is
+  /// the `strikeAt` way across (a storm). Sweep: each victim is taken as the middle of the
+  /// attacker passes it (an alien beaming up things). Devour: each victim is taken as the front
+  /// of the attacker reaches it (a sandworm).
+  enum class StrikeMode { Centre, Sweep, Devour };
+  /// How it strikes, see StrikeMode.
+  StrikeMode strikeMode = StrikeMode::Centre;
+  /// Sweep and devour: where its striking point was at the last step, and whether there was one.
+  double lastPoint = 0;
+  bool hasLastPoint = false;
   /// What a catastrophe wipes out when it strikes: "life", or a list of sprite names.
   std::string wipes = "life";
   /// Sprite shown on every victim of a strike.
@@ -254,7 +265,11 @@ class World {
   bool triggerRare();
   /// Wipes out entities: all life (kills == "life") or the sprites named in kills. Each victim
   /// shows `effect`, and is brought back some seconds later. The attacker itself is spared.
-  void wipeOut(const std::string& kills, const std::string& effect, const Entity* except);
+  /// @param from,to only victims whose middle column lies in this range are taken (default: all)
+  /// @param rows only victims overlapping these rows are taken, if rows.second > rows.first
+  /// @return how many were taken
+  size_t wipeOut(const std::string& kills, const std::string& effect, const Entity* except,
+                 double from = -1e9, double to = 1e9, std::pair<double, double> rows = {0, 0});
   /// How many entities catastrophes have wiped out so far.
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.

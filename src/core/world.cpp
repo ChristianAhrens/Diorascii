@@ -647,6 +647,25 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     if (usable > 1) e->z = static_cast<int>(zmax) - lane * static_cast<int>(zmax - zmin) / (usable - 1);
   }
 
+  // `feet-rows: a..b` puts a ground sprite's feet on those ground rows (0 = the first; negative counts
+  // from the bottom, -1 is the last), and with `traffic: yes` the vehicles keep to their side of the
+  // road: the lower rows of the range for what moves right, the upper rows for what moves left.
+  if (p.has("feet-rows") && p.str("habitat", "medium") == "ground") {
+    const int rows = std::max(h_ - seabedY_, 1);
+    const auto [flo, fhi] = p.range("feet-rows", {0, 0});
+    auto resolve = [&](double v) { return std::clamp(static_cast<int>(v) < 0 ? rows + static_cast<int>(v) : static_cast<int>(v), 0, rows - 1); };
+    int lo = resolve(flo), hi = resolve(fhi);
+    if (lo > hi) std::swap(lo, hi);
+    if (p.str("traffic", "no") == "yes" && hi > lo) {
+      const int mid = (lo + hi + 1) / 2;
+      if (right) lo = mid;
+      else hi = mid - 1;
+    }
+    const int feet = rng_.rangeInt(lo, hi);
+    e->y = e->anchorY = seabedY_ - e->height() + feet + 1;
+    e->z = static_cast<int>(zmax) - feet * static_cast<int>(zmax - zmin) / std::max(rows - 1, 1);
+  }
+
   // Members of a herd that left come back from the same side, a little apart, still facing the same way.
   const double rejoin = (where && !initial) ? rng_.range(0, 12) : 0.0;
   e->x = (where && where->hasX) ? where->x
@@ -1002,7 +1021,20 @@ int World::interact() {
     rainLeft_ = scene_->weatherDuration;  // pressing again while it lasts keeps it going
     return 1;
   }
+  if (a.kind == SceneDef::Action::Kind::Summon) {
+    auto sprite = pack_->find(a.sprite);
+    if (!sprite || countSprite(a.sprite) > 0) return 0;  // one at a time
+    spawnCreature(sprite, false, true);  // a visitor: it leaves again and is not replaced
+    flushIncoming();
+    return 1;
+  }
   return 0;
+}
+
+size_t World::countSprite(const std::string& name) const {
+  size_t n = 0;
+  for (const auto& e : entities_) n += (!e->dead && e->sprite->name() == name) ? 1 : 0;
+  return n;
 }
 
 void World::setPhase(double phase) {

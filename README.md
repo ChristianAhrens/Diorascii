@@ -246,6 +246,7 @@ Header keys:
 | `anchor-row` | which sprite row sits on the surface line |
 | `mouth-row` | row where it eats or bites |
 | `bubble-rate`, `bob-amplitude`, `bob-frequency` | tuning for those behaviors |
+| `feet-rows: 1..-2`, `traffic: yes` | a ground sprite's feet stand on these ground rows (0 is the first, a negative number counts from the bottom); with `traffic` vehicles keep to their side of the road: the lower rows of the range moving right, the upper rows moving left |
 | `lanes: 4` | ground sprites stand up to this many rows deep on the bank; the ones further forward are drawn in front |
 | `altitude: 8` | sky sprites hover within this many rows above the ground |
 | `active: day` or `night` | only shown by day or by night (needs a day and night cycle in the scene) |
@@ -316,7 +317,7 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     sky-fraction: 0.2               # share of the height above the surface (1 = all sky)
     ground-rows: 2
     stars: 23                       # one star per N sky cells
-    action: drop food               # what the f key does: drop | impact <sprite>, weather <sprite> [<funnel>], or none
+    action: drop food               # what the f key does: drop | impact <sprite>, weather <sprite> [<funnel>], summon <sprite>, or none
     action-label: Feed the fish     # text of the menu button
     gravity: 2.5                    # cells/s^2 for falling debris
     dust-settle: 40                 # seconds for dust to fill one row of a crater

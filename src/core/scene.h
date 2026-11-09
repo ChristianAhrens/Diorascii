@@ -49,9 +49,10 @@ struct SceneDef {
   ///   impact <sprite>  a meteorite strikes the ground and digs a crater
   ///   weather <sprite> [<funnel>]  rain or a sandstorm for a while (the sprite is the drop or grain);
   ///                    with a funnel sprite, half of the time a tornado crosses the scene instead
+  ///   summon <sprite>  a visitor comes through (an ambulance), one at a time
   struct Action {
     /// Which action the scene offers.
-    enum class Kind { None, Drop, Impact, Weather };
+    enum class Kind { None, Drop, Impact, Weather, Summon };
     /// What the action key does.
     Kind kind = Kind::None;
     /// Sprite that is dropped or hurled, depending on kind.

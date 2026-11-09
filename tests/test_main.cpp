@@ -2976,6 +2976,30 @@ TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports)
   CHECK(r.world().timeMode() == World::TimeMode::Realtime && std::fabs(r.world().phase() - 3.0 / 24.0) < 1e-6);
 }
 
+TEST(summon_calls_one_visitor_at_a_time_and_feet_rows_and_traffic_place_vehicles_on_their_side) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 7\naction: summon van\n--- population\ncar count 40\n",
+      {"name: van\nfacing: right\nhabitat: ground\nspeed: 8..8\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nVV\n",
+       "name: car\nfacing: right\nhabitat: ground\nspeed: 4..6\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nCC\nCC\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  CHECK(world.scene().action.kind == SceneDef::Action::Kind::Summon);
+  CHECK(world.interact() == 1 && world.countSprite("van") == 1);
+  CHECK(world.interact() == 0);  // one at a time
+  const int rows = world.height() - world.seabedY();
+  const int mid = (1 + (rows - 2) + 1) / 2;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "car") continue;
+    const int feet = static_cast<int>(e->y) + e->height() - 1 - world.seabedY();  // ground row of the feet
+    CHECK(feet >= 1 && feet <= rows - 2);                                         // on the road, not the sidewalks
+    CHECK(e->movingRight() ? feet >= mid : feet < mid);                           // right: lower half, left: upper
+  }
+  for (int i = 0; i < 400 && world.countSprite("van") > 0; ++i) world.step(0.05);
+  CHECK(world.countSprite("van") == 0);  // it drove through and was not replaced
+  CHECK(world.interact() == 1);          // and may be called again
+  std::string err;
+  CHECK(SceneDef::parse("name: s\naction: summon\n", err) == nullptr);  // needs a sprite
+}
+
 TEST(the_session_menu_shows_the_version_and_the_copyright) {
   AssetPack pack = AssetPack::embedded();
   Session s = makeSession(pack);

@@ -220,6 +220,8 @@ class World {
   size_t entityCount() const { return entities_.size(); }
   /// All entities, for behaviors and tests.
   std::vector<std::unique_ptr<Entity>>& entities() { return entities_; }
+  /// Number of live entities made from the sprite with this name.
+  size_t countSprite(const std::string& name) const;
   /// Number of live entities carrying the tag.
   size_t countTag(const std::string& tag) const;
   /// Prey caught by predators so far.

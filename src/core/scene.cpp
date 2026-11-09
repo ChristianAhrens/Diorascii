@@ -137,15 +137,16 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
     const auto t = p.list("action");
     if (t.size() == 1 && t[0] == "none") {
       sc->action.kind = Action::Kind::None;
-    } else if ((t.size() == 2 && (t[0] == "drop" || t[0] == "impact" || t[0] == "weather")) ||
+    } else if ((t.size() == 2 && (t[0] == "drop" || t[0] == "impact" || t[0] == "weather" || t[0] == "summon")) ||
                (t.size() == 3 && t[0] == "weather")) {
       sc->action.kind = t[0] == "drop"     ? Action::Kind::Drop
                         : t[0] == "impact" ? Action::Kind::Impact
+                        : t[0] == "summon" ? Action::Kind::Summon
                                            : Action::Kind::Weather;
       sc->action.sprite = t[1];
       if (t.size() == 3) sc->action.extra = t[2];
     } else {
-      err = "'action' must be 'none', 'drop <sprite>', 'impact <sprite>' or 'weather <sprite> [<funnel>]'";
+      err = "'action' must be 'none', 'drop <sprite>', 'impact <sprite>', 'summon <sprite>' or 'weather <sprite> [<funnel>]'";
       return nullptr;
     }
   }

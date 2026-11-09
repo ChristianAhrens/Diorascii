@@ -1,0 +1,23 @@
+name: smoke
+behaviors: fly
+fps: 2
+loop: no
+die-after-animation: yes
+color: #6c6c78
+depth: 4
+--- art
+ @@
+@@@@
+--- mask
+ kk
+kkkk
+--- art
+ oo
+oooo
+--- mask
+ kk
+kkkk
+--- art
+ ..
+--- mask
+ kk

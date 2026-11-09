@@ -1,0 +1,23 @@
+name: pigeon
+facing: right
+habitat: ground
+behaviors: swim
+feet-rows: 0..0
+speed: 0.3..0.8
+fps: 3
+depth: 6..7
+life: yes
+sleeps: 0.9
+color: #888a94
+--- art
+>o
+``
+--- mask
+l
+ll
+--- art
+>o
+ `
+--- mask
+l
+ l

@@ -1,0 +1,28 @@
+name: cyclist
+facing: right
+habitat: ground
+behaviors: swim
+feet-rows: 1..-2
+traffic: yes
+speed: 3..4
+depth: 8..12
+fps: 4
+rush: yes
+pool: any
+solid: yes
+--- art
+  o
+ /|\
+o-o-
+--- mask
+ 3
+ 1 1
+k k1
+--- art
+  o
+ /|\
+o-o-
+--- mask
+ 3
+ 1 1
+k k1

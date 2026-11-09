@@ -1,0 +1,18 @@
+name: shop_bakery
+facing: right
+habitat: ground
+speed: 0..0
+depth: 21
+solid: yes
+--- art
+ [ BAKERY ]
+/vvvvvvvvvv\
+|()  ()  ()|
+|[]  []  []|
+|__  ||  __|
+--- mask
+ yyyyyyyyyy
+ywywywywywyw
+nooonoonooon
+nccnnccnnccn
+nnnnnnnnnnnn

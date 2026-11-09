@@ -1,0 +1,70 @@
+# City: skyscrapers behind a street with traffic, people, shops, a park and an elevated railway;
+# planes come in to land in the background. F calls an ambulance through the streets.
+name: city
+title: City
+order: 19
+
+medium: no
+sky-fraction: 1
+sky: #4a86c8 #bcd8ec
+ground-colors: #a09e9a #4a4c54
+ground-glyphs: .       ,    '       
+ground-rows: 4
+stars: 18
+day-night: yes
+day-length: 240
+start-hour: 10
+sun-sprite: sun_big
+moon-sprite: moon_big
+city: yes
+skyline: 0.18..0.80
+avenues: 3
+action: summon ambulance
+action-label: Call an ambulance
+event-first: 6..14
+event-interval: 20..50
+
+--- population
+# sprite       mode       amount (one per this many columns); vehicles have `rush: yes`, so the
+# number on the street follows the rush hours: this is the most, at 8:00 and 17:30
+car_sedan      per-cols   60
+car_hatch      per-cols   75
+taxi           per-cols   130
+bus            per-cols   220
+truck          per-cols   180
+cyclist        per-cols   150
+walker_back    per-cols   30
+walker_front   per-cols   38
+jogger         per-cols   120
+kid            per-cols   100
+pigeon         per-cols   80
+cloud_big      per-cols   110
+cloud_big_l    per-cols   110
+cloud_small    per-cols   70
+cloud_small_l  per-cols   70
+bird           per-cols   60
+
+--- decor
+# sprite       align      margin
+station        left       18
+shop_cafe      left       2
+shop_bakery    left       16
+shop_flowers   center     -26
+shop_books     center     16
+shop_pharmacy  right      30
+kiosk          right      16
+fountain       center     -6
+bench          center     -16
+bench          center     6
+oak            center     -12
+oak            center     2
+bush           center     -2
+bush           center     -9
+flower         center     -4
+
+--- events
+train          2
+plane          3
+
+--- rare
+blaze          1

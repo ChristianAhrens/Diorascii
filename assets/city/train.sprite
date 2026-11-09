@@ -1,0 +1,18 @@
+name: train
+facing: right
+habitat: rail
+behaviors: swim
+speed: 14..20
+depth: 18
+tag: train
+backing: 0.55
+--- art
+ __________   __________   __________   _________
+|[][][][][]| |[][][][][]| |[][][][][]| |[][][][]|\
+|▄▄▄▄▄▄▄▄▄▄|=|▄▄▄▄▄▄▄▄▄▄|=|▄▄▄▄▄▄▄▄▄▄|=|▄▄▄▄▄▄▄▄▄▄\
+'-o-o--o-o-' '-o-o--o-o-' '-o-o--o-o-' '-o-o--o-o-'
+--- mask
+ llllllllll   llllllllll   llllllllll   lllllllll
+lccccccccccl lccccccccccl lccccccccccl lccccccccll
+lrrrrrrrrrrlKlrrrrrrrrrrlKlrrrrrrrrrrlKlrrrrrrrrrrl
+llKlKllKlKll llKlKllKlKll llKlKllKlKll llKlKllKlKll

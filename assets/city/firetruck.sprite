@@ -1,0 +1,35 @@
+name: firetruck
+facing: right
+habitat: ground
+feet-rows: 1..-2
+traffic: yes
+fps: 5
+tag: wail
+depth: 8..12
+backing: 0.55
+behaviors: engine
+speed: 12..15
+--- art
+                    ▄▄▄▄▄▄
+  =H=H=H=H=H=H=H=  ██████
+ ___________________ ___
+|▄▄▄ FIRE ▄▄▄▄▄▄▄▄|[_]|\
+'-(O)---(O)-----(O)(O)-'
+--- mask
+                    rrrbbb
+  WWWWWWWWWWWWWWW  rrrbbb
+ RRRRRRRRRRRRRRRRRRR RRR
+RRRR WWRW RRRRRRRRRcRcRR
+RRKKKRRRKKKRRRRRKKKKKKRR
+--- art
+                    ▄▄▄▄▄▄
+  =H=H=H=H=H=H=H=  ██████
+ ___________________ ___
+|▄▄▄ FIRE ▄▄▄▄▄▄▄▄|[_]|\
+'-(O)---(O)-----(O)(O)-'
+--- mask
+                    bbbrrr
+  WWWWWWWWWWWWWWW  bbbrrr
+ RRRRRRRRRRRRRRRRRRR RRR
+RRRR WWRW RRRRRRRRRcRcRR
+RRKKKRRRKKKRRRRRKKKKKKRR

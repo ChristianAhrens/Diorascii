@@ -1,0 +1,18 @@
+name: shop_pharmacy
+facing: right
+habitat: ground
+speed: 0..0
+depth: 21
+solid: yes
+--- art
+ [  (+)   ]
+/==========\
+|[]  []  []|
+|[]  []  []|
+|__  ||  __|
+--- mask
+ gggwwwgggg
+gggggggggggg
+nccnnccnnccn
+nccnnccnnccn
+nnnnnnnnnnnn

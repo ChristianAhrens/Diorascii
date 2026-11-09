@@ -1,0 +1,28 @@
+name: walker_front
+facing: right
+habitat: ground
+behaviors: swim
+life: yes
+solid: yes
+sleeps: 0.8
+pool: any
+depth: 5..7
+feet-rows: -1..-1
+speed: 1..2
+fps: 4
+--- art
+ o
+/|\
+/ \
+--- mask
+ t
+222
+kkk
+--- art
+ o
+/|\
+ |
+--- mask
+ t
+222
+ k

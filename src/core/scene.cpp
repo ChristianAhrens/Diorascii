@@ -129,6 +129,9 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
   }
   sc->dayNight = p.str("day-night", "no") == "yes";
   sc->airless = p.str("airless", "no") == "yes";
+  sc->city = p.str("city", "no") == "yes";
+  sc->avenues = std::clamp(static_cast<int>(p.num("avenues", 0)), 0, 6);
+  sc->skyline = p.range("skyline", sc->skyline);
   sc->dayLength = std::max(p.num("day-length", sc->dayLength), 1.0);
   sc->startHour = std::clamp(p.num("start-hour", sc->startHour), 0.0, 24.0);
   sc->sunSprite = p.str("sun-sprite");

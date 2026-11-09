@@ -1,0 +1,62 @@
+name: car_sedan
+facing: right
+habitat: ground
+feet-rows: 1..-2
+traffic: yes
+rush: yes
+pool: any
+backing: 0.55
+behaviors: drive
+turns: 0.3
+speed: 5..9
+depth: 8..12
+--- art
+    .------.
+  _/ [][][] \_
+#|▄▄▄▄▄▄▄▄▄▄▄▄|*
+'-(O)----(O)-'
+--- mask
+    11111111
+  11 cccccc 11
+r11111111111111y
+11KKK1111KKK11
+--- art
+    .------.
+   /[____]|\_
+  |#▄▄▄▄▄▄|▄▄|
+  '(O)--(O)-'
+--- mask
+    11111111
+   1c1111c111
+  1r1111111111
+  1KKK11KKK11
+--- art
+    .-----.
+   /[_____]\
+  |#▄▄▄▄▄▄#|
+  '(O)---(O)'
+--- mask
+    1111111
+   1c11111c1
+  1r111111r1
+  1KKK111KKK1
+--- art
+   .------.
+  _/|[____]\
+ |▄▄|▄▄▄▄▄*|
+   '-(O)--(O)'
+--- mask
+   11111111
+  111c1111c1
+ 111111111y1
+   11KKK11KKK1
+--- art
+    .-----.
+   /[=====]\
+  |*▄▄▄▄▄▄*|
+  '(O)---(O)'
+--- mask
+    1111111
+   1ccccccc1
+  1y111111y1
+  1KKK111KKK1

@@ -103,6 +103,13 @@ struct SceneDef {
   Rgb snowA{238, 244, 250}, snowB{206, 220, 238};
   /// Characters scattered over the forest belt, the rock and the snow.
   std::u32string forestGlyphs = U"^\"'^ ,", rockGlyphs = U".:  ,'", snowGlyphs = U"*. .  ";
+  /// True for a city scene: a skyline of skyscrapers behind a street. The ground rows are the
+  /// street (sidewalk, road, sidewalk), and an elevated railway runs through it if there is room.
+  bool city = false;
+  /// How many side streets running off into the city (at most; fewer on narrow screens).
+  int avenues = 0;
+  /// Height of the skyscrapers as shares of the sky above the street (shortest..tallest).
+  std::pair<double, double> skyline{0.3, 0.62};
   /// Rows at the bottom of the ground that are a flowing river (0 = no river).
   int riverRows = 0;
   /// River colors from the bank down to the deepest row.

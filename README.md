@@ -5,7 +5,7 @@
 [![Windows](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml/badge.svg)](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml)
 
 Animated ASCII scenes for your terminal: an underwater aquarium, a forest with a
-river, a desert with an oasis, a mountain range from the meadow up to the snow, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
+river, a desert with an oasis, a mountain range from the meadow up to the snow, a city with skyscrapers, traffic and trains, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
@@ -89,9 +89,23 @@ actions (up, down, left, right, select, back), so any input device can use it.
 | Forest | Make it rain | it rains for about 18 seconds (pressing again keeps it going): drops streak down at a slant and splash on the bank and in the river, clouds roll in and the light dims, then it clears up again |
 | Desert | Sandstorm or tornado | a coin toss each time. A sandstorm blows grains across the whole screen for about 16 seconds while the sky turns ochre and the sun disappears. A tornado crosses the scene instead, weaving, whirling up sand and **throwing every animal in its path into the air**; they land dazed, and then walk on. Pressing again during a tornado brings the sandstorm on top of it. |
 | Mountains | Snowstorm | an icy wind sweeps snow across the whole screen for about 22 seconds: flakes race sideways while they settle, the peaks and the sun vanish in a pale whiteout, the birds fall silent and the wind howls (see below) |
+| City | Call an ambulance | an ambulance drives through the streets with its lights flashing |
 | Moon | Meteor strike | a meteorite streaks down and hits the ground: it wrecks everything standing there, digs a crater and throws up debris and dust that drift back down slowly under the moon's low gravity. Dust then fills the crater gradually, shallow rim first, until the ground is smooth again. Rovers drive down into the crater and climb out as it fills. |
 
 New scenes define their own action in their `*.scene` file (see below).
+
+### The city
+
+Buildings in three rows (a pale far row, a middle row and a front row) stand behind a narrow main street: a
+sidewalk, a road of two lanes and a sidewalk. They run from low offices to towers of up to 80% of the sky, with
+four kinds of facade (grid of windows, glass curtain wall, ribbons, small windows) and roofs with antennas, crowns,
+water towers, helipads or steps, and their windows light up as it gets dark. Street lamps switch on at dusk and
+pool light on the street. Cars, taxis, buses, trucks and cyclists keep to their side of the road, and the traffic follows the **rush hours**: it is thin at night and at midday and peaks at about 8:00 and 17:30 (a vehicle sprite with `rush: yes` only joins the street with the chance that the time of day gives), people walk on
+both sidewalks (fewer at night), and there are shops, a kiosk and a park with a fountain, benches and trees. An
+elevated railway runs through the buildings on a viaduct (a dark deck with bright rails on a concrete beam with
+pillars, masts and a wire above it) with a station, and trains run on it now and then (on screens too small for it
+there is no railway). On wide enough screens one to three **side streets** break off from the main street at a broad crossing with a zebra stripe, run a short way back between the buildings and disappear behind them: some cars turn off the main road into them, showing three-quarter and rear views as they turn and drive away, and others come down them, seen from the front, and turn onto the main road. Between the buildings of the front row (which are spaced out) you can sometimes see other side streets running back behind them. Planes come in on their landing approach in the background, sinking slowly behind the
+skyline towards an airport that is off screen. Vehicles, trains and planes are drawn as fine line art on a darkened backing so that they stand out. The buildings are generated to the height of your terminal, always lower than the mountains' peaks.
 
 ### The mountains
 
@@ -171,6 +185,7 @@ to summon it right away instead of waiting.
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
 | Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **lashes out a tongue at the animals on the ground ahead of it and swallows each one it reaches** (what flies is spared) |
 | Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
+| City | Fire | a skyscraper catches fire: flames lick up its facade and over the roof, smoke billows, a fire engine races through the street with its siren, **parks in front of the building and sprays it with jets of blue water**, which puts the fire out sooner, and drives off without its siren as soon as the last fire is out. Most of the time the fire is beaten and the building is wrapped in scaffolding with a crane and **renovated** with new looks. **Sometimes the fire wins**: it spreads to 3 to 5 neighbouring buildings one after another, they all **burn down** (they collapse into smouldering rubble), the engine leaves when the flames are out, and it takes a long while, about a minute and a half, before everything is **rebuilt** from the rubble. From the arrival of the engine until the last building is back, the site (wider if the fire has spread) is **cordoned off** with barriers across the road and both sidewalks: all other vehicles and people stop in front of them and wait |
 | Moon | Alien | an alien walks across the surface and **destroys the flagpole and the rover each at the moment it passes them** (a rover that drives out of its way is spared), and nothing else |
 
 The avalanche is the exception to "crosses the scene": it comes down a mountainside (see above) and
@@ -221,7 +236,7 @@ directory and pass `--assets DIR` (or put it in `assets/` to ship it).
 
     name: darter
     facing: right            # direction the art points
-    habitat: medium          # medium (water) | surface | sky | ground | river
+    habitat: medium          # medium (water) | surface | sky | ground | river | rail (the city's elevated railway)
     speed: 9..18             # cells per second
     depth: 3..16             # draw order, larger = further away
     tag: prey                # lets behaviors find it (prey, food, ...)
@@ -246,6 +261,7 @@ Header keys:
 | `anchor-row` | which sprite row sits on the surface line |
 | `mouth-row` | row where it eats or bites |
 | `bubble-rate`, `bob-amplitude`, `bob-frequency` | tuning for those behaviors |
+| `behaviors: drive`, `turns: 0.3` | a city vehicle that drives along the main road and, with this chance, turns off into the next side street |
 | `feet-rows: 1..-2`, `traffic: yes` | a ground sprite's feet stand on these ground rows (0 is the first, a negative number counts from the bottom); with `traffic` vehicles keep to their side of the road: the lower rows of the range moving right, the upper rows moving left |
 | `lanes: 4` | ground sprites stand up to this many rows deep on the bank; the ones further forward are drawn in front |
 | `altitude: 8` | sky sprites hover within this many rows above the ground |
@@ -335,6 +351,9 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     weather-duration: 18            # seconds a rain shower lasts
     overcast-tint: #c98e4c 0.75     # color (and strength) the scene turns towards in heavy weather
     day-night: yes                  # sun, moon, stars and dimming light
+    city: yes                       # a skyline of skyscrapers behind a street (the ground rows are sidewalk, road, sidewalk)
+    avenues: 3                      # side streets running off into the city (at most; fewer on narrow screens)
+    skyline: 0.18..0.80             # height of the buildings as shares of the sky above the street (low offices to towers)
     airless: yes                    # no atmosphere (moon): black sky and stars all day, only the ground shifts a little
     day-length: 240                 # seconds for one full day
     start-hour: 10                  # time of day at the start
@@ -449,7 +468,7 @@ other frontends (such as a tvOS app) can be added without touching it.
 
 ## Status
 
-Five scenes (aquarium, forest, desert, mountains, moon) with original sprites; feeding, predation,
+Six scenes (aquarium, forest, desert, mountains, city, moon) with original sprites; feeding, predation,
 rain, sandstorms and tornadoes, snowstorms, meteor strikes with craters, avalanches, herds, hunting
 lions and bears, a day and night cycle with sleeping animals, scheduled events, rare catastrophes
 (kraken, thunderstorm, sandworm, avalanche, alien), synthesized ambient sound, three render styles

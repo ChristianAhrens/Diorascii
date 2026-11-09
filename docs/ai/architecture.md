@@ -1,6 +1,6 @@
 # Architecture
 
-State as of v1.1.1. Line counts are approximate and exist to show where the weight is.
+State as of v1.2.0 plus the unreleased work of 2026-11-09 (see CHANGELOG `[Unreleased]`). Line counts are approximate and exist to show where the weight is.
 
 ## Layers
 
@@ -12,8 +12,9 @@ src/core   (no I/O, deterministic per seed; library diorascii_core)
         v                                                       |
 src/term   VT/ANSI encoder (vt.cpp) + Terminal (terminal_posix.cpp | terminal_win.cpp)
 src/audio  miniaudio device wrapper; own thread, parameters via std::atomic
-src/app    Session (scene, menu, style, time of day, pause, toasts, info line, sound request; no I/O)
-           + main.cpp: CLI and the terminal main loop around a Session
+src/app    Session (scene, menu, style, time of day, host clock hour as reported by the frontend, pause, toasts,
+           info line, sound request; no I/O) + localclock.h (the host's local hour; the only clock access,
+           used by the frontends) + main.cpp: CLI and the terminal main loop around a Session
 ```
 
 Planned (v1.2.0): a native Apple shell for tvOS (and later iOS if it becomes a supported target),
@@ -77,12 +78,22 @@ behaviors; `world.cpp` maps names to functions in one table:
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
 chase twister emit_dust catastrophe ledge soar avalanche`
 
+Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
+the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
+(each victim as the attacker's middle passes it: the moon alien) or `devour` (each victim in its way
+as its front reaches it: the sandworm). With `strike-reach` a devouring attacker first lashes a
+tongue or tentacle at a victim (`World::lash`, `Tongue`, `renderTongues`; entities carry a unique
+`id` so a tongue finds its victim again): `strike-aim: ahead` (walking things ahead of its front,
+the worm's tongue) or `around` (anything alive around it, from along its underside: the kraken),
+`strike-lashes` at once, `lash-color`, `mouth-row` as the row it starts from. The victim is crushed
+when the tip arrives. `World::crushCount()` and `squealCount()` feed the sound.
+
 Cross-cutting systems, all in `World`:
 
 | System | Notes |
 |---|---|
 | Layout | surface/seabed/ground rows, river, `lanes` for depth on a bank; the mountains scene has terrain (`ridgeRow`, `zoneAt`, `Zone` bands with wobbling limits) |
-| Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock); sun/moon arcs; `airless` scenes (the moon) cycle too, but the sky stays black with stars and only the ground brightens and darkens a little; the sun (`sun_corona`) and the earth are its arc bodies |
+| Light / time | `Light{day,sun,glow,stars,haze,hazeColor}`, phase 0..1, `TimeMode` (cycle, dawn, day, dusk, night, realtime: the frontend reports the host's local hour through `Session::setClockHour`, see `app/localclock.h`, since the core reads no clock; `Realtime` is last in the `t`/menu order and never the default); sun/moon arcs (8x5 sprites; a sky lower than the body cuts it off at the top); `airless` scenes (the moon) cycle too, but the sky stays black with stars and only the ground brightens and darkens a little; the sun (`sun_corona`, bigger than the earth) and the earth are its arc bodies. The haze color is dimmed to the time of day (a night sandstorm stays dark) and the star level follows the overcast (clouds and dust hide the stars) |
 | Sleeping | ~70% of most species sleep at night, each with its own bedtime; sleepers do not hunt, eat or get hunted |
 | Events | one scheduled visitor at a time per scene (`--- events`) |
 | Rare catastrophes | separate slow timer, one at a time; strike at `strike-at` progress (`strike-mode`: `centre` all at once, `sweep` each victim as the attacker's middle passes it, `devour` as its front reaches it, preceded by a tongue or tentacles (`World::lash`, `Tongue`, drawn in `renderTongues`; `strike-aim: around` for the kraken) when `strike-reach` is set); wipes `life` or named sprites; dead things restock gradually; screen flash; `x` summons one |
@@ -95,14 +106,20 @@ in-house xoshiro `Rng`, so a seed reproduces a world exactly.
 ## Sound (src/core/ambience.*, src/audio)
 
 `ambientFor(World)` reduces world state to `AmbientParams` (kind, night, rain, flashes, storm
-proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness and crush count, avalanche squeal count, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
+proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
 fills a stereo float buffer; everything is smoothed and scenes crossfade, so nothing clicks. The
 audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 
+Event sounds are driven by counters (flashes, impacts, crushes, squeals) that only count as events when they increase; the first value seen is the baseline.
+
 One `AmbientKind` per scene (`Silent, Forest, Aquarium, Desert, Moon, Mountains`) with a hand-written
 synthesis function each. See [findings](findings.md) F-08 about the coupling this implies.
+
+## Art notes
+
+Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as separate population lines at half the density each. The sun and moon sprites are 8x5; the moon scene's sun is 13x8. New sprites need to be added to the list in `embedded_assets_all_load` only if they are meant to be required.
 
 ## Versioning, build, release
 

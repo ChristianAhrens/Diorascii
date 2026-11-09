@@ -70,6 +70,13 @@ levels were only measured. Accumulated preferences from the forest iterations:
 - Thunder/flash counters must not trigger on world rebuild or when sound is switched on mid-storm
   (the first counter value is the baseline).
 - Tuned values are single constants; report which knob you changed and in which direction.
+- Sandworm and kraken (2026-11-09, by the owner's ears): bellow (deep, trumpeting) and avalanche squeal
+  accepted; the first crunch "sounded like a shot" (one sharp, decaying burst plus a deep thump), so
+  an event sound is now a series of soft bites with no sharp start; both worm sounds were too loud at
+  first and were halved; keep event sounds well below the storm sounds. Fundamentals below about
+  100 Hz are inaudible on small speakers: put the energy in harmonics above 150 Hz.
+- A new `AmbientParams` field must also be copied in the audio backends (`audio.cpp`,
+  `audio_apple.mm`). Forgetting it passes every test and is silent in the real program.
 
 ## Changelog and commit messages
 

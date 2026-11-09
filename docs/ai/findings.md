@@ -22,6 +22,10 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-14 | L | Copyright holder / vendor naming is inconsistent | todo |
 | F-15 | L | No sanitizer, lint or `build.ps1` evidence in CI | todo |
 | F-16 | L | Documentation drift risks | todo |
+| F-18 | M | Unverified art and sound of the 2026-11-09 work | open |
+| F-19 | M | Audio parameters are copied by hand in two backends | open |
+| F-20 | L | Real-time mode: time zones, DST, tvOS | open |
+| F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -175,3 +179,31 @@ behaviors, actions, scenes or formats change, update README, CHANGELOG, `docs/ai
 - Remote input: the grid view is focusable and keyboard presses arrive (seen in the log); their handling (keyboard keys, not remote button types) was added afterwards and still needs a run to confirm. The remote's own swipe/click path is untested.
 - Deployment target is tvOS 17.0 (a guess); `connect:to:format:` is deprecated from tvOS 27.
 - iOS is not wired up; the shared pieces (Session, audio_apple) are ready for it.
+
+## F-18 Unverified art and sound of the 2026-11-09 work (M)
+Written after v1.2.0 and listed in CHANGELOG `[Unreleased]`. Judged by the owner by ear and eye
+(accepted unless noted): the sandworm's bellow and the avalanche squeal, the worm's chewing (after one
+retune) and loudness. **Never heard or seen by the assistant:** the kraken's gulp; the look of the worm's
+tongue and the kraken's tentacles in a real terminal (glyphs `= | / \ @`, colors `lash-color`,
+reach 14 and 20, three tentacles); the moon's lighter/darker ground and its 13x8 sun; the 8x5
+sun and moon in each scene; the larger clouds. Tunables are single values: `strike-reach`,
+`strike-lashes`, `lash-color`, `mouth-row` in the sprites; gains and filters in `src/core/ambience.cpp`.
+
+## F-19 Audio parameters are copied by hand in two backends (M)
+`src/audio/audio.cpp` and `audio_apple.mm` each copy every `AmbientParams` field into atomics and back.
+A new field that is forgotten in either backend is silent in the real program while the synthesis tests
+pass; this happened on 2026-11-09 (sandworm, crush and squeal sounds). Noted in `ambience.h` and
+the conventions. **Options:** one shared header with an atomic mirror of `AmbientParams` used by both
+backends, or a compile-time check on the field count.
+
+## F-20 Real-time mode (L)
+`dio::localClockHour()` uses `std::localtime` (not thread safe; called from the main thread only). Not
+verified: other time zones, daylight-saving changes, the tvOS build calling `setClockHour`, a host clock
+set wrongly. The mode ignores `dayLength` and the scene's `start-hour`. No seasonal sunrise or sunset
+(owner: not for now).
+
+## F-21 Scene logic in the core; fragile fixed-seed tests (L)
+Adds to F-08: `strike-mode`, tongues and tentacles, `airless` and the crush/squeal counters are generic
+mechanisms but `ambientFor` still names `"sandworm"` and the synths are per scene. Fixed-seed tests
+depend on the order of the population list: adding the larger clouds changed the random stream and the
+goat test had to move to seed 7. Prefer asserting on properties over particular seeds when touching them.

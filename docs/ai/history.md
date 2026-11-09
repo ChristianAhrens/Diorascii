@@ -46,6 +46,16 @@ library gathering), extensible rendered items, same-or-better look, and an outlo
 - 08:33-10:01: Mountains scene (whole-height terrain, eagles, goats, bears, avalanche, snowstorm), sound tuned through listening feedback, README screenshots (cropped, rounded, shadowed), page videos re-encoded to 20 fps, Mountains button on the page. **1.1.1 tagged 11:03.**
 - Next announced by the owner: **v1.2.0 - tvOS support.**
 
+**2026-11-09** (after v1.2.0, unreleased on `develop`; owner's list of changes, then a plan, then work in eight scoped commits)
+- Sandstorm lighting and stars follow the time of day; real-time mode (`t` list order: appended last, not default; no seasonal times);
+  the moon gets a cycle (sun by lunar day, earth by night, black sky); the sun and moon grow to 8x5 (the owner
+  judged 10x6 too big); clouds in two sizes.
+- Catastrophes strike where the attacker is: alien sweeps, sandworm devours with a tongue, kraken lashes tentacles;
+  thunderstorm unchanged by the owner's wish. Sounds: worm bellow and chewing, avalanche squeal, kraken gulp. One
+  bug found by the owner ("I cannot hear it"): the audio backends did not forward the new parameters (F-19).
+- History was rewritten before pushing: the follow-up fixes (chewing, tongue, loudness, star dimming, gulp) were
+  folded into the commits they belong to (backup branch `backup/pre-rewrite-2026-11-09`, tree verified identical).
+
 ## What was not done, on purpose
 
 - No classic mode, no curses backend, no scripting layer, no ECS.

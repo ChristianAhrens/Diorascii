@@ -2679,6 +2679,38 @@ TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_c
   CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle on the moon
 }
 
+TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  Session::Config config;
+  for (size_t i = 0; i < scenes.size(); ++i) {
+    if (scenes[i]->dayNight) config.scene = i;
+  }
+  Session s = makeSession(pack, config);
+  CHECK(s.world().timeMode() == World::TimeMode::Cycle);  // never the default
+  for (int i = 0; i < 4; ++i) s.handle(Action::Time);     // dawn, day, dusk, night
+  CHECK(s.world().timeMode() == World::TimeMode::Night);
+  s.setClockHour(15.5);
+  s.handle(Action::Time);  // the last one
+  CHECK(s.world().timeMode() == World::TimeMode::Realtime);
+  CHECK(std::fabs(s.world().phase() - 15.5 / 24.0) < 1e-6);
+  s.setClockHour(15.75);
+  for (int i = 0; i < 100; ++i) s.step(0.05);  // the world's own clock does not run on
+  CHECK(std::fabs(s.world().phase() - 15.75 / 24.0) < 1e-6);
+  s.resize(120, 40);  // kept across the rebuild
+  s.step(0.05);
+  CHECK(s.world().timeMode() == World::TimeMode::Realtime);
+  CHECK(std::fabs(s.world().phase() - 15.75 / 24.0) < 1e-6);
+  s.handle(Action::Time);  // and round again to the cycle
+  CHECK(s.world().timeMode() == World::TimeMode::Cycle);
+  Session::Config rt = config;
+  rt.realtime = true;
+  Session r = makeSession(pack, rt);
+  r.setClockHour(3);
+  r.step(0.05);
+  CHECK(r.world().timeMode() == World::TimeMode::Realtime && std::fabs(r.world().phase() - 3.0 / 24.0) < 1e-6);
+}
+
 TEST(session_menu_consumes_navigation_while_open_and_quit_comes_from_keys_or_menu) {
   AssetPack pack = AssetPack::embedded();
   Session s = makeSession(pack);

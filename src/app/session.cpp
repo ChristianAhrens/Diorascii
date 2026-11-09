@@ -22,7 +22,7 @@ const char* styleName(Style s) {
 /// Options of the menu's time-of-day choice. Scenes without a cycle only have one.
 std::vector<std::string> timeOptions(bool hasCycle) {
   if (!hasCycle) return {"No cycle"};
-  return {"Cycle", "Dawn", "Day", "Dusk", "Night"};
+  return {"Cycle", "Dawn", "Day", "Dusk", "Night", "Real time"};
 }
 
 /// Draws the info line (version, scene, size, entity count, seed, fps) in row 0.
@@ -53,6 +53,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
       h_(height),
       seed_(config.seed),
       style_(config.style),
+      timeMode_(config.realtime ? World::TimeMode::Realtime : World::TimeMode::Cycle),
       carriedPhase_(config.hour >= 0 ? config.hour / 24.0 : -1),
       menu_("DIORASCII"),
       info_(config.info) {
@@ -62,7 +63,8 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   menu_.addChoice("style", "Style",
                   {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
                   static_cast<size_t>(style_));
-  menu_.addChoice("time", "Time of day", timeOptions(scenes_[sceneIdx_]->dayNight), 0);
+  menu_.addChoice("time", "Time of day", timeOptions(scenes_[sceneIdx_]->dayNight),
+                  scenes_[sceneIdx_]->dayNight ? static_cast<size_t>(timeMode_) : 0);
   menu_.addChoice("info", "Info line", {"off", "on"}, info_ ? 1 : 0);
   menu_.addChoice("audio", "Sound", {"off", "on"}, 0);
   menu_.addButton("action", scenes_[sceneIdx_]->action.label);
@@ -78,6 +80,7 @@ void Session::rebuild() {
   world_ = std::make_unique<World>(pack_, scenes_[sceneIdx_], w_, h_, seed_);
   if (carriedPhase_ >= 0 && world_->hasDayNight()) world_->setPhase(carriedPhase_);
   world_->setTimeMode(timeMode_);
+  syncClock();
   rebuildPending_ = false;
   repaint_ = true;
 }
@@ -144,8 +147,9 @@ void Session::handle(Action a) {
     case Action::Time:
       if (scenes_[sceneIdx_]->dayNight) {
         flush();
-        timeMode_ = static_cast<World::TimeMode>((static_cast<int>(timeMode_) + 1) % 5);
+        timeMode_ = static_cast<World::TimeMode>((static_cast<int>(timeMode_) + 1) % World::kTimeModes);
         world_->setTimeMode(timeMode_);
+        syncClock();
         menu_.setValue("time", static_cast<size_t>(timeMode_));
         toast(timeOptions(true)[static_cast<size_t>(timeMode_)], 1.5);
       }
@@ -167,6 +171,7 @@ void Session::applyMenuEvents() {
       flush();
       timeMode_ = static_cast<World::TimeMode>(ev.value);
       world_->setTimeMode(timeMode_);
+      syncClock();
     }
     else if (ev.id == "info") info_ = ev.value == 1;
     else if (ev.id == "audio") setSound(ev.value == 1);
@@ -183,8 +188,13 @@ void Session::resize(int width, int height) {
   rebuildPending_ = true;
 }
 
+void Session::syncClock() {
+  if (timeMode_ == World::TimeMode::Realtime && clockHour_ >= 0 && world_->hasDayNight()) world_->setHour(clockHour_);
+}
+
 void Session::step(double dt) {
   flush();
+  syncClock();
   if (!paused_) world_->step(dt);
   if (toastLeft_ > 0 && !menu_.isOpen()) toastLeft_ -= dt;
 }

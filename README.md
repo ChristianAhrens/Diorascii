@@ -71,6 +71,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
     diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
+    diorascii --realtime            # let the time of day follow this computer's clock
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
@@ -134,8 +135,10 @@ one after another over dusk and wake up one after another at dawn. Sleepers do n
 hunt or get hunted. A few animals stay up, and some are nocturnal, like the desert's
 bats and the lion.
 
-`t` (or the menu) steps through *cycle, dawn, day, dusk, night*: the first runs the
-clock, the others freeze the time of day. `--hour` sets the start time. The time of day
+`t` (or the menu) steps through *cycle, dawn, day, dusk, night, real time*: the first runs the
+clock, the next four freeze the time of day, and *real time* follows the clock of the computer
+Diorascii runs on (also `--realtime`), so the scene's day, dusk and night match the one outside.
+`--hour` sets the start time. The time of day
 carries over when you switch scenes. The info line (`i`) shows the clock.
 
 In the terminal styles the cycle shows in the stars, the sun and moon and the creatures

@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "app/localclock.h"
 #include "app/session.h"
 #include "audio/audio.h"
 #include "core/assets.h"
@@ -43,6 +44,8 @@ struct Options {
   int dumpWidth = 100, dumpHeight = 30;
   /// Start time of day in hours (--hour); negative means the scene's own start time.
   double hour = -1;
+  /// Let the time of day follow the host clock (--realtime).
+  bool realtime = false;
   /// Frame rate (--fps).
   double fps = 20;
   /// Force 24-bit, 256-color or Linux console output (--truecolor, --256, --console).
@@ -78,6 +81,7 @@ void usage() {
       "  --act N          with --dump: trigger the scene's action at step N\n"
       "  --rare N         with --dump: summon the scene's rare event at step N\n"
       "  --hour H         start at this time of day, 0 to 24 (scenes with a day and night cycle)\n"
+      "  --realtime       let the time of day follow this computer's clock\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
@@ -96,6 +100,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--dump") { const char* v = next(); if (!v) return false; o.dumpSteps = std::atoi(v); }
     else if (a == "--rare") { const char* v = next(); if (!v) return false; o.dumpRare = std::atoi(v); }
     else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
+    else if (a == "--realtime") o.realtime = true;
     else if (a == "--hour") { const char* v = next(); if (!v) return false; o.hour = std::atof(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
     else if (a == "--style") {
@@ -183,6 +188,10 @@ int main(int argc, char** argv) {
   if (opt.dumpSteps >= 0) {
     World world(pack, scenes[sceneIdx], opt.dumpWidth, opt.dumpHeight, opt.seed);
     if (opt.hour >= 0) world.setHour(opt.hour);
+    if (opt.realtime) {
+      world.setTimeMode(World::TimeMode::Realtime);
+      world.setHour(localClockHour());
+    }
     for (int i = 0; i < opt.dumpSteps; ++i) {
       if (i == opt.dumpAct) world.interact();
       if (i == opt.dumpRare) world.triggerRare();
@@ -210,6 +219,7 @@ int main(int argc, char** argv) {
   config.scene = sceneIdx;
   config.style = opt.style;
   config.hour = opt.hour;
+  config.realtime = opt.realtime;
   config.sound = !opt.mute;
   Session session(pack, scenes, config, w, h);
 
@@ -252,6 +262,7 @@ int main(int argc, char** argv) {
     if (elapsed > 0) measuredFps = measuredFps * 0.9 + (1.0 / elapsed) * 0.1;
 
     session.setMeasuredFps(measuredFps);
+    session.setClockHour(localClockHour());
     session.step(dt);
     if (audio.running()) audio.setParams(session.ambient());
     session.render(cur);

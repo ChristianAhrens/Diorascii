@@ -238,8 +238,12 @@ class World {
   /// Moves an avalanche entity one step down the mountain, scarring what it passes and wiping out
   /// what it buries. Called by the `avalanche` behavior.
   void slideStep(Entity& e, double dt);
-  /// How the time of day advances. The other modes freeze it at a fixed moment.
-  enum class TimeMode { Cycle, Dawn, Day, Dusk, Night };
+  /// How the time of day advances. Dawn, Day, Dusk and Night freeze it at a fixed moment; Realtime
+  /// leaves it to the frontend, which sets it from the host's clock (see setPhase()), because the
+  /// core has no clock of its own.
+  enum class TimeMode { Cycle, Dawn, Day, Dusk, Night, Realtime };
+  /// Number of TimeMode values.
+  static constexpr int kTimeModes = 6;
   /// Runs the day and night cycle, or freezes the time of day. Without a cycle in
   /// the scene this changes nothing.
   void setTimeMode(TimeMode mode);

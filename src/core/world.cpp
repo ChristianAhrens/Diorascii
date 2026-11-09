@@ -895,7 +895,8 @@ void World::setTimeMode(TimeMode mode) {
     case TimeMode::Day: phase_ = 0.5; break;
     case TimeMode::Dusk: phase_ = 0.73; break;
     case TimeMode::Night: phase_ = 0.0; break;
-    case TimeMode::Cycle: break;  // carry on from the current time
+    case TimeMode::Cycle: break;     // carry on from the current time
+    case TimeMode::Realtime: break;  // the frontend sets the time from the host's clock
   }
 }
 

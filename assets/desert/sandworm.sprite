@@ -8,7 +8,9 @@ fps: 4
 tag: gloom
 wipes: life
 strike-effect: dustburst
-strike-at: 0.5
+strike-mode: devour
+strike-reach: 14
+mouth-row: 7
 behaviors: catastrophe
 --- art
                                                        -----

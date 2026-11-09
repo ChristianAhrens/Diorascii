@@ -81,6 +81,9 @@ AmbientParams ambientFor(const World& world) {
   p.tornado = static_cast<float>(world.nearness("tornado"));
   p.impacts = world.impactCount();
   p.avalanche = static_cast<float>(world.avalancheLevel());
+  p.worm = static_cast<float>(world.nearness("sandworm"));
+  p.crushes = world.crushCount();
+  p.squeals = world.squealCount();
   return p;
 }
 
@@ -93,6 +96,9 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowSandTop_ = coeff(1.0f / 4000.0f / 6.28f);
   lowTornado_ = coeff(1.0f / 170.0f / 6.28f);
   lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
+  lowRoar_ = coeff(1.0f / 420.0f / 6.28f);
+  lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
+  lowSqueal_ = coeff(1.0f / 1800.0f / 6.28f);
   lowSlide_ = coeff(1.0f / 95.0f / 6.28f);
   lowSlideMid_ = coeff(1.0f / 900.0f / 6.28f);
   lowStreamTop_ = coeff(1.0f / 1300.0f / 6.28f);
@@ -244,6 +250,19 @@ void Ambience::mountainSample(const AmbientParams& p, float out[2]) {
   // snow and rock on top of it.
   const float slide = avalanche_;
   const float roll = std::clamp(0.7f + 0.3f * roll_, 0.2f, 1.0f);
+  // An animal buried by the snow: a short squeal that sinks in pitch, heard through the snow
+  // (low-passed hard, so it is muted).
+  float squeal = 0;
+  for (Squeal& s : squealVoices_) {
+    const double tau = t_ - s.start;
+    if (!s.used || tau < 0 || tau > 0.6) continue;
+    const double hz = s.pitch * (1150.0 - 450.0 * tau / 0.6) * (1.0 + 0.03 * std::sin(kTwoPi * 11.0 * tau));
+    s.phase += kTwoPi * hz * dt;
+    const double env = std::min(1.0, tau / 0.03) * std::exp(-tau / 0.25);
+    squeal += static_cast<float>(env * (std::sin(s.phase) + 0.5 * std::sin(2 * s.phase) + 0.3 * std::sin(3 * s.phase)));
+  }
+  squealLow_[0] += (squeal - squealLow_[0]) * lowSqueal_;
+  squealLow_[1] += (squealLow_[0] - squealLow_[1]) * lowSqueal_;
 
   for (int ch = 0; ch < 2; ++ch) {
     const float n = noise(rng_) * noiseScale_;
@@ -267,7 +286,7 @@ void Ambience::mountainSample(const AmbientParams& p, float out[2]) {
               (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
               cry * panCry * 1.4f +
               peck * (ch ? std::sin(peckPan_ * 1.5708f) : std::cos(peckPan_ * 1.5708f)) * 1.4f + crackBandAv_[ch] * 0.35f + thump + slideLow_[ch][1] * 14.0f * slide * slide * roll +
-              slideMid_[ch] * 0.7f * slide * slide * slide * roll;
+              slideMid_[ch] * 0.7f * slide * slide * slide * roll + squealLow_[1] * 0.6f;
   }
 }
 
@@ -291,6 +310,47 @@ void Ambience::desertSample(const AmbientParams& p, float out[2]) {
   const float chirps = night_ * 0.014f * (cricket(t_, 2.1, 33, 4300) + 0.7f * cricket(t_ + 0.5, 1.7, 28, 4800));
   // The sandworm below, as it nears: a growl in the ground.
   const float growl = storm_ * storm_ * 0.5f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
+  // The worm bellows now and then while it crosses: a very deep, trumpeting roar. The pitch
+  // swoops up and sinks again, the tone is rough (a fast tremble) and low-passed to stay deep.
+  if (wormNear_ > 0.05f) {
+    if (nextRoar_ == 0) nextRoar_ = t_ + rng_.range(0.3, 1.2);
+    if (t_ >= nextRoar_) {
+      roarStart_ = t_;
+      roarDur_ = rng_.range(2.0, 2.8);
+      nextRoar_ = t_ + roarDur_ + rng_.range(1.2, 3.5);
+    }
+  } else {
+    nextRoar_ = 0;
+  }
+  float bellow = 0;
+  const double rt = t_ - roarStart_;
+  if (rt >= 0 && rt < roarDur_) {
+    const double u = rt / roarDur_;
+    const double env = std::min(1.0, rt / 0.3) * std::min(1.0, (roarDur_ - rt) / 0.8);
+    const double hz = 34.0 + 46.0 * std::sin(3.14159265 * std::pow(u, 0.7)) + 3.0 * std::sin(kTwoPi * 5.5 * rt);
+    roarPhase_ += kTwoPi * hz * dt;
+    const double tone = std::tanh(2.4 * std::sin(roarPhase_) + 1.3 * std::sin(2 * roarPhase_ + 0.6) +
+                                  0.7 * std::sin(3 * roarPhase_ + 1.1));
+    bellow = static_cast<float>(tone * env * (1.0 + 0.4 * std::sin(kTwoPi * 23.0 * t_)));
+  }
+  roarLow_[0] += (bellow - roarLow_[0]) * lowRoar_;
+  roarLow_[1] += (roarLow_[0] - roarLow_[1]) * lowRoar_;
+  const float roarOut = roarLow_[1] * 0.45f * wormNear_;
+  // Crushing: chewing. Each thing it swallows is ground between a few soft bites, every one a
+  // short swell of low-passed noise (no sharp start, so it never sounds like a shot), over a faint
+  // low grumble.
+  float crunchEnv = 0, grumble = 0;
+  for (const Crunch& c : crunches_) {
+    const double tau = t_ - c.start;
+    if (c.gain <= 0 || tau < 0 || tau > 1.6) continue;
+    for (int b = 0; b < c.bites; ++b) {
+      const double bt = tau - c.bite[b];
+      if (bt < 0 || bt > 0.09) continue;
+      const double swell = std::sin(3.14159265 * bt / 0.09);
+      crunchEnv += static_cast<float>(c.gain * c.force[b] * swell * swell);
+    }
+    grumble += static_cast<float>(c.gain * std::sin(kTwoPi * 62.0 * tau) * std::min(1.0, tau / 0.12) * std::exp(-tau / 0.7));
+  }
 
   for (int ch = 0; ch < 2; ++ch) {
     const float n = noise(rng_) * noiseScale_;
@@ -302,12 +362,17 @@ void Ambience::desertSample(const AmbientParams& p, float out[2]) {
     const float n3 = noise(rng_) * noiseScale_;
     tornadoLow_[ch][0] += (n3 - tornadoLow_[ch][0]) * lowTornado_;
     tornadoLow_[ch][1] += (tornadoLow_[ch][0] - tornadoLow_[ch][1]) * lowTornado_;
+    const float nc = noise(rng_) * noiseScale_;
+    crunchLow_[ch][0] += (nc - crunchLow_[ch][0]) * lowCrunch_;
+    crunchLow_[ch][1] += (crunchLow_[ch][0] - crunchLow_[ch][1]) * lowCrunch_;
+    // the grinding is the noise below ~500 Hz, with a little more of the bite's grit above it
+    const float crunchOut = (crunchLow_[ch][1] * 7.0f + (nc - crunchLow_[ch][0]) * 0.25f) * crunchEnv;
     const float n4 = noise(rng_) * noiseScale_;
     deepLow_[ch][0] += (n4 - deepLow_[ch][0]) * lowDeep_;
     deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
     out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
               tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl +
-              chirps * (ch ? 0.9f : 1.0f);
+              chirps * (ch ? 0.9f : 1.0f) + roarOut + grumble * 0.03f + crunchOut;
   }
 }
 
@@ -417,6 +482,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(tornado_, p.kind == AmbientKind::Desert ? p.tornado : 0.0f, kStorm);
     approach(whale_, p.kind == AmbientKind::Aquarium ? p.whale : 0.0f, kStorm);
     approach(avalanche_, p.kind == AmbientKind::Mountains ? p.avalanche : 0.0f, kSlide);
+    approach(wormNear_, p.kind == AmbientKind::Desert ? p.worm : 0.0f, kStorm);
     approach(volume_, p.volume, kVolume);
 
     // Gusts: slow swells plus a random drift, so they never repeat evenly.
@@ -471,6 +537,39 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
         }
       }
       seenNibbles_ = p.nibbles;
+    }
+    // Things the sandworm swallows and animals an avalanche buries (the first values seen are starting points).
+    if (!crushesSynced_) { seenCrushes_ = p.crushes; crushesSynced_ = true; }
+    if (p.crushes != seenCrushes_) {
+      if (p.crushes > seenCrushes_ && p.kind == AmbientKind::Desert) {
+        for (unsigned n = 0; n < std::min(p.crushes - seenCrushes_, 3u); ++n) {
+          Crunch& c = *std::min_element(std::begin(crunches_), std::end(crunches_),
+                                        [](const Crunch& a, const Crunch& b) { return a.start < b.start; });
+          c.start = t_ + n * rng_.range(0.05, 0.2);
+          c.gain = static_cast<float>(rng_.range(0.8, 1.0));
+          c.bites = rng_.rangeInt(6, Crunch::kBites);
+          float at = static_cast<float>(rng_.range(0.0, 0.05));
+          for (int b = 0; b < c.bites; ++b) {  // irregular chewing that eases off
+            c.bite[b] = at;
+            c.force[b] = static_cast<float>(rng_.range(0.55, 1.0)) * (1.0f - 0.5f * b / c.bites);
+            at += static_cast<float>(rng_.range(0.07, 0.13));
+          }
+        }
+      }
+      seenCrushes_ = p.crushes;
+    }
+    if (!squealsSynced_) { seenSqueals_ = p.squeals; squealsSynced_ = true; }
+    if (p.squeals != seenSqueals_) {
+      if (p.squeals > seenSqueals_ && p.kind == AmbientKind::Mountains) {
+        for (unsigned n = 0; n < std::min(p.squeals - seenSqueals_, 3u); ++n) {
+          Squeal& s = *std::min_element(std::begin(squealVoices_), std::end(squealVoices_),
+                                        [](const Squeal& a, const Squeal& b) { return a.start < b.start; });
+          s.start = t_ + n * rng_.range(0.05, 0.25);
+          s.pitch = static_cast<float>(rng_.range(0.8, 1.3));
+          s.used = true;
+        }
+      }
+      seenSqueals_ = p.squeals;
     }
     // Meteorite strikes and the alien's flash on the moon (first values seen are starting points).
     if (!impactsSynced_) { seenImpacts_ = p.impacts; impactsSynced_ = true; }

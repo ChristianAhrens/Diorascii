@@ -154,8 +154,8 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 |---|---|
 | Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
 | Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale and the growl of the kraken as it nears |
-| Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears |
-| Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way |
+| Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears, bellows with a very deep, trumpeting roar while it crosses, and each animal it swallows is chewed with a series of low, grumbling crunches |
+| Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way, and every animal it buries lets out a short, muffled squeal |
 | Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble |
 
 ### Rare events
@@ -169,7 +169,7 @@ to summon it right away instead of waiting.
 |---|---|---|
 | Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and at the middle it **kills every animal**: fish, jellyfish, eels, crabs, shark and whale burst into ink |
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
-| Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **swallows every animal** |
+| Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **lashes out a tongue at the animals on the ground ahead of it and swallows each one it reaches** (what flies is spared) |
 | Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
 | Moon | Alien | an alien walks across the surface and **destroys the flagpole and the rover each at the moment it passes them** (a rover that drives out of its way is spared), and nothing else |
 
@@ -258,7 +258,7 @@ Header keys:
 | `wind: yes` | a particle that is blown across the whole scene (sand), for a weather action |
 | `life: yes` | a living thing: catastrophes that wipe out life take it |
 | `row: 2` | pinned to this row (a negative number counts from the bottom) |
-| `wipes`, `strike-mode`, `strike-at`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out; how it strikes (`centre`, the default: everything at once when it is `strike-at` (0 to 1) of the way across the scene, like a storm; `sweep`: each victim as the middle of the attacker passes it; `devour`: each victim in its way as its front reaches it); and the sprite shown on every victim |
+| `wipes`, `strike-mode`, `strike-at`, `strike-reach`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out; how it strikes (`centre`, the default: everything at once when it is `strike-at` (0 to 1) of the way across the scene, like a storm; `sweep`: each victim as the middle of the attacker passes it; `devour`: each victim in its way as its front reaches it, and with `strike-reach: N` it first lashes a tongue out at victims up to N cells ahead of it; the tongue is drawn from the row `mouth-row`); and the sprite shown on every victim |
 | `strike-sprite`, `screen-flash`, `storm-rain` | a bolt that hits the ground under the attacker, seconds of screen flashing (two quick flashes), and seconds of rain it brings (needs a weather action in the scene) |
 | `tag: gloom` | the scene darkens (like heavy weather) while this sprite is around |
 | `backing: 0.5` | darkens the background behind the sprite's glyphs by this share (full style only), so light sprites stay readable on bright and dark backdrops |

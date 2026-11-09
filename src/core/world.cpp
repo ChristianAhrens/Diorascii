@@ -326,9 +326,11 @@ void catastrophe(Entity& e, World& w, double dt) {
   if (e.strikeMode != Entity::StrikeMode::Centre) {  // takes each victim as it passes it
     const double now = point();
     const bool devour = e.strikeMode == Entity::StrikeMode::Devour;  // it only takes what is in its way
+    if (devour && e.strikeReach > 0) w.lash(e);
     // A cell of leeway each way, so that a victim walking towards it is not stepped over.
     const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
-                                   devour ? std::make_pair(e.y, e.y + e.height()) : std::make_pair(0.0, 0.0));
+                                   devour);
+    if (devour) w.noteCrushed(taken);
     e.lastPoint = now;
     if (taken > 0) {
       if (e.flashTime > 0) w.flash(e.flashTime);
@@ -498,6 +500,7 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.contrast = p.str("contrast", "no") == "yes";
   e.life = p.str("life", "no") == "yes";
   e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
+  e.strikeReach = std::max(p.num("strike-reach", 0), 0.0);
   e.wipes = p.str("wipes", "life");
   const std::string mode = p.str("strike-mode", "centre");
   e.strikeMode = mode == "sweep" ? Entity::StrikeMode::Sweep : mode == "devour" ? Entity::StrikeMode::Devour : Entity::StrikeMode::Centre;
@@ -831,7 +834,7 @@ void World::claim(Entity& o, const std::string& effect) {
 }
 
 size_t World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except, double from,
-                      double to, std::pair<double, double> rows) {
+                      double to, bool groundedOnly) {
   const size_t before = killed_;
   const bool all = wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(wipes);
@@ -839,7 +842,7 @@ size_t World::wipeOut(const std::string& wipes, const std::string& effect, const
     if (&o == except || o.isRare) return;
     const double middle = o.x + o.width() / 2.0;
     if (middle < from || middle > to) return;
-    if (rows.second > rows.first && (o.y + o.height() <= rows.first || o.y >= rows.second)) return;
+    if (groundedOnly && !o.grounded) return;
     const bool victim = all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end();
     if (victim) claim(o, effect);
   };
@@ -848,6 +851,100 @@ size_t World::wipeOut(const std::string& wipes, const std::string& effect, const
   // (spawnEffect above adds to the same list, and effects are never victims.)
   for (size_t i = 0; i < incoming_.size(); ++i) take(*incoming_[i]);
   return killed_ - before;
+}
+
+Entity* World::findEntity(uint64_t id) {
+  for (auto& e : entities_) {
+    if (e->id == id) return e.get();
+  }
+  return nullptr;
+}
+
+bool World::lash(const Entity& a) {
+  if (!tongues_.empty() || time_ < nextLash_ || a.strikeReach <= 0) return false;
+  const bool all = a.wipes == "life";
+  const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(a.wipes);
+  const int dir = a.vx > 0 ? 1 : -1;
+  const double front = dir > 0 ? a.x + a.width() : a.x;
+  const Entity* best = nullptr;
+  double bestAhead = 0;
+  for (auto& other : entities_) {
+    const Entity& o = *other;
+    if (&o == &a || o.dead || o.isRare || !o.grounded || isAsleep(o)) continue;
+    if (!(all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end())) continue;
+    const double ahead = (o.x + o.width() / 2.0 - front) * dir;
+    if (ahead < 1.5 || ahead > a.strikeReach) continue;  // what is at its very mouth is simply swallowed
+    if (!best || ahead < bestAhead) { best = &o; bestAhead = ahead; }
+  }
+  if (!best) return false;
+  Tongue t;
+  t.attacker = a.id;
+  t.victim = best->id;
+  t.effect = a.strikeEffect;
+  t.wipes = a.wipes;
+  t.x0 = front - dir;
+  t.y0 = a.y + a.mouthRow;
+  t.x1 = best->x + best->width() / 2.0;
+  t.y1 = best->y + best->height() / 2.0;
+  tongues_.push_back(t);
+  return true;
+}
+
+void World::stepTongues(double dt) {
+  for (size_t i = tongues_.size(); i-- > 0;) {
+    Tongue& t = tongues_[i];
+    Entity* a = findEntity(t.attacker);
+    if (!a || a->dead) {  // the attacker has gone: the tongue goes with it
+      tongues_.erase(tongues_.begin() + static_cast<std::ptrdiff_t>(i));
+      continue;
+    }
+    t.age += dt;
+    t.x0 = (a->vx > 0 ? a->x + a->width() : a->x) - (a->vx > 0 ? 1 : 0);
+    t.y0 = a->y + a->mouthRow;
+    Entity* v = findEntity(t.victim);
+    const bool alive = v && !v->dead;
+    if (alive && !t.hit) {  // the tip follows the victim
+      t.x1 = v->x + v->width() / 2.0;
+      t.y1 = v->y + v->height() / 2.0;
+    }
+    if (!t.hit && t.age >= t.reach) {
+      t.hit = true;
+      if (alive) {
+        claim(*v, t.effect);
+        noteCrushed(1);
+      }
+    }
+    if (t.age >= t.dur) {
+      nextLash_ = time_ + 0.25;
+      tongues_.erase(tongues_.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+  }
+}
+
+void World::renderTongues(Frame& out, Style style, const Light& light) const {
+  for (const Tongue& t : tongues_) {
+    // Out to the victim in the first part, back in again once it is crushed.
+    const double p = t.hit ? std::max(0.0, 1.0 - (t.age - t.reach) / (t.dur - t.reach)) : std::min(1.0, t.age / t.reach);
+    const double dx = t.x1 - t.x0, dy = t.y1 - t.y0;
+    const double len = std::sqrt(dx * dx + dy * dy * 4.0);  // cells are about twice as tall as wide
+    const int samples = std::max(2, static_cast<int>(len * 2));
+    // The glyph follows the direction of the tongue.
+    const double ady = std::fabs(dy) * 2.0, adx = std::fabs(dx);
+    const char32_t glyph = ady < 0.45 * adx ? U'=' : ady > 2.2 * adx ? U'|' : (dx * dy > 0 ? U'\\' : U'/');
+    for (int s = 0; s <= samples; ++s) {
+      const double u = static_cast<double>(s) / samples;
+      if (u > p) break;
+      const double wobble = 0.8 * std::sin(u * len * 0.8 - t.age * 28.0) * u * (1.0 - p * 0.5);  // it lashes about
+      const int cx = static_cast<int>(std::floor(t.x0 + dx * u));
+      const int cy = static_cast<int>(std::floor(t.y0 + dy * u + wobble));
+      if (!out.inBounds(cx, cy)) continue;
+      Cell& cell = out.at(cx, cy);
+      const bool tip = u + 1.0 / samples > p;
+      cell.ch = tip ? U'@' : glyph;
+      cell.fg = shade(tip ? Rgb{196, 48, 84} : Rgb{232, 96, 128}, light);
+      cell.defaultFg = style == Style::Mono;
+    }
+  }
 }
 
 void World::flash(double seconds) {
@@ -1067,7 +1164,10 @@ Entity* World::nearest(const std::string& tag, double x, double y, double maxDis
 }
 
 void World::flushIncoming() {
-  for (auto& e : incoming_) entities_.push_back(std::move(e));
+  for (auto& e : incoming_) {
+    e->id = ++nextId_;
+    entities_.push_back(std::move(e));
+  }
   incoming_.clear();
 }
 
@@ -1114,6 +1214,8 @@ void World::step(double dt) {
     for (BehaviorFn b : e->behaviors) b(*e, *this, dt);
     if (e->ttl > 0 && e->age > e->ttl) e->dead = true;
   }
+
+  stepTongues(dt);
 
   if (!scene_->events.empty() && !eventAlive) {
     if (eventTimer_ < 0) eventTimer_ = rng_.range(scene_->eventInterval.first, scene_->eventInterval.second);
@@ -1359,6 +1461,7 @@ void World::slideStep(Entity& e, double dt) {
       if (o.dead || o.isRare || !o.destructible || isAirZone(o.zone)) continue;
       if (!o.life && o.zone == Zone::None && !o.grounded) continue;  // effects
       if (o.x + o.width() <= x0 || o.x >= x1 || o.y + o.height() <= top || o.y >= bot) continue;
+      if (o.life && !isAsleep(o)) ++squeals_;  // an animal under the snow cries out
       claim(o, "snowpuff");
     }
     // Powder billows up around the head, and rock and uprooted trees tumble out of the forest.
@@ -1556,6 +1659,7 @@ void World::render(Frame& out, Style style) const {
   std::stable_sort(order.begin(), order.end(),
                    [](const Entity* a, const Entity* b) { return a->z > b->z; });
   for (const Entity* e : order) blit(out, *e, style, l, h_);
+  renderTongues(out, style, l);
   if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
     for (int y = 0; y < h_; ++y) {
       for (int x = 0; x < w_; ++x) {

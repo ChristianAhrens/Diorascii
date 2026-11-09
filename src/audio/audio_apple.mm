@@ -22,7 +22,8 @@ struct AudioOutput::Impl {
   std::atomic<float> night{0}, rain{0}, volume{1};
   std::atomic<unsigned> flashes{0};
   std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
-  std::atomic<unsigned> nibbles{0}, impacts{0};
+  std::atomic<float> worm{0};
+  std::atomic<unsigned> nibbles{0}, impacts{0}, crushes{0}, squeals{0};
 
   /// Reads the shared parameters into one AmbientParams.
   AmbientParams params() const {
@@ -38,6 +39,9 @@ struct AudioOutput::Impl {
     p.avalanche = avalanche.load();
     p.nibbles = nibbles.load();
     p.impacts = impacts.load();
+    p.worm = worm.load();
+    p.crushes = crushes.load();
+    p.squeals = squeals.load();
     return p;
   }
 };
@@ -109,6 +113,9 @@ void AudioOutput::setParams(const AmbientParams& p) {
   impl_->avalanche = p.avalanche;
   impl_->nibbles = p.nibbles;
   impl_->impacts = p.impacts;
+  impl_->worm = p.worm;
+  impl_->crushes = p.crushes;
+  impl_->squeals = p.squeals;
 }
 
 }  // namespace dio

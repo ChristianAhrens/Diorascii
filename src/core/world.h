@@ -41,6 +41,8 @@ enum class Zone {
 
 /// A live thing in the world: a sprite with a position, motion and behaviors.
 struct Entity {
+  /// Unique within the world (0 until it has joined it); lets a tongue find its victim again.
+  uint64_t id = 0;
   /// What it looks like.
   std::shared_ptr<const Sprite> sprite;
   std::string tag;  ///< "prey", "food", ... - looked up by behaviors
@@ -71,6 +73,8 @@ struct Entity {
   bool hasLastPoint = false;
   /// What a catastrophe wipes out when it strikes: "life", or a list of sprite names.
   std::string wipes = "life";
+  /// Devour: how many cells ahead of its front it lashes a tongue out at a victim (0 = no tongue).
+  double strikeReach = 0;
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -266,10 +270,23 @@ class World {
   /// Wipes out entities: all life (kills == "life") or the sprites named in kills. Each victim
   /// shows `effect`, and is brought back some seconds later. The attacker itself is spared.
   /// @param from,to only victims whose middle column lies in this range are taken (default: all)
-  /// @param rows only victims overlapping these rows are taken, if rows.second > rows.first
+  /// @param groundedOnly spare what flies: only things that walk on the ground are taken
   /// @return how many were taken
   size_t wipeOut(const std::string& kills, const std::string& effect, const Entity* except,
-                 double from = -1e9, double to = 1e9, std::pair<double, double> rows = {0, 0});
+                 double from = -1e9, double to = 1e9, bool groundedOnly = false);
+  /// A devouring attacker (see Entity::strikeReach) lashes its tongue out at the nearest victim
+  /// ahead of it: the tongue reaches it, the victim is crushed, the tongue draws back. One tongue
+  /// at a time.
+  /// @return true if a tongue was started
+  bool lash(const Entity& attacker);
+  /// Number of tongues currently lashing out.
+  size_t tongueCount() const { return tongues_.size(); }
+  /// How many things devouring catastrophes (the sandworm) have crushed so far; sound follows each.
+  unsigned crushCount() const { return crushes_; }
+  /// Counts things crushed by a devouring catastrophe. Called by the `catastrophe` behavior.
+  void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
+  /// How many animals an avalanche has buried so far; each lets out a muffled squeal.
+  unsigned squealCount() const { return squeals_; }
   /// How many entities catastrophes have wiped out so far.
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.
@@ -374,6 +391,12 @@ class World {
   void spawnHerd(const std::shared_ptr<const Sprite>& sprite);
   /// Lets rain drops fall, or wind carry sand across the scene, for this step.
   void spawnWeather(double dt);
+  /// Moves the tongues, crushes what they reach and removes the ones that are done.
+  void stepTongues(double dt);
+  /// Draws the tongues lashing out of devouring attackers.
+  void renderTongues(Frame& out, Style style, const Light& light) const;
+  /// The entity with this id, or nullptr.
+  Entity* findEntity(uint64_t id);
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
@@ -412,6 +435,23 @@ class World {
     double endedAt = -1;  ///< age of the avalanche entity when its head reached the bottom
     double puffs = 0;
   } slide_;
+  /// A tongue lashing out: it reaches for the victim, crushes it on arrival and draws back.
+  struct Tongue {
+    uint64_t attacker = 0, victim = 0;  ///< entity ids
+    double age = 0;
+    double reach = 0.28, dur = 0.6;     ///< seconds to reach the victim, and to be done altogether
+    bool hit = false;                   ///< the victim has been crushed
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the mouth and the tip, in cells
+    std::string effect;                 ///< shown on the victim when it is crushed
+    std::string wipes;
+  };
+  /// Tongues lashing out now, and when the next one may start.
+  std::vector<Tongue> tongues_;
+  double nextLash_ = 0;
+  /// The id given to the next entity that joins the world.
+  uint64_t nextId_ = 0;
+  /// Counters behind crushCount() and squealCount().
+  unsigned crushes_ = 0, squeals_ = 0;
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
   /// Seconds until the next rare event; negative means none is scheduled yet.

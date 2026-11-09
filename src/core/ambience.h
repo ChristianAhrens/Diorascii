@@ -16,6 +16,9 @@ enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains };
 inline constexpr int kAmbientKinds = 6;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
+/// Every field must also be handed on by the audio backends (src/audio/audio.cpp and
+/// audio_apple.mm copy them one by one); a field missing there is silent in the real program
+/// although the synthesis tests pass.
 struct AmbientParams {
   AmbientKind kind = AmbientKind::Silent;
   float night = 0;   ///< how dark it is
@@ -37,6 +40,12 @@ struct AmbientParams {
   unsigned impacts = 0;
   /// How loud an avalanche is, from 0 to 1 (World::avalancheLevel()): it cracks, rumbles and roars.
   float avalanche = 0;
+  /// How near a sandworm is, from 0 to 1 (World::nearness("sandworm")): it bellows as it crosses.
+  float worm = 0;
+  /// Counts things crushed by the sandworm (World::crushCount()); each one is a low crunch.
+  unsigned crushes = 0;
+  /// Counts animals buried by an avalanche (World::squealCount()); each one is a muffled squeal.
+  unsigned squeals = 0;
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -162,6 +171,37 @@ class Ambience {
   int peckKnocks_ = 0;          ///< how many knocks it has
   float peckPan_ = 0.5f, peckPitch_ = 1;
   float lowSlide_, lowSlideMid_, lowStreamTop_, lowStreamBottom_, lowIce_;  ///< mountain filter coefficients
+  float wormNear_ = 0;                ///< smoothed sandworm proximity
+  double nextRoar_ = 0;               ///< when the worm bellows next (0 = not planned)
+  double roarStart_ = -10, roarDur_ = 2.4;  ///< when the current bellow began, and how long it lasts
+  double roarPhase_ = 0;              ///< phase of the bellow's tone
+  float roarLow_[2] = {};             ///< two low-pass stages that keep the bellow deep
+  float lowRoar_;                     ///< filter coefficient of the bellow
+  /// Chewing, as the worm swallows something: a series of soft, grinding bites. `bite` holds when
+  /// each one starts (seconds after `start`) and how hard it is.
+  struct Crunch {
+    static constexpr int kBites = 9;
+    double start = 0;
+    float gain = 0;
+    int bites = 0;
+    float bite[kBites] = {}, force[kBites] = {};
+  };
+  Crunch crunches_[4];
+  float crunchLow_[2][2] = {};        ///< two low-pass stages of the crunch, per ear
+  float lowCrunch_;                   ///< filter coefficient of the crunch
+  unsigned seenCrushes_ = 0;
+  bool crushesSynced_ = false;
+  /// A muffled squeal of an animal in an avalanche.
+  struct Squeal {
+    double start = 0, phase = 0;
+    float pitch = 1;
+    bool used = false;
+  };
+  Squeal squealVoices_[3];
+  float squealLow_[2] = {};           ///< two low-pass stages that muffle the squeal
+  float lowSqueal_;                   ///< filter coefficient of the squeal
+  unsigned seenSqueals_ = 0;
+  bool squealsSynced_ = false;
   unsigned seenImpacts_ = 0;
   bool impactsSynced_ = false;
 };

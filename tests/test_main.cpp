@@ -1599,7 +1599,8 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
     CHECK(world.triggerRare());
     // A storm or a kraken strikes everything at once; an alien takes things as it passes them, so
     // wait for it to have crossed the scene.
-    const bool sweeps = std::string(c.scene) == "moon";
+    const bool sweeps = std::string(c.scene) == "moon" || std::string(c.scene) == "desert";
+    const size_t flyers = countSprite(world, "vulture") + countSprite(world, "bat");
     bool struck = false;
     for (int i = 0; i < 3000 && !(struck && (!sweeps || countSprite(world, c.attacker) == 0)); ++i) {
       world.step(0.05);
@@ -1610,7 +1611,10 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
     if (sweeps) {
       CHECK(world.killedCount() >= 1 && countSprite(world, "flag") == 0);  // the flag stands still: always taken
     }
-    if (animals) {
+    if (std::string(c.scene) == "desert") {  // the worm swallows what is in its way, one by one, and not what flies
+      CHECK(world.crushCount() == world.killedCount() && world.crushCount() > 3);
+      CHECK(countSprite(world, "vulture") + countSprite(world, "bat") == flyers);
+    } else if (animals) {
       size_t aliveLife = 0;
       for (auto& e : world.entities()) aliveLife += (e->life && !e->dead);
       CHECK(aliveLife == 0);                      // everything alive is gone, in a single moment
@@ -2701,6 +2705,104 @@ TEST(the_mountains_sound_like_wind_a_stream_an_eagle_and_roar_in_a_storm_and_an_
     loudest = std::max(loudest, ambientFor(world).avalanche);
   }
   CHECK(loudest > 0.9f);
+}
+
+// RMS of the `seconds` after `after` replaces `before` in a running ambience (a counter that went up).
+static double rmsAfterChange(const AmbientParams& before, const AmbientParams& after, double seconds, uint64_t seed = 2) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, seed);
+  std::vector<float> warm(kRate * 2 * 2);
+  a.render(before, warm.data(), kRate * 2);
+  std::vector<float> buf(static_cast<size_t>(kRate * seconds) * 2);
+  a.render(after, buf.data(), static_cast<int>(buf.size() / 2));
+  double sum = 0;
+  for (float s : buf) {
+    CHECK(std::isfinite(s) && std::fabs(s) <= 1.0f);
+    sum += double(s) * s;
+  }
+  return std::sqrt(sum / double(buf.size()));
+}
+
+TEST(a_sandworm_bellows_as_it_crosses_and_crunches_each_thing_it_swallows) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Desert;
+  AmbientParams worm = calm;
+  worm.worm = 1;
+  CHECK(ambienceRms(worm, 10) > ambienceRms(calm, 10) * 2);  // a deep roar over the dry wind
+  AmbientParams crunch = calm;
+  crunch.crushes = 1;
+  CHECK(rmsAfterChange(calm, crunch, 0.6) > rmsAfterChange(calm, calm, 0.6) * 2);  // a crunch at once
+  AmbientParams moonCrunch = crunch;
+  moonCrunch.kind = AmbientKind::Moon;
+  AmbientParams moon = calm;
+  moon.kind = AmbientKind::Moon;
+  CHECK(rmsAfterChange(moon, moonCrunch, 0.6) < rmsAfterChange(moon, moon, 0.6) * 1.5);  // only the desert hears it
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  CHECK(ambientFor(world).worm == 0.0f && ambientFor(world).crushes == 0);
+  world.triggerRare();
+  float nearest = 0;
+  for (int i = 0; i < 1500; ++i) {
+    world.step(0.05);
+    nearest = std::max(nearest, ambientFor(world).worm);
+  }
+  CHECK(nearest > 0.9f);
+  CHECK(ambientFor(world).crushes > 3);
+}
+
+TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  world.setTimeMode(World::TimeMode::Day);
+  world.triggerRare();
+  bool lashed = false, beforeHit = false, drawn = false;
+  unsigned crushedAtStart = 0;
+  for (int i = 0; i < 1500 && !(lashed && world.tongueCount() == 0); ++i) {
+    world.step(0.05);
+    if (world.tongueCount() == 0) continue;
+    if (!lashed) {
+      lashed = true;
+      crushedAtStart = world.crushCount();
+    }
+    Frame f;
+    world.render(f);
+    bool tongue = false;
+    for (int y = 0; y < f.height(); ++y) {
+      for (int x = 0; x < f.width(); ++x) {
+        const Cell& c = f.at(x, y);  // the tip: a red '@' (the storm dims the colors a little)
+        tongue |= c.ch == U'@' && c.fg.r > c.fg.g * 2 && c.fg.r > c.fg.b * 2;
+      }
+    }
+    drawn |= tongue;
+    if (world.crushCount() == crushedAtStart) beforeHit = true;  // out first: the victim is still alive
+  }
+  CHECK(lashed && drawn && beforeHit);
+  CHECK(world.crushCount() > crushedAtStart);  // and the lash crushed something
+  CHECK(world.tongueCount() == 0);             // one tongue at a time, and it is gone afterwards
+  // The alien, which has no reach, never lashes.
+  World moon(pack, pack.scene("moon"), 120, 30, 5);
+  moon.triggerRare();
+  for (int i = 0; i < 600; ++i) {
+    moon.step(0.05);
+    CHECK(moon.tongueCount() == 0);
+  }
+}
+
+TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Mountains;
+  AmbientParams buried = calm;
+  buried.squeals = 1;
+  CHECK(rmsAfterChange(calm, buried, 0.5) > rmsAfterChange(calm, calm, 0.5) * 1.3);
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 140, 40, 7);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.squealCount() == 0);
+  world.triggerRare();
+  for (int i = 0; i < 1200; ++i) world.step(0.05);
+  CHECK(world.squealCount() > 0 && world.squealCount() <= world.killedCount());  // animals only, not the trees
+  CHECK(ambientFor(world).squeals == world.squealCount());
 }
 
 /// A session over the built-in scenes, 100 by 30 cells.

@@ -14,6 +14,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed the sun and the moon in the aquarium, forest, desert and mountains from 5x3 to 8x5 cells, so that they read as discs. In a low sky (the aquarium's) they are cut off at the top instead of at the bottom
 
 ### Fixed
 - Fixed the stars staying bright in a night-time sandstorm (or rain): clouds and dust now hide them

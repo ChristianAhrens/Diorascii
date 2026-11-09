@@ -3,10 +3,14 @@ glow: yes
 solid: yes
 habitat: sky
 --- art
- \|/
--( )-
- /|\
+  .--. 
+ /    \
+|      |
+ \    /
+  '--'
 --- mask
- YYY
-YYYYY
- YYY
+  YYYY
+ YYYYYY
+YYYYYYYY
+ YYYYYY
+  YYYY

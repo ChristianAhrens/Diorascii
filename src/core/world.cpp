@@ -1448,7 +1448,9 @@ void World::renderCelestial(Frame& out, Style style, const Light& light) const {
   body.fg = sprite->props().color("color", {255, 240, 180});
   body.x = u * (w_ - 1) - sprite->width() / 2.0;
   // At the horizon the whole body is just below it; it climbs to the top of the sky at mid-arc.
-  body.y = skyEnd * (1 - std::sin(kPi * u));
+  // In a sky lower than the body it stops with its feet on the sky's last row and its top cut off.
+  const double peak = std::min(0.0, static_cast<double>(skyEnd - sprite->height()));
+  body.y = skyEnd - (skyEnd - peak) * std::sin(kPi * u);
   blit(out, body, style, light, skyEnd);  // rows below the horizon stay hidden
 }
 

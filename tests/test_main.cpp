@@ -728,6 +728,26 @@ TEST(the_moon_follows_a_cycle_of_sun_and_earth_with_a_black_sky_and_a_ground_tha
   CHECK(count(night, world.surfaceY(), blue) > 10 && count(night, world.surfaceY(), yellow) == 0);
 }
 
+TEST(the_sun_and_moon_are_larger_than_a_single_glyph_and_a_low_sky_cuts_them_off_at_the_top) {
+  AssetPack pack = AssetPack::embedded();
+  CHECK(pack.find("sun_big")->width() == 8 && pack.find("sun_big")->height() == 5);
+  CHECK(pack.find("moon_big")->width() == 8 && pack.find("moon_big")->height() == 5);
+  World world(pack, pack.scene("aquarium"), 80, 24, 1);  // the aquarium's sky is a few rows only
+  CHECK(world.surfaceY() < 5);
+  world.setPhase(0.5);  // the sun at the top of its arc
+  Frame f;
+  world.render(f);
+  auto yellow = [](const Cell& c) {
+    return (c.bg.r > 200 && c.bg.g > 180 && c.bg.b < 120) || (c.ch != U' ' && c.fg.r > 200 && c.fg.g > 180 && c.fg.b < 120);
+  };
+  int top = 0, bottom = 0;
+  for (int x = 0; x < f.width(); ++x) {
+    top += yellow(f.at(x, 0)) ? 1 : 0;
+    bottom += yellow(f.at(x, world.surfaceY() - 1)) ? 1 : 0;
+  }
+  CHECK(top > 0 && bottom > 0);  // the sun fills the sky's rows, only its top is cut off
+}
+
 TEST(the_sun_over_the_moon_is_larger_than_the_earth) {
   AssetPack pack = AssetPack::embedded();
   CHECK(pack.find("sun_corona")->width() > pack.find("earth")->width());

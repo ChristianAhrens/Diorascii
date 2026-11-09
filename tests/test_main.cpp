@@ -175,7 +175,7 @@ TEST(embedded_assets_all_load) {
                         "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
-                        "cloud_wisp", "snowpuff", "snowflake", "pounce", "avalanche"})
+                        "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -746,6 +746,26 @@ TEST(the_sun_and_moon_are_larger_than_a_single_glyph_and_a_low_sky_cuts_them_off
     bottom += yellow(f.at(x, world.surfaceY() - 1)) ? 1 : 0;
   }
   CHECK(top > 0 && bottom > 0);  // the sun fills the sky's rows, only its top is cut off
+}
+
+TEST(scenes_mix_clouds_of_the_usual_size_with_larger_ones) {
+  AssetPack pack = AssetPack::embedded();
+  const std::pair<const char*, const char*> pairs[] = {{"cloud_big", "cloud_big_l"}, {"cloud_small", "cloud_small_l"},
+                                                       {"cloud_wisp", "cloud_wisp_l"}};
+  for (const auto& p : pairs) {
+    CHECK(pack.find(p.second)->width() > pack.find(p.first)->width());
+    CHECK(pack.find(p.second)->height() > pack.find(p.first)->height());
+  }
+  for (const char* scene : {"forest", "desert", "mountains"}) {
+    World world(pack, pack.scene(scene), 300, 40, 1);
+    int usual = 0, large = 0;
+    for (auto& e : world.entities()) {
+      const std::string& n = e->sprite->name();
+      usual += (n == "cloud_big" || n == "cloud_small" || n == "cloud_wisp") ? 1 : 0;
+      large += (n == "cloud_big_l" || n == "cloud_small_l" || n == "cloud_wisp_l") ? 1 : 0;
+    }
+    CHECK(usual > 0 && large > 0);
+  }
 }
 
 TEST(the_sun_over_the_moon_is_larger_than_the_earth) {
@@ -2383,7 +2403,7 @@ TEST(goats_deer_and_bears_stay_in_their_zones_birds_and_eagles_in_theirs) {
 
 TEST(goats_leap_in_hops_and_wander_between_ledges) {
   AssetPack pack = AssetPack::embedded();
-  World world(pack, quietMountains(pack), 160, 44, 6);
+  World world(pack, quietMountains(pack), 160, 44, 7);
   world.setTimeMode(World::TimeMode::Day);
   Entity* goat = allOf(world, "goat").front();
   const double x0 = goat->x, row0 = goat->anchorY;

@@ -38,7 +38,8 @@ rare-interval: 240..480
 
 --- population
 # sprite       mode       amount
-cloud_wisp     per-cols   45
+cloud_wisp     per-cols   90
+cloud_wisp_l   per-cols   90
 fir_big        per-cols   6
 fir_small      per-cols   5
 shrub          per-cols   9

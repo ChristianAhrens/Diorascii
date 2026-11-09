@@ -31,8 +31,11 @@ pine_small     per-cols   7
 oak            per-cols   14
 bush           per-cols   8
 flower         per-cols   6
-cloud_big      per-cols   45
-cloud_small    per-cols   30
+# half of the clouds are a larger variant
+cloud_big      per-cols   90
+cloud_big_l    per-cols   90
+cloud_small    per-cols   60
+cloud_small_l  per-cols   60
 bird           per-cols   40
 deer           per-cols   38
 rabbit         per-cols   50

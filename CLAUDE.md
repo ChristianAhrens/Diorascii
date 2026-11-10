@@ -1,6 +1,6 @@
 # Diorascii - guide for AI collaborators
 
-Diorascii is a C++20 ASCII-art scene app for the terminal (aquarium, forest, desert, mountains, moon):
+Diorascii is a C++20 ASCII-art scene app for the terminal (aquarium, forest, desert, mountains, city, moon):
 MIT licensed, all code and art original, zero runtime dependencies. Read this file first; the detail
 is in [docs/ai/](docs/ai/README.md).
 

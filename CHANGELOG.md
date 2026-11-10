@@ -24,6 +24,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed the project page's description and the guide for AI collaborators to name the City among the scenes, and the README's list of behaviors to include `drive`, `engine` and `blaze`
 - Changed the City's plane to a larger drawing in the style of a pictogram: a swept wing behind and above the fuselage, one below it, a tail fin with a blue tip, a row of windows and a blue stripe along the belly
 - Changed the City's skyscrapers to be up to 80% of the sky and the buildings to stand further apart, gave the planes clearer wings, made the traffic thinner overall with rush hours at about 8:00 and 17:30 (vehicle sprites with `rush: yes`), and made the lettering on mirrored sprites (TAXI, FIRE) stay readable
 - Changed the fire engine to stay until the building is renovated, spray solid blue jets of water, and to cordon off a wider site with barriers across the road and the sidewalks

@@ -320,6 +320,9 @@ Behaviors:
 | `ledge` | on a mountain: walks (or hops, with a `hop-period`) along a ledge of its `zone`, turns round where the zone or the mountain ends and now and then climbs to another ledge |
 | `soar` | on a mountain: flies across the scene and swoops up and down within its `zone` band, now and then diving (frames: wings up, wings down, gliding, diving) |
 | `avalanche` | the powder cloud of an avalanche: creaks on a snowy flank, then rips down it, scarring the land and burying what stands in its way |
+| `drive` | a city vehicle: drives along the main road in its lane, can turn off into side streets (`turns`) and shows its five views as it turns; stops in front of a cordon |
+| `engine` | the fire engine: drives to the burning building with its siren, parks, sprays water, leaves without the siren once no building burns, and cordons the site with barriers while it stays |
+| `blaze` | the city's rare event (an invisible sprite): sets a skyscraper on fire; the fire is either beaten or spreads and burns 3 to 5 more buildings down, which are rebuilt later |
 
 ## Extending: scenes
 

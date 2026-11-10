@@ -178,7 +178,7 @@ TEST(embedded_assets_all_load) {
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
                         "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
-                        "submarine", "toxinpuff", "flood", "log"})
+                        "submarine", "toxinpuff", "flood", "log", "helicopter"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -3638,7 +3638,7 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
 TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
   AssetPack pack = AssetPack::embedded();
   struct Case { const char* scene; const char* first; const char* second; };
-  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}}) {
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}}) {
     auto scene = pack.scene(c.scene);
     CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
     if (!scene || scene->rare.size() != 2) continue;
@@ -3759,6 +3759,35 @@ TEST(a_flood_tears_everything_off_the_bank_and_leaves_mud_and_the_land_bare_for_
   CHECK(mud == 0);
 }
 
+TEST(poachers_in_a_helicopter_shoot_down_the_life_of_the_desert_one_by_one_and_leave) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  size_t life = 0;
+  for (auto& e : world.entities()) life += e->life;
+  CHECK(life > 8);
+  world.triggerRare(RarePick::Other);
+  size_t alive = life, fewest = life, between = 0;
+  double rotor = 0;
+  bool left = false;
+  for (int i = 0; i < 2000; ++i) {
+    world.step(0.05);
+    alive = 0;
+    for (auto& e : world.entities()) alive += (e->life && !e->dead);
+    fewest = std::min(fewest, alive);
+    between += (alive > 0 && alive < life) ? 1 : 0;
+    rotor = std::max(rotor, world.rotorLevel());
+    left |= i > 100 && countSprite(world, "helicopter") == 0;
+  }
+  CHECK(fewest <= life / 8);                      // it hunts down (nearly) all of it
+  CHECK(between > 100);                           // one after the other, not all at once
+  CHECK(world.shotCount() >= life * 8 / 10);      // each one with a shot
+  CHECK(world.crushCount() == 0);                 // which are shots, not bites
+  CHECK(rotor > 0.9 && left);                     // the rotor is heard, and the poachers go
+  CHECK(alive >= life / 2);                       // and the animals come back later
+}
+
 TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
   constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
   auto rms = [&](const AmbientParams& p) {
@@ -3769,7 +3798,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
     for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
     return std::sqrt(sum / double(buf.size() / 2));
   };
-  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest}) {
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert}) {
     AmbientParams calm;
     calm.kind = kind;
     AmbientParams menace = calm;
@@ -3777,11 +3806,33 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
     CHECK(rms(menace) > rms(calm) * 1.5);
     CHECK(rms(menace) < 0.3);  // loud, but well below a storm
   }
+  // A rifle shot cracks, in the desert only.
+  auto peakAfter = [&](AmbientKind kind, bool shoot) {
+    Ambience a(kRate, 4);
+    AmbientParams p;
+    p.kind = kind;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    for (int s = 0; s < 3; ++s) a.render(p, buf.data(), kRate);
+    if (shoot) p.shots += 2;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = 0; i < static_cast<size_t>(kRate * 0.3) * 2; ++i) pk = std::max(pk, std::fabs(buf[i]));
+    return pk;
+  };
+  CHECK(peakAfter(AmbientKind::Desert, true) > peakAfter(AmbientKind::Desert, false) * 1.5f);
+  CHECK(peakAfter(AmbientKind::Forest, true) < peakAfter(AmbientKind::Forest, false) * 1.2f);
+  // The world feeds it: the strongest of the catastrophes' levels, and the shot count.
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  CHECK(ambientFor(world).menace == 0.0f);
+  world.triggerRare(RarePick::Other);
+  for (int i = 0; i < 100; ++i) world.step(0.05);
+  CHECK(ambientFor(world).menace > 0.3f && ambientFor(world).shots == world.shotCount());
 }
 
 TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest"}) {
+  for (const char* name : {"aquarium", "forest", "desert"}) {
     for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
       for (double hour : {3.0, 12.0, 19.0}) {
         World world(pack, pack.scene(name), w, h, 7);
@@ -3800,7 +3851,7 @@ TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
 
 TEST(the_second_catastrophes_are_deterministic_per_seed) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest"}) {
+  for (const char* name : {"aquarium", "forest", "desert"}) {
     std::string a, b;
     for (std::string* out : {&a, &b}) {
       World world(pack, pack.scene(name), 120, 32, 11);

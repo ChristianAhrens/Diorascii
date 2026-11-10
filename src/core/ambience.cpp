@@ -90,7 +90,8 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
-  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel()}));
+  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel()}));
+  p.shots = world.shotCount();
   return p;
 }
 
@@ -107,6 +108,7 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowHiss_ = coeff(1.0f / 1100.0f / 6.28f);
   lowFlood_ = coeff(1.0f / 420.0f / 6.28f);
   lowFloodTop_ = coeff(1.0f / 2300.0f / 6.28f);
+  lowChop_ = coeff(1.0f / 650.0f / 6.28f);
   lowThump_ = coeff(1.0f / 190.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
   lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
@@ -639,6 +641,14 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
         out[ch] = (menaceLow_[ch][1] * 3.2f + (n - menaceHigh_[ch]) * 0.06f + menaceHigh_[ch] * 0.28f) * 0.55f * level * swell;
         break;
       }
+      case AmbientKind::Desert: {  // a helicopter: the chop of the rotor, over a whine
+        const double chop = std::pow(0.5 + 0.5 * std::sin(kTwoPi * 11.5 * t_), 2.2);
+        menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowChop_;
+        menacePhase_[1] += kTwoPi * 390.0 * dt * 0.5;
+        out[ch] = (menaceHigh_[ch] * static_cast<float>(chop) * 1.9f + menaceLow_[ch][1] * 1.5f * static_cast<float>(chop) +
+                   0.012f * static_cast<float>(std::sin(menacePhase_[1]))) * 0.7f * level;
+        break;
+      }
       default: break;
     }
   }
@@ -794,8 +804,27 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenImpacts_ = p.impacts;
     }
+    // Rifle shots (the poachers' helicopter): each one cracks (the first value seen is the starting point).
+    if (!shotsSynced_) { seenShots_ = p.shots; shotsSynced_ = true; }
+    if (p.shots != seenShots_) {
+      if (p.shots > seenShots_ && p.kind == AmbientKind::Desert) {
+        Shot& s = *std::min_element(std::begin(shotVoices_), std::end(shotVoices_),
+                                    [](const Shot& a, const Shot& b) { return a.start < b.start; });
+        s.start = t_ + rng_.range(0.0, 0.06);
+        s.pan = static_cast<float>(rng_.range(0.25, 0.75));
+      }
+      seenShots_ = p.shots;
+    }
     float menaceOut[2];
     menaceSample(p, menaceOut);
+    for (const Shot& s : shotVoices_) {  // a sharp crack that dies away at once, over a short thump
+      const double tau = t_ - s.start;
+      if (tau < 0 || tau > 0.4) continue;
+      const float crack = noise(rng_) * static_cast<float>(std::exp(-tau / 0.012)) * 0.34f;
+      const float thump = static_cast<float>(std::sin(kTwoPi * 150.0 * tau) * std::exp(-tau / 0.05)) * 0.22f;
+      menaceOut[0] += (crack + thump) * (1.2f - s.pan);
+      menaceOut[1] += (crack + thump) * (0.2f + s.pan);
+    }
     float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0}, city[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);

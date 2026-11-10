@@ -63,6 +63,8 @@ struct AmbientParams {
   /// zero): the leaking submarine's hissing gas, the flood's rush, the poachers' helicopter, the
   /// yeti's roars and stamping, the monsters' roars and stamping, the rumble of the big meteor coming down.
   float menace = 0;
+  /// Counts the poachers' rifle shots (World::shotCount()); each one cracks.
+  unsigned shots = 0;
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -267,10 +269,20 @@ class Ambience {
   float fireLow_[2][2] = {}, fireCrack_[2] = {}, planeLow_[2][2] = {};  ///< fire and jet filters
   float lowTrain_, lowTrainBand_, lowKlack_, lowFire_, lowJet_;  ///< their coefficients
   float menace_ = 0;                ///< smoothed strength of the second catastrophe
+  double menacePhase_[2] = {};      ///< phases of its tones (the roar, the whine)
   float menaceLow_[2][2] = {};      ///< low-pass stages of its noise, per ear
   float menaceHigh_[2] = {};        ///< what the hiss and the rush take away, per ear
   float lowHiss_, lowThump_;        ///< coefficients of the hiss and of the low stages
   float lowFlood_, lowFloodTop_;    ///< coefficients of the flood's rush
+  float lowChop_;                   ///< coefficient of the rotor's chop
+  /// A rifle shot: a crack with a thump.
+  struct Shot {
+    double start = -10;
+    float pan = 0.5f;
+  };
+  Shot shotVoices_[4];
+  unsigned seenShots_ = 0;
+  bool shotsSynced_ = false;
   unsigned seenImpacts_ = 0;
   bool impactsSynced_ = false;
 };

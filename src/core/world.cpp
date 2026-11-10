@@ -433,6 +433,9 @@ void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 /// The leaking submarine (see World::leakStep).
 void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
 
+/// The poachers' helicopter (see World::poachStep).
+void poach(Entity& e, World& w, double dt) { w.poachStep(e, dt); }
+
 /// The flood (see World::floodStep).
 void flood(Entity& e, World& w, double dt) { w.floodStep(e, dt); }
 
@@ -449,7 +452,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
       {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
-      {"leak", leak}, {"flood", flood}};
+      {"leak", leak}, {"flood", flood}, {"poach", poach}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -497,6 +500,7 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.strikeAround = p.str("strike-aim", "ahead") == "around";
   e.strikeLashes = std::clamp(static_cast<int>(p.num("strike-lashes", 1)), 1, 8);
   e.lashColor = p.color("lash-color", e.lashColor);
+  e.lashShot = p.str("lash-shot", "no") == "yes";
   e.wipes = p.str("wipes", "life");
   const std::string mode = p.str("strike-mode", "centre");
   e.strikeMode = mode == "sweep" ? Entity::StrikeMode::Sweep : mode == "devour" ? Entity::StrikeMode::Devour : Entity::StrikeMode::Centre;
@@ -957,13 +961,19 @@ bool World::lash(const Entity& a) {
   t.effect = a.strikeEffect;
   t.wipes = a.wipes;
   t.color = a.lashColor;
+  if (a.lashShot) {  // a shot is there and gone
+    t.shot = true;
+    t.reach = 0.1;
+    t.dur = 0.3;
+    ++shots_;
+  }
   t.ox = bestX - a.x;
   t.x0 = bestX;
   t.y0 = baseY;
   t.x1 = best->x + best->width() / 2.0;
   t.y1 = best->y + best->height() / 2.0;
   tongues_.push_back(t);
-  nextLash_ = time_ + (a.strikeLashes > 1 ? 0.2 : 0.0);  // tentacles lash one after another
+  nextLash_ = time_ + (a.lashShot ? 0.45 : a.strikeLashes > 1 ? 0.2 : 0.0);  // tentacles lash one after another
   return true;
 }
 
@@ -988,7 +998,7 @@ void World::stepTongues(double dt) {
       t.hit = true;
       if (alive) {
         claim(*v, t.effect);
-        noteCrushed(1);
+        if (!t.shot) noteCrushed(1);
       }
     }
     if (t.age >= t.dur) {
@@ -1011,13 +1021,13 @@ void World::renderTongues(Frame& out, Style style, const Light& light) const {
     for (int s = 0; s <= samples; ++s) {
       const double u = static_cast<double>(s) / samples;
       if (u > p) break;
-      const double wobble = 0.8 * std::sin(u * len * 0.8 - t.age * 28.0) * u * (1.0 - p * 0.5);  // it lashes about
+      const double wobble = t.shot ? 0.0 : 0.8 * std::sin(u * len * 0.8 - t.age * 28.0) * u * (1.0 - p * 0.5);  // it lashes about
       const int cx = static_cast<int>(std::floor(t.x0 + dx * u));
       const int cy = static_cast<int>(std::floor(t.y0 + dy * u + wobble));
       if (!out.inBounds(cx, cy)) continue;
       Cell& cell = out.at(cx, cy);
       const bool tip = u + 1.0 / samples > p;
-      cell.ch = tip ? U'@' : glyph;
+      cell.ch = t.shot ? (tip ? U'*' : U'.') : tip ? U'@' : glyph;
       cell.fg = shade(tip ? scale(t.color, 0.8) : t.color, light);
       cell.defaultFg = style == Style::Mono;
     }

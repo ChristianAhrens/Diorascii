@@ -1,5 +1,5 @@
 /// @file core/disasters.cpp
-/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest).
+/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert).
 
 #include <algorithm>
 #include <cmath>
@@ -31,6 +31,8 @@ constexpr double kMudDry = 110.0, kReplantMin = 25.0, kReplantMax = 75.0;
 /// Seconds of downpour the flood brings.
 constexpr double kFloodRain = 24.0;
 
+/// Seconds the poachers hunt at the most, and the seconds with nothing left to shoot at before they go.
+constexpr double kPoachMax = 75.0, kPoachIdle = 3.0;
 /// Palette of the poison: a sickly green.
 constexpr Rgb kToxinColor{150, 210, 40};
 
@@ -235,6 +237,45 @@ void World::renderFlood(Frame& out, Style style, const Light& light) const {
       c.defaultBg = style != Style::Full;
       c.defaultFg = style == Style::Mono;
     }
+  }
+}
+
+void World::poachStep(Entity& e, double dt) {
+  if (e.cruise <= 0) e.cruise = std::max(std::fabs(e.vx), 8.0);  // the speed the sprite was given
+  const double cx = e.x + e.width() / 2.0, cy = e.y + e.height() / 2.0;
+  const Entity* target = nullptr;
+  double best = 1e9;
+  for (const auto& o : entities_) {
+    if (o->dead || o->isRare || !o->life || isAsleep(*o)) continue;
+    const double d = std::fabs(o->x + o->width() / 2.0 - cx) + 2.0 * std::fabs(o->y + o->height() / 2.0 - cy);
+    if (d < best) {
+      best = d;
+      target = o.get();
+    }
+  }
+  e.idle = target ? 0 : e.idle + dt;
+  if (e.age <= kPoachMax) {  // what has been shot does not come back while the poachers are about
+    for (auto& r : restock_) r.left = std::max(r.left, 8.0);
+  }
+  const bool leaving = e.age > kPoachMax || e.idle > kPoachIdle;
+  double wantX = e.vx, wantY = e.y;
+  if (leaving) {  // off to the nearer edge, a little higher
+    wantX = (cx < w_ / 2.0 ? -1 : 1) * e.cruise * 1.3;
+    wantY = e.y - 2;
+  } else if (target) {
+    const double tx = target->x + target->width() / 2.0;
+    wantX = std::clamp((tx - cx) * 1.2, -e.cruise, e.cruise);
+    // Hovers a few rows above its target, never lower than the ground.
+    wantY = std::clamp(target->y - e.height() - 3.0, 1.0, std::max(1.0, seabedY_ - e.height() - 2.0));
+  }
+  e.vx += std::clamp(wantX - e.vx, -14.0 * dt, 14.0 * dt);
+  e.x += e.vx * dt;
+  e.y += std::clamp(wantY - e.y, -3.0 * dt, 3.0 * dt);
+  if (std::fabs(e.vx) > 1.0) e.mirrored = (e.vx > 0) != e.facesRight;
+  if (!leaving) {
+    lash(e);
+  } else if (e.x > w_ || e.x + e.width() < 0) {
+    e.dead = true;
   }
 }
 

@@ -89,6 +89,13 @@ struct Entity {
   int strikeLashes = 1;
   /// Color of its tongue or tentacles.
   Rgb lashColor{232, 96, 128};
+  /// True: its lashes are rifle shots (straight, quick, counted by World::shotCount()) instead of
+  /// tongues or tentacles.
+  bool lashShot = false;
+  /// Top speed of a hunting catastrophe (the helicopter, the yeti) in cells per second.
+  double cruise = 0;
+  /// Seconds a hunting catastrophe has had nothing left to hunt; it leaves after a few.
+  double idle = 0;
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -380,6 +387,13 @@ class World {
   void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
   /// How many animals an avalanche has buried so far; each lets out a muffled squeal.
   unsigned squealCount() const { return squeals_; }
+  /// How many rifle shots the poachers have fired so far; sound follows each.
+  unsigned shotCount() const { return shots_; }
+  /// How close the poachers' helicopter is to the middle of the scene, 0 to 1; the rotor sound follows it.
+  double rotorLevel() const { return nearness("chopper"); }
+  /// Drives the poachers' helicopter (the `poach` behavior): it flies after the closest living
+  /// thing, shoots at what is in reach and leaves when nothing is left or after a while.
+  void poachStep(Entity& e, double dt);
   /// How many entities catastrophes have wiped out so far.
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.
@@ -599,6 +613,7 @@ class World {
     bool hit = false;                   ///< the victim has been crushed
     double ox = 0;                      ///< where it starts, in columns from the attacker's left edge
     Rgb color{232, 96, 128};
+    bool shot = false;                  ///< a rifle shot rather than a tongue
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the base and the tip, in cells
     std::string effect;                 ///< shown on the victim when it is crushed
     std::string wipes;
@@ -609,7 +624,7 @@ class World {
   /// The id given to the next entity that joins the world.
   uint64_t nextId_ = 0;
   /// Counters behind crushCount() and squealCount().
-  unsigned crushes_ = 0, squeals_ = 0;
+  unsigned crushes_ = 0, squeals_ = 0, shots_ = 0;
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
   /// The poison trail of the submarine: a puff is left behind it every column or so, and every

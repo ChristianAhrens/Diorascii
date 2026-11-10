@@ -1,5 +1,5 @@
 /// @file core/disasters.cpp
-/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert).
+/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert), the yeti (mountains).
 
 #include <algorithm>
 #include <cmath>
@@ -33,6 +33,9 @@ constexpr double kFloodRain = 24.0;
 
 /// Seconds the poachers hunt at the most, and the seconds with nothing left to shoot at before they go.
 constexpr double kPoachMax = 75.0, kPoachIdle = 3.0;
+/// Seconds the yeti takes to climb over the ridge.
+constexpr double kClimb = 5.0;
+
 /// Palette of the poison: a sickly green.
 constexpr Rgb kToxinColor{150, 210, 40};
 
@@ -274,6 +277,81 @@ void World::poachStep(Entity& e, double dt) {
   if (std::fabs(e.vx) > 1.0) e.mirrored = (e.vx > 0) != e.facesRight;
   if (!leaving) {
     lash(e);
+  } else if (e.x > w_ || e.x + e.width() < 0) {
+    e.dead = true;
+  }
+}
+
+void World::maulStep(Entity& e, double dt) {
+  if (e.cruise <= 0) {  // the first step: it comes over the highest ridge
+    e.cruise = std::max(std::fabs(e.vx), 4.0);
+    int peak = w_ / 2;
+    for (int x = 0; x < w_; ++x) {
+      if (ridgeRow(x) < ridgeRow(peak)) peak = x;
+    }
+    e.x = peak - e.width() / 2.0;
+    e.vx = 0.01;
+    e.behindRidge = true;
+  }
+  if (e.age < kClimb) {  // it climbs over the ridge from the back: first hidden by the mountain, then rising above it
+    const int peak = static_cast<int>(e.x + e.width() / 2.0);
+    e.fps = 3.0;
+    const double foot = ridgeRow(peak) + 1 + e.height() * (1.0 - e.age / kClimb);
+    e.y = foot - e.height() + 1;
+    e.z = 22;
+    return;
+  }
+  e.behindRidge = false;
+  const double cx = e.x + e.width() / 2.0;
+  const Entity* target = nullptr;
+  double best = 1e9;
+  for (const auto& o : entities_) {
+    if (o->dead || o->isRare || !o->life || !o->grounded || isAsleep(*o)) continue;
+    const double d = std::fabs(o->x + o->width() / 2.0 - cx) + 3.0 * std::fabs(o->y + o->height() - (e.y + e.height()));  // near it, and on its level
+    if (d < best) {
+      best = d;
+      target = o.get();
+    }
+  }
+  e.idle = target ? 0 : e.idle + dt;
+  if (e.age <= kPoachMax) {
+    for (auto& r : restock_) r.left = std::max(r.left, 8.0);
+  }
+  const bool leaving = e.age > kPoachMax || e.idle > kPoachIdle;
+  double want = 0;
+  if (leaving) {  // back over the mountain, off to the nearer side
+    want = (cx < w_ / 2.0 ? -1 : 1) * e.cruise;
+  } else if (target) {
+    const double gap = target->x + target->width() / 2.0 - cx;
+    // It has to get to the animal itself: it walks until the animal is under its body (and then kills it).
+    want = std::fabs(gap) > 2.0 ? (gap > 0 ? 1 : -1) * e.cruise : 0.0;
+    if (std::fabs(gap) > 1) e.vx = (gap > 0 ? 1 : -1) * std::max(std::fabs(e.vx), 0.01);  // faces its target
+  }
+  const double dir = e.vx > 0 ? 1 : -1;
+  e.vx = want != 0 ? want : dir * 0.01;
+  e.x += want * dt;
+  e.mirrored = (e.vx > 0) != e.facesRight;
+  // Its feet go where its prey stands (the mountain is a face, with the meadow at the bottom): down
+  // the slope into the valley. Never above the skyline, and not into the stream. Leaving, it climbs.
+  const int column = static_cast<int>(e.x + e.width() / 2.0);
+  const double lowest = static_cast<double>(riverRows_ > 0 ? riverTopY_ - 1 : h_ - 1);
+  double foot = ridgeRow(column) + 2.0;
+  if (!leaving && target) foot = std::clamp(target->y + target->height() - 1.0, ridgeRow(column) + 1.0, lowest);
+  const double wantY = foot - e.height() + 1;
+  e.y += std::clamp(wantY - e.y, -7.0 * dt, 7.0 * dt);
+  e.anchorY = e.y;
+  e.z = depthFor(e.y + e.height());
+  // Walking shakes the ground: the legs move only while it travels.
+  e.fps = want != 0 ? 3.0 : 0.0;
+  if (!leaving) {  // whatever is under its body when it gets there is grabbed and killed
+    for (auto& o : entities_) {
+      if (o->dead || o->isRare || !o->life || !o->grounded || isAsleep(*o)) continue;
+      const double mid = o->x + o->width() / 2.0;
+      if (mid >= e.x + 4 && mid <= e.x + e.width() - 4 && std::fabs((o->y + o->height()) - (e.y + e.height() - 1)) <= 3.5) {
+        claim(*o, "snowpuff");
+        spawnEffect("snowpuff", mid - 1, o->y, e.z - 1, rng_.range(-2, 2), -rng_.range(0.5, 2));
+      }
+    }
   } else if (e.x > w_ || e.x + e.width() < 0) {
     e.dead = true;
   }

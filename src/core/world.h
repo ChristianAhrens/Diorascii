@@ -96,6 +96,9 @@ struct Entity {
   double cruise = 0;
   /// Seconds a hunting catastrophe has had nothing left to hunt; it leaves after a few.
   double idle = 0;
+  /// Drawn as if behind the mountain: the cells inside the mountain's outline are hidden (the yeti
+  /// climbing over the ridge).
+  bool behindRidge = false;
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -394,6 +397,12 @@ class World {
   /// Drives the poachers' helicopter (the `poach` behavior): it flies after the closest living
   /// thing, shoots at what is in reach and leaves when nothing is left or after a while.
   void poachStep(Entity& e, double dt);
+  /// How close the yeti is to the middle of the scene, 0 to 1; its roar and stamping follow it.
+  double yetiLevel() const { return nearness("beast"); }
+  /// Drives the yeti (the `maul` behavior): it climbs over the highest ridge, follows the terrain
+  /// down to the closest animal on the ground, grabs what is in reach and leaves when nothing is
+  /// left or after a while.
+  void maulStep(Entity& e, double dt);
   /// How many entities catastrophes have wiped out so far.
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.

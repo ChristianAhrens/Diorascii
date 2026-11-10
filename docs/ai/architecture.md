@@ -77,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach maul`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -133,7 +133,12 @@ The code is in `src/core/disasters.cpp`:
 - `poachStep` (desert): the helicopter chases the nearest living thing, hovers above it and calls `lash` with
   `lash-shot: yes`, which makes a `Tongue` a quick straight `.`-tracer, counted by `shotCount()`; restocking waits while it
   hunts; it leaves when nothing is left for 3 s or after 75 s.
-Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field).
+- `maulStep` (mountains): the yeti climbs for 5 s over the highest ridge from behind: `Entity::behindRidge` makes `blit`
+  hide the cells inside the mountain outline (`ridge_`) while its feet rise, then it is drawn in front. The mountain is a
+  face with the meadow at the bottom, so its feet go to the row of its prey (never above the skyline) and it walks to the
+  nearest grounded life (distance counts rows three times) and kills whatever comes under its body (`claim`); it never
+  lashes, so it crosses the scene after its prey; flyers are out of its reach.
+Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field). The mountains' is a creature: thuds every 0.55 s and a roar now and then (`yetiLevel` is the `nearness` of the tag `beast`).
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals, shots) that only count as events when they increase; the first value seen is the baseline.
 

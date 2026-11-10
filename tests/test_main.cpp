@@ -178,7 +178,7 @@ TEST(embedded_assets_all_load) {
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
                         "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
-                        "submarine", "toxinpuff", "flood", "log", "helicopter"})
+                        "submarine", "toxinpuff", "flood", "log", "helicopter", "yeti"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -3638,7 +3638,7 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
 TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
   AssetPack pack = AssetPack::embedded();
   struct Case { const char* scene; const char* first; const char* second; };
-  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}}) {
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}, Case{"mountains", "avalanche", "yeti"}}) {
     auto scene = pack.scene(c.scene);
     CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
     if (!scene || scene->rare.size() != 2) continue;
@@ -3788,6 +3788,54 @@ TEST(poachers_in_a_helicopter_shoot_down_the_life_of_the_desert_one_by_one_and_l
   CHECK(alive >= life / 2);                       // and the animals come back later
 }
 
+TEST(a_giant_yeti_comes_over_the_highest_ridge_and_mauls_the_animals_on_the_ground) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 140, 36, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  size_t ground = 0;
+  for (auto& e : world.entities()) ground += (e->life && e->grounded);
+  CHECK(ground > 5);
+  world.triggerRare(RarePick::Other);
+  world.step(0.05);
+  int peak = 0;
+  for (int x = 0; x < world.width(); ++x) {
+    if (world.ridgeRow(x) < world.ridgeRow(peak)) peak = x;
+  }
+  bool atPeak = false;
+  size_t left = ground, tall = 0;
+  double roar = 0;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "yeti") {
+      atPeak = std::fabs(e->x + e->width() / 2.0 - peak) < 3;  // it starts on the ridge
+      tall = static_cast<size_t>(e->height());
+    }
+  }
+  CHECK(atPeak && tall >= 12);                  // and it is much bigger than the bear
+  bool hiddenAtFirst = false, shownLater = false;
+  double highestFoot = 1e9, lowestFoot = 0;
+  for (auto& e : world.entities()) hiddenAtFirst |= e->sprite->name() == "yeti" && e->behindRidge;
+  for (int i = 0; i < 2000; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->sprite->name() != "yeti") continue;
+      if (!e->behindRidge) {
+        shownLater = true;
+        highestFoot = std::min(highestFoot, e->y + e->height());
+        lowestFoot = std::max(lowestFoot, e->y + e->height());
+      }
+    }
+    size_t now = 0;
+    for (auto& e : world.entities()) now += (e->life && e->grounded && !e->dead);
+    left = std::min(left, now);
+    roar = std::max(roar, world.yetiLevel());
+  }
+  const double descended = lowestFoot - highestFoot;
+  CHECK(left == 0 && world.killedCount() >= ground);
+  CHECK(hiddenAtFirst && shownLater && descended >= 8);  // up over the ridge from behind, then down into the valley
+  CHECK(roar > 0.8 && countSprite(world, "yeti") == 0);  // it has gone again
+}
+
 TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
   constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
   auto rms = [&](const AmbientParams& p) {
@@ -3798,7 +3846,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
     for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
     return std::sqrt(sum / double(buf.size() / 2));
   };
-  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert}) {
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Mountains}) {
     AmbientParams calm;
     calm.kind = kind;
     AmbientParams menace = calm;
@@ -3832,7 +3880,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
 
 TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest", "desert"}) {
+  for (const char* name : {"aquarium", "forest", "desert", "mountains"}) {
     for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
       for (double hour : {3.0, 12.0, 19.0}) {
         World world(pack, pack.scene(name), w, h, 7);
@@ -3851,7 +3899,7 @@ TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
 
 TEST(the_second_catastrophes_are_deterministic_per_seed) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest", "desert"}) {
+  for (const char* name : {"aquarium", "forest", "desert", "mountains"}) {
     std::string a, b;
     for (std::string* out : {&a, &b}) {
       World world(pack, pack.scene(name), 120, 32, 11);

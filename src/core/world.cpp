@@ -70,8 +70,10 @@ bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
   return e.active == Entity::Active::Day ? l.sun > 0.35 : l.sun < 0.35;
 }
 
-/// Draws one entity into out, shaded for the light, skipping rows from maxRow down.
-void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) {
+/// Draws one entity into out, shaded for the light, skipping rows from maxRow down and, for
+/// something behind a mountain, the cells inside the mountain's outline (hideBelow: first row of the
+/// mountain per column).
+void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow, const std::vector<int>* hideBelow = nullptr) {
   const SpriteFrame& f = e.sprite->frame(e.mirrored, e.frame);
   const int ox = static_cast<int>(std::floor(e.x));
   const int oy = static_cast<int>(std::floor(e.y));
@@ -83,6 +85,7 @@ void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) 
     for (int c = 0; c < e.width(); ++c) {
       const int px = ox + c, py = oy + r;
       if (!out.inBounds(px, py) || py >= maxRow) continue;
+      if (hideBelow && py >= (*hideBelow)[static_cast<size_t>(px)]) continue;  // behind the mountain
       const char32_t ch = f.art[r][c], m = f.mask[r][c];
       Cell& cell = out.at(px, py);
       if (ch == U' ') {
@@ -433,6 +436,9 @@ void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 /// The leaking submarine (see World::leakStep).
 void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
 
+/// The yeti (see World::maulStep).
+void maul(Entity& e, World& w, double dt) { w.maulStep(e, dt); }
+
 /// The poachers' helicopter (see World::poachStep).
 void poach(Entity& e, World& w, double dt) { w.poachStep(e, dt); }
 
@@ -452,7 +458,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
       {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
-      {"leak", leak}, {"flood", flood}, {"poach", poach}};
+      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -1803,7 +1809,7 @@ void World::render(Frame& out, Style style) const {
       renderStreet(out, style, l);
       streetDrawn = true;
     }
-    blit(out, *e, style, l, h_);
+    blit(out, *e, style, l, h_, e->behindRidge && !ridge_.empty() ? &ridge_ : nullptr);
   }
   if (!backDrawn) renderCityBack(out, style, l);
   if (!streetDrawn) renderStreet(out, style, l);

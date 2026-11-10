@@ -275,6 +275,9 @@ class Ambience {
   float lowHiss_, lowThump_;        ///< coefficients of the hiss and of the low stages
   float lowFlood_, lowFloodTop_;    ///< coefficients of the flood's rush
   float lowChop_;                   ///< coefficient of the rotor's chop
+  double nextMenaceRoar_ = 0;       ///< when the creature roars next (0 = not planned)
+  double menaceRoarStart_ = -10, menaceRoarDur_ = 1.5;  ///< the current roar
+  int menaceRoarVoice_ = 0;         ///< 0 the low growl, 1 the shrill cry
   /// A rifle shot: a crack with a thump.
   struct Shot {
     double start = -10;

@@ -90,7 +90,7 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
-  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel()}));
+  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel(), world.yetiLevel()}));
   p.shots = world.shotCount();
   return p;
 }
@@ -654,6 +654,33 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
   }
   if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
     bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level);
+  }
+  if (p.kind != AmbientKind::Mountains && p.kind != AmbientKind::City) return;
+  // A creature: heavy steps and a roar now and then. The monsters of the city are bigger and slower.
+  const bool big = p.kind == AmbientKind::City;
+  const double period = big ? 0.95 : 0.55;
+  const double ph = std::fmod(t_, period);
+  const float thump = static_cast<float>(std::exp(-ph / (big ? 0.2 : 0.11)) * std::sin(kTwoPi * (big ? 44.0 : 62.0) * ph));
+  out[0] += thump * (big ? 0.36f : 0.38f) * level + menaceLow_[0][1] * (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
+  out[1] += thump * (big ? 0.36f : 0.38f) * level + menaceLow_[1][1] * (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
+  if (nextMenaceRoar_ == 0) nextMenaceRoar_ = t_ + rng_.range(0.5, 1.5);
+  if (t_ >= nextMenaceRoar_) {
+    menaceRoarStart_ = t_;
+    menaceRoarDur_ = rng_.range(1.3, 2.0);
+    menaceRoarVoice_ = big ? (menaceRoarVoice_ + 1) % 2 : 0;
+    nextMenaceRoar_ = t_ + menaceRoarDur_ + rng_.range(2.0, 4.5);
+  }
+  const double rt = t_ - menaceRoarStart_;
+  if (rt >= 0 && rt < menaceRoarDur_) {
+    const double u = rt / menaceRoarDur_;
+    const double env = std::min(1.0, rt / 0.15) * std::min(1.0, (menaceRoarDur_ - rt) / 0.5);
+    // The yeti and the lizard bellow low; the winged monster screeches high.
+    const double hz = menaceRoarVoice_ == 1 ? 520.0 + 380.0 * std::sin(3.14159265 * u) : (big ? 58.0 : 96.0) + 50.0 * std::sin(3.14159265 * std::pow(u, 0.8));
+    menacePhase_[0] += kTwoPi * hz * dt;
+    const double tone = std::tanh(2.2 * std::sin(menacePhase_[0]) + 1.1 * std::sin(2 * menacePhase_[0] + 0.5) + 0.5 * std::sin(3 * menacePhase_[0] + 1.0));
+    const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f : 0.14f);
+    out[0] += roar;
+    out[1] += roar;
   }
 }
 

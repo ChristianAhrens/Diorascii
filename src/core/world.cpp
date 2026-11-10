@@ -436,6 +436,9 @@ void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 /// The leaking submarine (see World::leakStep).
 void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
 
+/// The big meteor (see World::asteroidStep).
+void asteroid(Entity& e, World& w, double dt) { w.asteroidStep(e, dt); }
+
 /// The monster fight (see World::clashStep).
 void clash(Entity& e, World& w, double dt) { w.clashStep(e, dt); }
 
@@ -461,7 +464,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
       {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
-      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}};
+      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}, {"asteroid", asteroid}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }

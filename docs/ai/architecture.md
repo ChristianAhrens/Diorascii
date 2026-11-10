@@ -77,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach maul clash`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach maul clash asteroid`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -150,7 +150,15 @@ The code is in `src/core/disasters.cpp`:
   first. Everything grounded and moving on the street (not the train, not the avenue cars) gets `Entity::fleeing` when the
   fight is called and every step while it lasts: `World::step` runs it straight off the screen at 14+ cells/s away from
   `meetX` and puts its `onDeath` into `restock_`, which the clash keeps holding back until phase 3.
-Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field). The mountains' is a creature: thuds every 0.55 s and a roar now and then (`yetiLevel` is the `nearness` of the tag `beast`). The city's monsters step and roar in the same way, bigger and slower (tag `titan`), the winged one's screech being a second voice gated by the field `winged` (nearness of `winged_titan`; it is never chosen without it), and every stream of fire roars by the field `flames` (`World::flameLevel()`: the swell of the fire-stream tongues; noise up to 2800 Hz over a deep body, with a slow random swell and faint crackles; no periodic modulation, which sounded like flapping).
+- `asteroidStep` (moon): the sprite `asteroid` has 8 frames of growing size on one 28x14 canvas; over 9 s it falls from a
+  random start to the middle, the frame follows the progress, `bigImpactAt` digs a crater over the whole width, wrecks
+  everything grounded (also what is still arriving) through `claim`, flashes the screen, and throws dust and rock out to
+  both edges.
+
+The sprites of the monsters, the submarine and the meteor were made with a throw-away silhouette rasteriser (solid body
+cells, with `/ \ | - _` outline glyphs on the border cells and `backing` so that they read against any backdrop), not by
+hand.
+Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field). The mountains' is a creature: thuds every 0.55 s and a roar now and then (`yetiLevel` is the `nearness` of the tag `beast`). The city's monsters step and roar in the same way, bigger and slower (tag `titan`), the winged one's screech being a second voice gated by the field `winged` (nearness of `winged_titan`; it is never chosen without it), and every stream of fire roars by the field `flames` (`World::flameLevel()`: the swell of the fire-stream tongues; noise up to 2800 Hz over a deep body, with a slow random swell and faint crackles; no periodic modulation, which sounded like flapping). The moon's is a rumble in the ground that swells as the meteor falls (`asteroidLevel`).
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals, shots) that only count as events when they increase; the first value seen is the baseline.
 

@@ -355,6 +355,12 @@ class World {
   double avalancheLevel() const { return slideLevel_; }
   /// How strong the poison cloud of the leaking submarine is, from 0 (none) to 1; sound follows it.
   double toxinLevel() const { return toxinLevel_; }
+  /// How near the big meteor is to striking, from 0 (none) to 1 (it hits now); the rumble through
+  /// the ground follows it.
+  double asteroidLevel() const { return asteroidLevel_; }
+  /// Drives the big meteor (the `asteroid` behavior): it comes down from far away, grows as it
+  /// nears, and strikes the ground with an impact that is felt across the whole width.
+  void asteroidStep(Entity& e, double dt);
   /// Drives the leaking submarine (the `leak` behavior): it drives through the sea and leaves a
   /// trail of poison behind it that spreads while it passes and lingers after it has gone.
   void leakStep(Entity& e, double dt);
@@ -691,6 +697,16 @@ class World {
   } flood_;
   /// How loud the flood is right now.
   double floodLevel_ = 0;
+  /// The big meteor: where it starts and where it is going to hit, as columns.
+  struct Asteroid {
+    bool started = false;
+    double x0 = 0, xt = 0;
+  } asteroid_;
+  /// How close the big meteor is to its strike.
+  double asteroidLevel_ = 0;
+  /// The big strike: a crater across the whole width, everything on the ground wrecked, thrown
+  /// rock and a wave of dust that runs out to both edges, and a flash of the whole screen.
+  void bigImpactAt(double cx);
   /// The monster fight: where the monsters meet, which part of the show it is in and when the next
   /// blow falls.
   struct Clash {

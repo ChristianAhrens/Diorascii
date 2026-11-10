@@ -1,5 +1,5 @@
 /// @file core/disasters.cpp
-/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert), the yeti (mountains), the monster fight (city).
+/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert), the yeti (mountains), the monster fight (city), the big meteor (moon).
 
 #include <algorithm>
 #include <cmath>
@@ -572,6 +572,65 @@ void World::clashStep(Entity& e, double dt) {
   if (c.phase == 3 && whole && c.nextIgnite >= c.order.size()) {
     blazeBuildings_.clear();
     e.dead = true;
+  }
+}
+
+void World::asteroidStep(Entity& e, double dt) {
+  constexpr double kFlight = 9.0;  // seconds from far away to the strike
+  (void)dt;
+  if (!asteroid_.started) {
+    asteroid_.started = true;
+    asteroid_.xt = w_ * rng_.range(0.4, 0.6);
+    asteroid_.x0 = asteroid_.xt + w_ * rng_.range(-0.35, 0.35);
+  }
+  const double p = std::clamp(e.age / kFlight, 0.0, 1.0);
+  const double cx = asteroid_.x0 + (asteroid_.xt - asteroid_.x0) * p;
+  const double cy = 1.0 + (seabedY_ - e.height() / 2.0 - 1.0) * std::pow(p, 1.7);
+  e.x = cx - e.width() / 2.0;
+  e.y = cy - e.height() / 2.0;
+  // Far away it is a speck; the frames grow from there.
+  const size_t frames = e.sprite->frameCount();
+  e.frame = std::min(frames - 1, static_cast<size_t>(std::pow(p, 1.25) * static_cast<double>(frames)));
+  asteroidLevel_ = p;
+  if (p >= 1.0) {
+    asteroidLevel_ = 0;
+    bigImpactAt(cx);
+    asteroid_ = Asteroid{};
+    e.dead = true;
+  }
+}
+
+void World::bigImpactAt(double cx) {
+  impacts_ += 1;
+  const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
+  const int maxDepth = std::clamp(bank - 1, 1, 3);  // always leave some ground
+  for (int x = 0; x < w_; ++x) {  // a crater across the whole width: deepest where it hit
+    const double t = std::fabs(x - cx) / std::max(w_ / 2.0, 1.0);
+    crater_[static_cast<size_t>(x)] = std::max(crater_[static_cast<size_t>(x)], std::max(1.0, maxDepth * (1.0 - 0.6 * t * t)));
+  }
+  auto wreck = [&](Entity& o) {  // the shock wrecks everything standing on the ground
+    if (o.dead || !o.grounded || !o.destructible || o.isRare) return;
+    claim(o, "");  // what stood here is replaced later, as after the other catastrophes
+    ++destroyed_;
+    for (int i = 0; i < 3; ++i) {
+      spawnEffect("debris", o.x + rng_.range(0, o.width()), o.y + rng_.range(0, o.height()), 1, rng_.range(-6, 6), -rng_.range(2, 7));
+    }
+  };
+  for (auto& o : entities_) wreck(*o);
+  for (size_t i = 0; i < incoming_.size(); ++i) wreck(*incoming_[i]);
+  for (auto& r : restock_) r.left = std::max(r.left, rng_.range(12.0, 40.0));  // nothing is replaced for a while
+  flash(1.6);
+  if (auto bang = pack_->find("flash")) {
+    for (int x = 0; x < w_; x += std::max(bang->width(), 1)) {
+      spawnEffect("flash", x, seabedY_ - bang->height(), 1, 0, 0);
+    }
+  }
+  for (int x = 0; x < w_; x += 2) {  // a wave of dust runs out from the middle to both edges
+    const double away = x < cx ? -1.0 : 1.0;
+    spawnEffect("dust", x, seabedY_ - 1, 1, away * (4.0 + std::fabs(x - cx) * 0.18) + rng_.range(-1, 1), -rng_.range(0.5, 3.5));
+  }
+  for (int i = 0; i < 70; ++i) {  // and rock is thrown high into the black sky
+    spawnEffect("debris", cx + rng_.range(-w_ / 8.0, w_ / 8.0), seabedY_ - 1, 1, rng_.range(-14, 14), -rng_.range(3, 12));
   }
 }
 

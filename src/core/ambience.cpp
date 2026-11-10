@@ -90,7 +90,7 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
-  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel(), world.yetiLevel(), world.titanLevel()}));
+  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel(), world.yetiLevel(), world.titanLevel(), world.asteroidLevel()}));
   p.shots = world.shotCount();
   p.flames = static_cast<float>(world.flameLevel());
   p.winged = static_cast<float>(world.nearness("winged_titan"));
@@ -651,6 +651,10 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
         menacePhase_[1] += kTwoPi * 390.0 * dt * 0.5;
         out[ch] = (menaceHigh_[ch] * static_cast<float>(chop) * 1.9f + menaceLow_[ch][1] * 1.5f * static_cast<float>(chop) +
                    0.012f * static_cast<float>(std::sin(menacePhase_[1]))) * 0.7f * level;
+        break;
+      }
+      case AmbientKind::Moon: {  // the big meteor: a rumble in the ground that swells as it nears
+        out[ch] = menaceLow_[ch][1] * 4.5f * level * level;
         break;
       }
       default: break;

@@ -1,0 +1,249 @@
+name: asteroid
+facing: right
+habitat: sky
+solid: yes
+speed: 0..0
+depth: 1
+tag: asteroid
+glow: yes
+behaviors: asteroid
+--- art
+                            
+                            
+                            
+                            
+                            
+             **             
+             **             
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+--- mask
+                            
+                            
+                            
+                            
+                            
+             YY             
+             YY             
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+--- art
+                            
+                            
+                            
+                            
+             .:             
+             **             
+             ||             
+             \/             
+                            
+                            
+                            
+                            
+                            
+                            
+--- mask
+                            
+                            
+                            
+                            
+             YY             
+             YY             
+             OO             
+             OO             
+                            
+                            
+                            
+                            
+                            
+                            
+--- art
+                            
+                            
+             *:             
+             :.             
+             .:             
+             **             
+            /  \            
+            \__/            
+                            
+                            
+                            
+                            
+                            
+                            
+--- mask
+                            
+                            
+             YY             
+             YY             
+             YY             
+             YY             
+            OnnO            
+            OOOO            
+                            
+                            
+                            
+                            
+                            
+                            
+--- art
+                            
+             .:             
+             *:             
+            .:.:            
+            ..::            
+           /    \           
+          /      \          
+          \      /          
+           \____/           
+                            
+                            
+                            
+                            
+                            
+--- mask
+                            
+             YY             
+             YY             
+            YYYY            
+            YYYY            
+           OnnnnO           
+          OnnnnnnO          
+          OnnnnnnO          
+           OOOOOO           
+                            
+                            
+                            
+                            
+                            
+--- art
+                            
+             .:             
+            **:*            
+            .:.:            
+           :    :           
+         /-      -\         
+        /          \        
+        \          /        
+         \_      _/         
+           \____/           
+                            
+                            
+                            
+                            
+--- mask
+                            
+             YY             
+            YYYY            
+            YYYY            
+           YnnnnY           
+         OOnnnnnnOO         
+        OnnnnnnnnnnO        
+        OnnnnnnnnnnO        
+         OOnnnnnnOO         
+           OOOOOO           
+                            
+                            
+                            
+                            
+--- art
+             :.             
+             .:             
+            **:*            
+          /-    -\          
+        /-        -\        
+       /            \       
+      /              \      
+      \              /      
+       \            /       
+        \_        _/        
+          \______/          
+                            
+                            
+                            
+--- mask
+             YY             
+             YY             
+            YYYY            
+          OOnnnnOO          
+        OOnnnnnnnnOO        
+       OnnnnnnnnnnnnO       
+      OnnnnnnnnnnnnnnO      
+      OnnnnnnnnnnnnnnO      
+       OnnnnnnnnnnnnO       
+        OOnnnnnnnnOO        
+          OOOOOOOO          
+                            
+                            
+                            
+--- art
+             :.             
+            *.::            
+         /--    --\         
+      /--          --\      
+     /                \     
+    /                  \    
+    |                  |    
+    |                  |    
+    \                  /    
+     \                /     
+      \__          __/      
+         \________/         
+                            
+                            
+--- mask
+             YY             
+            YYYY            
+         OOOnnnnOOO         
+      OOOnnnnnnnnnnOOO      
+     OnnnnnnnnnnnnnnnnO     
+    OnnnnnnnnnnnnnnnnnnO    
+    OnnnnnnnnnnnnnnnnnnO    
+    OnnnnnnnnnnnnnnnnnnO    
+    OnnnnnnnnnnnnnnnnnnO    
+     OnnnnnnnnnnnnnnnnO     
+      OOOnnnnnnnnnnOOO      
+         OOOOOOOOOO         
+                            
+                            
+--- art
+             /\             
+       /-----  -----\       
+    /--              --\    
+   /                    \   
+  /                      \  
+ /                        \ 
+ |                        | 
+ |                        | 
+ \                        / 
+  \                      /  
+   \                    /   
+    \__              __/    
+       \_____  _____/       
+             \/             
+--- mask
+             OO             
+       OOOOOOnnOOOOOO       
+    OOOnnnnnnnnnnnnnnOOO    
+   OnnnnnnnnnnnnnnnnnnnnO   
+  OnnnnnnnnnnnnnnnnnnnnnnO  
+ OnnnnnnnnnnnnnnnnnnnnnnnnO 
+ OnnnnnnnnnnnnnnnnnnnnnnnnO 
+ OnnnnnnnnnnnnnnnnnnnnnnnnO 
+ OnnnnnnnnnnnnnnnnnnnnnnnnO 
+  OnnnnnnnnnnnnnnnnnnnnnnO  
+   OnnnnnnnnnnnnnnnnnnnnO   
+    OOOnnnnnnnnnnnnnnOOO    
+       OOOOOOnnOOOOOO       
+             OO             

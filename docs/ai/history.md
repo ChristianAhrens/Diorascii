@@ -61,6 +61,16 @@ library gathering), extensible rendered items, same-or-better look, and an outlo
   F = ambulance with siren, x = a burning skyscraper that is quickly renovated). Built as procedural skyline + data
   sprites, see [architecture](architecture.md) and F-22.
 
+**2026-11-10** The owner asked for a second catastrophe in every scene, 20% instead of the first one: a leaking submarine
+with a poison cloud (aquarium), a flood (forest), poachers in a helicopter (desert), a huge yeti coming over the ridge
+(mountains) and a fight between two giant monsters that ruins the city (city), with reference pictures for the last two
+and the yeti. The rare list was already weighted, so the odds are weights 1 and 0.25; the rest is five behaviors in
+`disasters.cpp`, five sprites plus effects, one sound field and the `X` key. The monster names from the pictures were not
+used for the sprites (`lizard_titan`, `winged_titan`; see F-23). Revised the same day after the owner's first look: the submarine grey and solid
+with an outline, driving through and leaving a spreading trail; the flood starting as a sparse wave; the monsters more clearly
+outlined and both spitting fire (blue and violet); and a second catastrophe for the moon, a big meteor that grows from afar
+and strikes across the whole width.
+
 ## What was not done, on purpose
 
 - No classic mode, no curses backend, no scripting layer, no ECS.

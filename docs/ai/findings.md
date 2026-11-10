@@ -27,6 +27,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-20 | L | Real-time mode: time zones, DST, tvOS | open |
 | F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
 | F-22 | M | The City scene was never seen or heard by the assistant; page and screenshots lack it | open |
+| F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -221,3 +222,19 @@ the terminal height (`skyline: 0.32..0.62` of the sky), the ambulance and fire e
 fire is an invisible `blaze` sprite so that the rare scheduler is reused, headlights are not lit at night, the railway
 needs a sky of at least 16 rows. Revised the same day after the owner's first look: flatter street (4 rows), taller and more varied buildings, a visible viaduct, vehicles and planes drawn with solid block glyphs (`█`; they vanish in no style, unlike solid mask blocks in Mono). Side streets with turning cars were added after that (cars keep their side-view sprite in the avenue; the trapezoid is a flat painting, not perspective). The plane was redrawn after the owner's pictogram (30x7: far wing above, near wing below, blue-tipped fin, window row, blue belly stripe; the first 4-row version with wings was judged unrecognisable), rush-hour traffic, a longer fire-engine stay with barriers and blue water jets were added at the owner's request (the look of all of it is unseen by the assistant). The vehicles, train and planes were redrawn as line art with a darkened backing after the solid blocks read as blobs (owner); the fire engine now fights the fire and cordons the site (owner). After the owner's screenshot the side streets were redone (broad crossing, short, behind the building rows, glimpses through gaps), cars got five views (side, rear and front, with three-quarters in between), the traffic and crowds were thinned and the planes made slim (20x3); still unseen by the assistant in a terminal. The train sound was reworked to a klack-klack rhythm (only the rhythm is tested, not how it sounds). Fires sometimes get out of hand (30%): 3-5 more buildings burn down and are rebuilt after about 1.5 minutes (look and timing unseen by the assistant; the rubble drawing is a first draft). Not done: the landing page (`pages/`), its videos and the README screenshots do not
 show the City yet; no new icon art. Adds to F-08: the city is data plus about 350 lines of C++ in `city.cpp`.
+
+## F-23 The second catastrophes (M)
+Added 2026-11-10. Judged only from text renders, headless runs, tests and measured levels; **never seen in a terminal or
+heard**: the green trail and the brown flood water (the sparse front) (colors and glyphs), the submarine, helicopter, yeti and the two
+monsters (drawn by a silhouette rasteriser, solid dark bodies with outline glyphs, 60x33 cells; the yeti 27x17), the
+mud, the tracer lines, the roars and thuds (only RMS ratios are tested, at least 1.5 times the calm level). **Decisions to
+confirm:** (1) *names*: the owner's pictures show Godzilla, a MUTO and a yeti; Godzilla and MUTO are trademarks of
+Toho and Legendary, so the sprites are named `lizard_titan` and `winged_titan` and the docs say "giant lizard" and
+"winged monster" (the art is original, drawn from silhouettes and not from the pictures); say if the real names are
+wanted. (2) The flood and the yeti spare what flies (birds, butterflies); the helicopter shoots everything. (3) The
+yeti appears standing on the highest ridge rather than rising behind it (entities are always drawn over the
+terrain). (4) The moon's big meteor is a sprite of 8 frames on one canvas (a bigger rock inside a 28x14 cell), so the "growing" is stepwise; the impact digs a crater to the ground-row limit (at most 3 rows) across the width. (5) In the city the fire spreads out from the fight to about 45% of the width (about 28 buildings on a 150-column screen) and nothing else reacts: people and cars carry on, no cordon, no fire
+engine; the winged monster only dies, there is no wreck. (6) A screen under 28 rows or narrower than 110 columns
+cancels the monster fight silently (no room); the yeti is 17 rows tall, so it fills most of a 24-row screen.
+(7) `World::clashStep`, `maulStep` and the others are special-purpose code in the generic core (adds to F-08, F-21).
+Fixed-seed tests of the first catastrophes now call `triggerRare(RarePick::Common)`.

@@ -1,0 +1,213 @@
+name: lizard_titan
+facing: right
+habitat: ground
+solid: yes
+speed: 0..0
+tag: titan
+backing: 0.6
+mouth-row: 3
+behaviors: clash
+--- art
+                                                            
+                                     /---------\            
+                                    /     ooo   --\         
+                                   /               ---\     
+                                   |                   -\   
+                                  /             __    __/   
+                          ^^^    /      _______/  \__/      
+                           ^A^^A^     _/                    
+                      AA^^^ ^AA^     |                      
+                       ^^AA^          \                     
+                         |             \                    
+                  AAAA  /               \                   
+                   A^^A-                 \                  
+                    A^^                  |                  
+                      |                   -\    /---|       
+                AA^^  |                  __ ----  _/        
+                 ^^^A^                  |  \__ __/          
+                  ^A |                  |     _             
+                     |                  |                   
+            AAAA^    |                  /                   
+             AAAA    |                 |                    
+             ^^    /-                  /                    
+                /--                   |                     
+      AA^^^  /--                      /                     
+       ^A^^--                        |                      
+        ^                  ____       --\                   
+       /                  |    |        |                   
+ ^^^^A-                   |    |        |                   
+ A^A                      |    |         \                  
+  |       __               ----           ----\             
+ /   ____/  |                                 |             
+|___/       \__________________________________|            
+                                                            
+--- mask
+                                                            
+                                     LLLLLLLLLLL            
+                                    LKKKKKRRRKKKLLL         
+                                   LKKKKKKKKKKKKKKKLLLL     
+                                   LKKKKKKKKKKKKKKKKKKKLL   
+                                  LKKKKKKKKKKKKKLLKKKKLLL   
+                          CCC    LKKKKKKLLLLLLLL  LLLL      
+                           CCCCCCKKKKKLL                    
+                      CCCCC CCCCKKKKKL                      
+                       CCCCCKKKKKKKKKKL                     
+                         LKKKKKKKKKKKKKL                    
+                  CCCC  LKKKKKKKKKKKKKKKL                   
+                   CCCCLKKKKKKKKKKKKKKKKKL                  
+                    CCCKKKKKKKKKKKKKKKKKKL                  
+                      LKKKKKKKKKKKKKKKKKKKLL    LLLLL       
+                CCCC  LKKKKKKKKKKKKKKKKKKLLKLLLLKKLL        
+                 CCCCCKKKKKKKKKKKKKKKKKKL  LLLKLLL          
+                  CC LKKKKKKKKKKKKKKKKKKL     L             
+                     LKKKKKKKKKKKKKKKKKKL                   
+            CCCCC    LKKKKKKKKKKKKKKKKKKL                   
+             CCCC    LKKKKKKKKKKKKKKKKKL                    
+             CC    LLKKKKKKKKKKKKKKKKKKL                    
+                LLLKKKKKKKKKKKKKKKKKKKL                     
+      CCCCC  LLLKKKKKKKKKKKKKKKKKKKKKKL                     
+       CCCCLLKKKKKKKKKKKKKKKKKKKKKKKKL                      
+        CKKKKKKKKKKKKKKKKKKLLLLKKKKKKKLLL                   
+       LKKKKKKKKKKKKKKKKKKL    LKKKKKKKKL                   
+ CCCCCLKKKKKKKKKKKKKKKKKKKL    LKKKKKKKKL                   
+ CCCKKKKKKKKKKKKKKKKKKKKKKL    LKKKKKKKKKL                  
+  LKKKKKKKLLKKKKKKKKKKKKKKKLLLLKKKKKKKKKKKLLLLL             
+ LKKKLLLLL  LKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKL             
+LLLLL       LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL            
+                                                            
+--- art
+                                                            
+                                     /---------\            
+                                    /     ooo   --\         
+                                   /               ---\     
+                                   |                   -\   
+                                  /             __    __/   
+                          ^^^    /      _______/  \__/      
+                           ^A^^A^     _/                    
+                      AA^^^ ^AA^     |                      
+                       ^^AA^          \                     
+                         |             \                    
+                  AAAA  /               \                   
+                   A^^A-                 \                  
+                    A^^                  |                  
+                      |                   -\    /---|       
+                AA^^  |                  __ ----  _/        
+                 ^^^A^                  |  \__ __/          
+                  ^A |                  |     _             
+                     |                  |                   
+            AAAA^    |                  /                   
+             AAAA    |                 |                    
+             ^^    /-                  /                    
+                /--                   |                     
+      AA^^^  /--                      /                     
+       ^A^^--                        |                      
+        ^                 _______     --\                   
+       /                 /       \       \                  
+ ^^^^A-                 /         |       \                 
+ A^A                   |          |        \                
+  |                     -\       /          ------\         
+ /   __                  |       |                 \        
+|___/  \__________________|      \_________________/        
+                                                            
+--- mask
+                                                            
+                                     LLLLLLLLLLL            
+                                    LKKKKKRRRKKKLLL         
+                                   LKKKKKKKKKKKKKKKLLLL     
+                                   LKKKKKKKKKKKKKKKKKKKLL   
+                                  LKKKKKKKKKKKKKLLKKKKLLL   
+                          CCC    LKKKKKKLLLLLLLL  LLLL      
+                           CCCCCCKKKKKLL                    
+                      CCCCC CCCCKKKKKL                      
+                       CCCCCKKKKKKKKKKL                     
+                         LKKKKKKKKKKKKKL                    
+                  CCCC  LKKKKKKKKKKKKKKKL                   
+                   CCCCLKKKKKKKKKKKKKKKKKL                  
+                    CCCKKKKKKKKKKKKKKKKKKL                  
+                      LKKKKKKKKKKKKKKKKKKKLL    LLLLL       
+                CCCC  LKKKKKKKKKKKKKKKKKKLLKLLLLKKLL        
+                 CCCCCKKKKKKKKKKKKKKKKKKL  LLLKLLL          
+                  CC LKKKKKKKKKKKKKKKKKKL     L             
+                     LKKKKKKKKKKKKKKKKKKL                   
+            CCCCC    LKKKKKKKKKKKKKKKKKKL                   
+             CCCC    LKKKKKKKKKKKKKKKKKL                    
+             CC    LLKKKKKKKKKKKKKKKKKKL                    
+                LLLKKKKKKKKKKKKKKKKKKKL                     
+      CCCCC  LLLKKKKKKKKKKKKKKKKKKKKKKL                     
+       CCCCLLKKKKKKKKKKKKKKKKKKKKKKKKL                      
+        CKKKKKKKKKKKKKKKKKLLLLLLLKKKKKLLL                   
+       LKKKKKKKKKKKKKKKKKL       LKKKKKKKL                  
+ CCCCCLKKKKKKKKKKKKKKKKKL         LKKKKKKKL                 
+ CCCKKKKKKKKKKKKKKKKKKKL          LKKKKKKKKL                
+  LKKKKKKKKKKKKKKKKKKKKKLL       LKKKKKKKKKKLLLLLLL         
+ LKKKLLKKKKKKKKKKKKKKKKKKL       LKKKKKKKKKKKKKKKKKL        
+LLLLL  LLLLLLLLLLLLLLLLLLLL      LLLLLLLLLLLLLLLLLLL        
+                                                            
+--- art
+                                   /------ooo-----|         
+                                   |           _ |  |v      
+                                  /           | vv   v      
+                                  |       _   |    / _|     
+                                 /       / |   ----|        
+                                 |      /  |        --\     
+                          ^^^    |     |   |        __/     
+                           ^A^^A-     _/   |   ____/        
+                      AA^^^ ^AA^     |     \__/             
+                       ^^AA^          \                     
+                         |             \                    
+                  AAAA  /               \                   
+                   A^^A-                 \                  
+                    A^^                  |                  
+                      |                   -\    /---|       
+                AA^^  |                  __ ----  _/        
+                 ^^^A^                  |  \__ __/          
+                  ^A |                  |     _             
+                     |                  |                   
+            AAAA^    |                  /                   
+             AAAA    |                 |                    
+             ^^    /-                  /                    
+                /--                   |                     
+      AA^^^  /--                      /                     
+       ^A^^--                        |                      
+        ^                  ____       --\                   
+       /                  |    |        |                   
+ ^^^^A-                   |    |        |                   
+ A^A                      |    |         \                  
+  |       __               ----           ----\             
+ /   ____/  |                                 |             
+|___/       \__________________________________|            
+                                                            
+--- mask
+                                   LLLLLLLRRRLLLLLL         
+                                   LKKKKKKKKKKKLKL  LW      
+                                  LKKKKKKKKKKKL WW   W      
+                                  LKKKKKKKLKKKL    LKLL     
+                                 LKKKKKKKL LKKKLLLLL        
+                                 LKKKKKKL  LKKKKKKKKLLL     
+                          CCC    LKKKKKL   LKKKKKKKKLLL     
+                           CCCCCLKKKKKLL   LKKKLLLLL        
+                      CCCCC CCCCKKKKKL     LLLL             
+                       CCCCCKKKKKKKKKKL                     
+                         LKKKKKKKKKKKKKL                    
+                  CCCC  LKKKKKKKKKKKKKKKL                   
+                   CCCCLKKKKKKKKKKKKKKKKKL                  
+                    CCCKKKKKKKKKKKKKKKKKKL                  
+                      LKKKKKKKKKKKKKKKKKKKLL    LLLLL       
+                CCCC  LKKKKKKKKKKKKKKKKKKLLKLLLLKKLL        
+                 CCCCCKKKKKKKKKKKKKKKKKKL  LLLKLLL          
+                  CC LKKKKKKKKKKKKKKKKKKL     L             
+                     LKKKKKKKKKKKKKKKKKKL                   
+            CCCCC    LKKKKKKKKKKKKKKKKKKL                   
+             CCCC    LKKKKKKKKKKKKKKKKKL                    
+             CC    LLKKKKKKKKKKKKKKKKKKL                    
+                LLLKKKKKKKKKKKKKKKKKKKL                     
+      CCCCC  LLLKKKKKKKKKKKKKKKKKKKKKKL                     
+       CCCCLLKKKKKKKKKKKKKKKKKKKKKKKKL                      
+        CKKKKKKKKKKKKKKKKKKLLLLKKKKKKKLLL                   
+       LKKKKKKKKKKKKKKKKKKL    LKKKKKKKKL                   
+ CCCCCLKKKKKKKKKKKKKKKKKKKL    LKKKKKKKKL                   
+ CCCKKKKKKKKKKKKKKKKKKKKKKL    LKKKKKKKKKL                  
+  LKKKKKKKLLKKKKKKKKKKKKKKKLLLLKKKKKKKKKKKLLLLL             
+ LKKKLLLLL  LKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKL             
+LLLLL       LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL            
+                                                            

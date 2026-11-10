@@ -178,7 +178,7 @@ TEST(embedded_assets_all_load) {
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
                         "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
-                        "submarine", "toxinpuff", "flood", "log", "helicopter", "yeti"})
+                        "submarine", "toxinpuff", "flood", "log", "helicopter", "yeti", "lizard_titan", "winged_titan"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -3638,7 +3638,7 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
 TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
   AssetPack pack = AssetPack::embedded();
   struct Case { const char* scene; const char* first; const char* second; };
-  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}, Case{"mountains", "avalanche", "yeti"}}) {
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}, Case{"mountains", "avalanche", "yeti"}, Case{"city", "blaze", "lizard_titan"}}) {
     auto scene = pack.scene(c.scene);
     CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
     if (!scene || scene->rare.size() != 2) continue;
@@ -3836,6 +3836,97 @@ TEST(a_giant_yeti_comes_over_the_highest_ridge_and_mauls_the_animals_on_the_grou
   CHECK(roar > 0.8 && countSprite(world, "yeti") == 0);  // it has gone again
 }
 
+TEST(a_giant_lizard_and_a_winged_monster_fight_in_the_city_and_leave_it_in_ruins_that_are_rebuilt) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 38, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.triggerRare(RarePick::Other));
+  size_t most = 0, ruins = 0;
+  bool both = false, beam = false, blue = false, violet = false, outwardRebuild = true, fledEverything = false,
+       backAfterwards = false, quietAfterFall = true;
+  double loudestFlames = 0;
+  bool inFront = true;
+  std::vector<double> spans;
+  double firstSpan = 0, widestSpan = 0, middle = 0;
+  double level = 0;
+  int bothUntil = 0, over = -1;
+  for (int i = 0; i < 4000; ++i) {
+    world.step(0.05);
+    most = std::max(most, world.troubledBuildings());
+    ruins = std::max(ruins, world.ruinedBuildings());
+    level = std::max(level, world.titanLevel());
+    {
+      const std::vector<int> cols = world.troubledColumns();
+      if (!cols.empty()) {
+        const double span = *std::max_element(cols.begin(), cols.end()) - *std::min_element(cols.begin(), cols.end());
+        if (spans.empty()) firstSpan = span;
+        spans.push_back(span);
+        widestSpan = std::max(widestSpan, span);
+        if (cols.size() >= most) {  // the middle of the ruins
+          double sum = 0;
+          for (int c : cols) sum += c;
+          middle = sum / static_cast<double>(cols.size());
+        }
+        // While it is rebuilt, the middle must be done before the outskirts.
+        if (countSprite(world, "winged_titan") == 0 && cols.size() + 8 < most && cols.size() > most / 4) {
+          for (int c : cols) {
+            if (std::fabs(c - middle) < 6) outwardRebuild = false;
+          }
+        }
+      }
+    }
+    {
+      size_t street = 0;  // people and vehicles on the main street
+      for (const char* n : {"walker_front", "walker_back", "kid", "jogger", "cyclist", "car_sedan", "car_hatch", "taxi", "bus", "truck"}) {
+        street += countSprite(world, n);
+      }
+      if (i > 700 && countSprite(world, "winged_titan") > 0 && street == 0) fledEverything = true;  // mid-fight: none left
+      if (i > 3500 && street > 3) backAfterwards = true;
+    }
+    for (auto& e : world.entities()) {  // the monsters stand in front of the trees, shops and benches of the street
+      const std::string n = e->sprite->name();
+      if (i < 10 || (n != "lizard_titan" && n != "winged_titan")) continue;
+      for (auto& o : world.entities()) {
+        const std::string m = o->sprite->name();
+        if (m == "oak" || m == "bush" || m == "pine_big" || m == "bench" || m == "kiosk") inFront &= e->z < o->z;
+      }
+    }
+    loudestFlames = std::max(loudestFlames, world.flameLevel());
+    if (countSprite(world, "winged_titan") == 0 && i > 300 && ambientFor(world).winged != 0.0f) quietAfterFall = false;
+    const bool pair = countSprite(world, "lizard_titan") > 0 && countSprite(world, "winged_titan") > 0;
+    both |= pair;
+    bothUntil = pair ? i : bothUntil;
+    if (over < 0 && countSprite(world, "lizard_titan") == 0) over = i;
+    beam |= world.tongueCount() > 0;
+    if (world.tongueCount() > 0 && i % 3 == 0) {  // flames of two colors: the lizard's blue and the other's violet
+      Frame f;
+      world.render(f);
+      for (int y = 0; y < f.height(); ++y) {
+        for (int x = 0; x < f.width(); ++x) {
+          const Cell& c = f.at(x, y);
+          if (c.ch != U'*' && c.ch != U'#' && c.ch != U'%' && c.ch != U'&' && c.ch != U'@') continue;
+          blue |= c.fg.b > 200 && c.fg.r < 140 && c.fg.g < 190 && c.fg.b > c.fg.g + 40;
+          violet |= c.fg.r > 140 && c.fg.b > 200 && c.fg.g < 130;
+        }
+      }
+    }
+  }
+  CHECK(both && beam && blue && violet);
+  CHECK(fledEverything && backAfterwards && inFront);
+  CHECK(loudestFlames > 0.9 && ambientFor(world).flames == 0.0f && ambientFor(world).winged == 0.0f);
+  CHECK(quietAfterFall);  // once the winged monster has fallen, its sound is gone  // the traffic and the people ran off, and came back later
+  // The devastation spreads out from where they fight, as soon as they fight, and the rebuilding follows from there.
+  CHECK(spans.size() > 10 && firstSpan < widestSpan / 2 && widestSpan > 60);
+  CHECK(outwardRebuild);
+  CHECK(bothUntil > 400);                     // they fight for a good while (over 20 seconds)
+  CHECK(ruins >= 12 && most >= 12);           // the city is in ruins
+  CHECK(level > 0.8);
+  CHECK(over > bothUntil);                    // the winner walks on afterwards
+  CHECK(world.troubledBuildings() == 0);      // and everything has been rebuilt by the end
+  CHECK(world.triggerRare(RarePick::Common)); // the slot is free again
+}
+
 TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
   constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
   auto rms = [&](const AmbientParams& p) {
@@ -3846,13 +3937,38 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
     for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
     return std::sqrt(sum / double(buf.size() / 2));
   };
-  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Mountains}) {
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Mountains, AmbientKind::City}) {
     AmbientParams calm;
     calm.kind = kind;
     AmbientParams menace = calm;
     menace.menace = 1;
     CHECK(rms(menace) > rms(calm) * 1.5);
     CHECK(rms(menace) < 0.3);  // loud, but well below a storm
+  }
+  // The monsters' streams of fire roar, and the winged one's screech is only heard while it lives.
+  {
+    AmbientParams fight;
+    fight.kind = AmbientKind::City;
+    fight.menace = 1;
+    fight.winged = 1;
+    AmbientParams fire = fight;
+    fire.flames = 1;
+    CHECK(rms(fire) > rms(fight) * 1.4);
+    // The screech is high: with the winged one gone the sound has much less of what lies above a few hundred Hz.
+    auto brightness = [&](const AmbientParams& p) {
+      Ambience a(kRate, 1);
+      std::vector<float> buf(static_cast<size_t>(kRate) * 30 * 2);
+      a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+      double s = 0, d = 0;
+      for (size_t i = 2; i < buf.size(); i += 2) {
+        s += double(buf[i]) * buf[i];
+        d += (double(buf[i]) - buf[i - 2]) * (double(buf[i]) - buf[i - 2]);
+      }
+      return std::sqrt(d / s);
+    };
+    AmbientParams alone = fight;
+    alone.winged = 0;
+    CHECK(brightness(fight) > brightness(alone) * 1.1);
   }
   // A rifle shot cracks, in the desert only.
   auto peakAfter = [&](AmbientKind kind, bool shoot) {
@@ -3880,7 +3996,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
 
 TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest", "desert", "mountains"}) {
+  for (const char* name : {"aquarium", "forest", "desert", "mountains", "city"}) {
     for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
       for (double hour : {3.0, 12.0, 19.0}) {
         World world(pack, pack.scene(name), w, h, 7);
@@ -3899,7 +4015,7 @@ TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
 
 TEST(the_second_catastrophes_are_deterministic_per_seed) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium", "forest", "desert", "mountains"}) {
+  for (const char* name : {"aquarium", "forest", "desert", "mountains", "city"}) {
     std::string a, b;
     for (std::string* out : {&a, &b}) {
       World world(pack, pack.scene(name), 120, 32, 11);

@@ -1,5 +1,5 @@
 /// @file core/disasters.cpp
-/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert), the yeti (mountains).
+/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest), the poachers' helicopter (desert), the yeti (mountains), the monster fight (city).
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +35,21 @@ constexpr double kFloodRain = 24.0;
 constexpr double kPoachMax = 75.0, kPoachIdle = 3.0;
 /// Seconds the yeti takes to climb over the ridge.
 constexpr double kClimb = 5.0;
+
+/// Seconds the two monsters fight, the speed they walk in and the gap between their fronts.
+constexpr double kFightTime = 26.0, kTitanSpeed = 7.0, kTitanGap = 6.0;
+/// How fast (columns per second) the fire spreads out from the fight and the rebuilding follows it,
+/// how far (share of the width) the fire reaches, and how long a building burns before it comes down.
+constexpr double kSpreadSpeed = 4.5, kSpreadReach = 0.45, kClashBurn = 4.5;
+/// Seconds a ruin smoulders before the rebuilding may reach it.
+constexpr double kMinRuin = 7.0;
+/// Draw order of the monsters: nearer than the park trees, benches and shops (10 and further away) so
+/// that they tower in front of them, further than the people (5 to 7), who run away anyway.
+constexpr int kTitanZ = 8;
+/// Seconds a blow lasts (the breath of the lizard), and the seconds between two blows.
+constexpr double kBreathTime = 1.5, kBlowMin = 2.8, kBlowMax = 4.2;
+/// The fire breath of the lizard (blue) and of the winged monster (violet).
+constexpr Rgb kBreathColor{70, 150, 255}, kVioletColor{176, 80, 240};
 
 /// Palette of the poison: a sickly green.
 constexpr Rgb kToxinColor{150, 210, 40};
@@ -298,7 +313,7 @@ void World::maulStep(Entity& e, double dt) {
     e.fps = 3.0;
     const double foot = ridgeRow(peak) + 1 + e.height() * (1.0 - e.age / kClimb);
     e.y = foot - e.height() + 1;
-    e.z = 22;
+    e.z = kTitanZ;
     return;
   }
   e.behindRidge = false;
@@ -353,6 +368,209 @@ void World::maulStep(Entity& e, double dt) {
       }
     }
   } else if (e.x > w_ || e.x + e.width() < 0) {
+    e.dead = true;
+  }
+}
+
+void World::clashStep(Entity& e, double dt) {
+  Entity* other = nullptr;  // the winged monster
+  for (auto& o : entities_) {
+    if (!o->dead && o->sprite->name() == "winged_titan") other = o.get();
+  }
+  for (auto& o : incoming_) {
+    if (o->sprite->name() == "winged_titan") other = o.get();
+  }
+  Clash& c = clash_;
+  if (c.started && c.phase < 3) {  // everyone on the streets runs from the monsters, and nothing new comes while they are about
+    for (auto& o : entities_) {
+      if (o->dead || o->fleeing || o->isRare || !o->grounded || std::fabs(o->vx) < 0.2 || o->driveState != 0 ||
+          o->sprite->name() == "train") {
+        continue;
+      }
+      const double cx = o->x + o->width() / 2.0;
+      o->fleeing = true;
+      o->vx = (cx < c.meetX ? -1.0 : 1.0) * std::max(14.0, std::fabs(o->vx) * 3.0);
+      o->mirrored = (o->vx > 0) != o->facesRight;
+    }
+    for (auto& r : restock_) r.left = std::max(r.left, 6.0);
+  }
+  if (!c.started) {  // both are called: the lizard walks in from one side, the winged one flies in from the other
+    c = Clash{};
+    auto flyer = pack_->find("winged_titan");
+    if (!flyer || h_ < 28 || w_ < 110) {  // no room for them on this screen
+      e.dead = true;
+      return;
+    }
+    c.started = true;
+    c.dir = rng_.chance(0.5) ? 1 : -1;
+    c.meetX = w_ * rng_.range(0.4, 0.6);
+    spawnCreature(flyer, false, true);
+    if (!incoming_.empty()) incoming_.back()->isRare = true;
+    c.nextBlow = rng_.range(1.0, 2.0);
+    e.fps = 0;
+    e.x = c.dir > 0 ? -e.width() : w_;
+    return;
+  }
+  if (!other && c.phase < 2) {  // the other one has not joined the world yet
+    return;
+  }
+  c.t += dt;
+  const bool whole = stepBuildings(dt);  // ruins smoulder and are rebuilt as time goes by
+    const double footY = seabedY_ + 3;  // the row below the feet: they stand in the road
+  const double ew = e.width();
+  e.z = kTitanZ;
+  e.y = footY - e.height();
+  e.mirrored = c.dir < 0;
+  // The fire spreads out from the middle of the fight as soon as it begins: every building catches
+  // when the front reaches it, burns for a few seconds and comes down. Once the fight is over the
+  // rebuilding spreads out from the middle in the same way.
+  auto spreadFire = [&](double step) {
+    if (c.order.empty() && c.nextIgnite == 0) {
+      for (size_t i = 0; i < city_.size(); ++i) {
+        const double d = std::fabs(city_[i].x + city_[i].w / 2.0 - c.meetX);
+        if (d <= w_ * kSpreadReach) c.order.push_back({d, static_cast<int>(i)});
+      }
+      std::sort(c.order.begin(), c.order.end());
+      blazeFails_ = true;
+    }
+    c.spread += step;
+    while (c.nextIgnite < c.order.size() && c.order[c.nextIgnite].first <= c.spread * kSpreadSpeed) {
+      Building& b = city_[static_cast<size_t>(c.order[c.nextIgnite].second)];
+      if (b.state == Building::State::Normal) {
+        b.state = Building::State::Burning;
+        b.timer = 0;
+        b.hold = true;
+        if (std::find(blazeBuildings_.begin(), blazeBuildings_.end(), c.order[c.nextIgnite].second) == blazeBuildings_.end()) {
+          blazeBuildings_.push_back(c.order[c.nextIgnite].second);
+        }
+      }
+      ++c.nextIgnite;
+    }
+    for (const auto& [dist, idx] : c.order) {
+      Building& b = city_[static_cast<size_t>(idx)];
+      if (b.state == Building::State::Burning && b.hold && b.timer >= kClashBurn) {  // it comes down
+        b.state = Building::State::Normal;
+        ruinBuilding(idx);
+        b.hold = true;
+      } else if (b.state == Building::State::Ruin && b.hold && c.rebuildT0 >= 0 && b.timer >= kMinRuin &&
+                 (c.t - c.rebuildT0) * kSpreadSpeed >= dist) {
+        b.hold = false;  // the rebuilding has reached it
+      }
+    }
+  };
+  // Where each stands once the fight is on: fronts apart by kTitanGap, the lizard on its own side.
+  const double lizardStop = c.dir > 0 ? c.meetX - kTitanGap / 2.0 - ew : c.meetX + kTitanGap / 2.0;
+  if (c.phase == 0) {  // arriving
+    const double toGo = (lizardStop - e.x) * c.dir;
+    if (toGo > 0.3) {
+      e.x += c.dir * std::min(kTitanSpeed * dt, toGo);
+      e.frame = static_cast<size_t>(std::max(0.0, std::floor(c.t * 2.0))) % 2;
+    } else {
+      e.frame = 0;
+    }
+    bool landed = false;
+    if (other) {  // the winged one comes in over the roofs and lands where the lizard stops
+      const double ow = other->width();
+      const double stop = c.dir > 0 ? c.meetX + kTitanGap / 2.0 : c.meetX - kTitanGap / 2.0 - ow;
+      if (!c.placed) {
+        other->x = c.dir > 0 ? w_ : -ow;
+        c.placed = true;
+      }
+      other->mirrored = c.dir < 0;
+      const double left = (stop - other->x) * -c.dir;  // distance still to fly
+      if (left > 0.5) {
+        other->x -= c.dir * std::min(15.0 * dt, left);
+        other->y = std::max(1.0, footY - other->height() - 12 + 0.0);
+        other->frame = static_cast<size_t>(std::floor(c.t * 6.0)) % 2;  // wings beating
+      } else {  // it settles on the street
+        other->y = std::min(footY - other->height(), other->y + 7.0 * dt);
+        other->frame = 2;
+        landed = other->y >= footY - other->height() - 0.01;
+      }
+      other->z = kTitanZ;
+      other->fps = 0;
+    }
+    if (toGo <= 0.3 && landed) {
+      c.phase = 1;
+      c.fightT = 0;
+    }
+    return;
+  }
+  if (c.phase == 1 && other) {  // the fight
+    c.fightT += dt;
+    spreadFire(dt);
+    other->y = footY - other->height();
+    other->z = kTitanZ;
+    // The blows come in turns: the lizard spits blue fire at its rival, the rival spits violet fire
+    // back, and now and then both do at once.
+    if (c.fightT >= c.nextBlow && c.fightT < kFightTime) {
+      c.nextBlow = c.fightT + rng_.range(kBlowMin, kBlowMax);
+      const int kind = c.blows % 3;  // 0 the lizard, 1 the winged one, 2 both
+      auto spit = [&](const Entity& from, const Entity& to, Rgb color, double ox) {
+        Tongue t;
+        t.attacker = from.id;
+        t.victim = to.id;
+        t.color = color;
+        t.harmless = true;
+        t.fire = true;
+        t.reach = 0.45;
+        t.dur = kBreathTime;
+        t.ox = ox;
+        tongues_.push_back(t);
+      };
+      if (kind != 1) {
+        c.breath = kBreathTime;
+        spit(e, *other, kBreathColor, c.dir > 0 ? ew - 1 : 0);
+      }
+      if (kind != 0) {
+        c.strike = kBreathTime;
+        spit(*other, e, kVioletColor, c.dir > 0 ? 0 : other->width() - 1);
+      }
+      ++c.blows;
+    }
+    e.frame = c.breath > 0 ? 2 : 0;
+    other->frame = c.strike > 0 ? 4 : 2;
+    c.breath = std::max(0.0, c.breath - dt);
+    c.strike = std::max(0.0, c.strike - dt);
+    // Each blow shakes the one that is hit.
+    const double shake = (c.breath > 0 || c.strike > 0) ? std::sin(c.fightT * 40.0) * 0.5 : 0.0;
+    const double otherStop = c.dir > 0 ? c.meetX + kTitanGap / 2.0 : c.meetX - kTitanGap / 2.0 - other->width();
+    other->x = otherStop + (c.breath > 0 ? shake : 0.0);
+    e.x = lizardStop + (c.strike > 0 ? shake : 0.0);
+    if (c.breath > 0 || c.strike > 0) {
+      spawnEffect("smoke", c.meetX + rng_.range(-4, 4), footY - rng_.range(4, 14), 4, rng_.range(-4, 4), -rng_.range(1, 3));
+    }
+    if (c.fightT >= kFightTime && c.breath <= 0 && c.strike <= 0) {  // the winged one falls
+      c.phase = 2;
+      c.endT = 0;
+      for (int i = 0; i < 14; ++i) {
+        spawnEffect("smoke", other->x + rng_.range(0, other->width()), other->y + rng_.range(0, other->height()), 4,
+                    rng_.range(-5, 5), -rng_.range(1, 4));
+      }
+      other->dead = true;
+      c.rebuildT0 = c.t;  // the fight is over: the rebuilding starts in the middle
+    }
+    return;
+  }
+  if (c.phase == 2) {
+    spreadFire(dt);  // the lizard roars, then walks on across the screen
+    c.endT += dt;
+    if (c.endT < 3.0) {
+      e.frame = 2;
+    } else {
+      e.x += c.dir * kTitanSpeed * dt;
+      e.frame = static_cast<size_t>(std::floor(c.endT * 2.0)) % 2;
+      }
+    if ((c.dir > 0 && e.x > w_) || (c.dir < 0 && e.x + ew < 0)) {
+      c.phase = 3;
+      e.x = -1000;  // out of the picture; the entity stays until the city is whole again
+    }
+    return;
+  }
+  // Only the ruins are left: they are rebuilt, one after the other.
+  spreadFire(dt);
+  if (c.phase == 3 && whole && c.nextIgnite >= c.order.size()) {
+    blazeBuildings_.clear();
     e.dead = true;
   }
 }

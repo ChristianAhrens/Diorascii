@@ -61,6 +61,14 @@ size_t World::ruinedBuildings() const {
   return n;
 }
 
+std::vector<int> World::troubledColumns() const {
+  std::vector<int> cols;
+  for (const Building& b : city_) {
+    if (b.state != Building::State::Normal) cols.push_back(b.x + b.w / 2);
+  }
+  return cols;
+}
+
 bool World::fireBurning() const {
   for (const Building& b : city_) {
     if (b.state == Building::State::Burning) return true;
@@ -147,8 +155,19 @@ void World::blazeStep(Entity& e, double dt) {
       }
     }
   }
+  const bool allDone = stepBuildings(dt) && spreadLeft_ == 0;
+  if (allDone) {  // everything is standing again: the site is open
+    blazeBuildings_.clear();
+    blazeOrigin_ = -1;
+    cordon_ = false;
+    liftBarriers();
+    e.dead = true;
+  }
+}
+
+bool World::stepBuildings(double dt) {
   double level = 0;
-  bool allDone = spreadLeft_ == 0;
+  bool allDone = true;
   for (int idx : blazeBuildings_) {
     Building& b = city_[static_cast<size_t>(idx)];
     if (b.state == Building::State::Normal) continue;
@@ -173,7 +192,7 @@ void World::blazeStep(Entity& e, double dt) {
         spawnEffect("smoke", b.x + rng_.range(0, std::max(b.w - 3, 1)), seabedY_ - std::max(2, b.h / 6) - rng_.range(0, 2), 4,
                     rng_.range(-0.5, 0.5), -rng_.range(0.8, 1.6));
       }
-      if (b.timer >= kRuin) {  // after a long while the rebuilding starts
+      if (b.timer >= kRuin && !b.hold) {  // after a long while the rebuilding starts
         b.state = Building::State::Scaffold;
         b.timer = 0;
       }
@@ -186,12 +205,19 @@ void World::blazeStep(Entity& e, double dt) {
   }
   sprayTime_ = std::max(0.0, sprayTime_ - dt);
   fireLevel_ = level;
-  if (allDone) {  // everything is standing again: the site is open
-    blazeBuildings_.clear();
-    blazeOrigin_ = -1;
-    cordon_ = false;
-    liftBarriers();
-    e.dead = true;
+  return allDone;
+}
+
+void World::ruinBuilding(int idx) {
+  Building& b = city_[static_cast<size_t>(idx)];
+  if (b.state != Building::State::Normal) return;
+  b.state = Building::State::Ruin;
+  b.ruined = true;
+  b.timer = 0;
+  if (std::find(blazeBuildings_.begin(), blazeBuildings_.end(), idx) == blazeBuildings_.end()) blazeBuildings_.push_back(idx);
+  for (int i = 0; i < 7; ++i) {  // dust and smoke billow up as it comes down
+    spawnEffect("smoke", b.x + rng_.range(0, std::max(b.w - 3, 1)), seabedY_ - b.h * rng_.range(0.1, 0.9), 4,
+                rng_.range(-3.0, 3.0), -rng_.range(0.5, 2.5));
   }
 }
 

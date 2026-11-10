@@ -29,7 +29,7 @@ struct AudioOutput::Impl {
   std::atomic<float> night{0}, rain{0}, volume{1};
   std::atomic<unsigned> flashes{0};
   std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
-  std::atomic<float> worm{0}, siren{0}, wail{0}, train{0}, plane{0}, fire{0}, menace{0};
+  std::atomic<float> worm{0}, siren{0}, wail{0}, train{0}, plane{0}, fire{0}, menace{0}, flames{0}, winged{0};
   std::atomic<unsigned> nibbles{0}, impacts{0}, crushes{0}, squeals{0}, shots{0};
 };
 
@@ -57,6 +57,8 @@ void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   p.crushes = impl->crushes.load();
   p.squeals = impl->squeals.load();
   p.menace = impl->menace.load();
+  p.flames = impl->flames.load();
+  p.winged = impl->winged.load();
   p.shots = impl->shots.load();
   impl->ambience.render(p, static_cast<float*>(output), static_cast<int>(frames));
 }
@@ -123,6 +125,8 @@ void AudioOutput::setParams(const AmbientParams& p) {
   impl_->crushes = p.crushes;
   impl_->squeals = p.squeals;
   impl_->menace = p.menace;
+  impl_->flames = p.flames;
+  impl_->winged = p.winged;
   impl_->shots = p.shots;
 }
 

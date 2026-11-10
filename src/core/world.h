@@ -99,6 +99,9 @@ struct Entity {
   /// Drawn as if behind the mountain: the cells inside the mountain's outline are hidden (the yeti
   /// climbing over the ridge).
   bool behindRidge = false;
+  /// Running for its life (from the city monsters): it dashes away from them and off the screen
+  /// and comes back later, as if replaced.
+  bool fleeing = false;
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -301,6 +304,8 @@ class World {
   void forceFireOutcome(bool fails) { forcedOutcome_ = fails ? 1 : 0; }
   /// Number of skyscrapers that have burnt down and are still ruins.
   size_t ruinedBuildings() const;
+  /// The middle column of every building that is burning, in ruins or being rebuilt.
+  std::vector<int> troubledColumns() const;
   /// True while some skyscraper is on fire.
   bool fireBurning() const;
   /// True while a fire is being fought: other vehicles and people keep away from the site.
@@ -313,6 +318,16 @@ class World {
   /// Runs the fire that the `blaze` behavior stands for: sets a skyscraper alight, calls the fire
   /// engine, lets it burn out and renovates the building.
   void blazeStep(Entity& e, double dt);
+  /// How strong the monsters' streams of fire are right now, from 0 (none) to 1: the loudest of the
+  /// streams alight, following the swell of each (they shoot out, hold and die away).
+  double flameLevel() const;
+  /// How close the two fighting monsters are to the middle of the scene, 0 to 1; their roars and
+  /// stamping follow it.
+  double titanLevel() const { return nearness("titan"); }
+  /// Drives the monster fight (the `clash` behavior, on the lizard): both monsters come in, fight
+  /// with fire breath and claws, flatten the buildings they stand in, and the lizard walks on; then
+  /// the ruins are rebuilt.
+  void clashStep(Entity& e, double dt);
   /// Row of the elevated railway, or -1 where there is none.
   int railRow() const { return railY_; }
   /// Top row (smallest) of the tallest skyscraper including its antenna, or the height if none.
@@ -497,6 +512,7 @@ class World {
     enum class State { Normal, Burning, Ruin, Scaffold };
     State state = State::Normal;
     bool ruined = false;       ///< it burnt down and is being rebuilt from the rubble
+    bool hold = false;         ///< a ruin that is not rebuilt until it is released (the monster fight's)
     double timer = 0;          ///< seconds in the state
   };
   /// Chooses where the side streets go, clear of the shops and trees on the sidewalk.
@@ -505,6 +521,11 @@ class World {
   void stepCity(double dt);
   /// Builds the skyline and decides where the railway runs.
   void buildCity();
+  /// Advances the burning, ruined and rebuilt buildings in `blazeBuildings_` by one step. Returns
+  /// true once every one of them is standing again.
+  bool stepBuildings(double dt);
+  /// Brings a building down into a ruin (dust and smoke billow up); the rebuilding follows by itself.
+  void ruinBuilding(int idx);
   /// Gives a skyscraper new looks and a new height (the first time, and after a renovation).
   void rollBuilding(Building& b);
   /// Draws the skyline and the side streets (behind everything that moves in the city, except what
@@ -623,6 +644,8 @@ class World {
     double ox = 0;                      ///< where it starts, in columns from the attacker's left edge
     Rgb color{232, 96, 128};
     bool shot = false;                  ///< a rifle shot rather than a tongue
+    bool harmless = false;              ///< it hurts nobody (the monsters' fire breath at each other)
+    bool fire = false;                  ///< drawn as a broad stream of flames that holds before it dies away
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the base and the tip, in cells
     std::string effect;                 ///< shown on the victim when it is crushed
     std::string wipes;
@@ -668,6 +691,28 @@ class World {
   } flood_;
   /// How loud the flood is right now.
   double floodLevel_ = 0;
+  /// The monster fight: where the monsters meet, which part of the show it is in and when the next
+  /// blow falls.
+  struct Clash {
+    bool started = false;   ///< the monsters have been called
+    bool placed = false;    ///< the winged one has been put at its edge
+    int dir = 1;            ///< side the lizard comes from: 1 from the left, -1 from the right
+    int phase = 0;          ///< 0 arriving, 1 fighting, 2 the lizard has won and walks on, 3 only ruins are left
+    double t = 0;           ///< seconds since the start
+    double meetX = 0;       ///< column of the middle between the two monsters
+    double fightT = 0;      ///< seconds of fighting so far
+    double nextBlow = 0, nextRuin = 0;  ///< when the next blow falls and the next building goes down
+    double breath = 0;      ///< seconds of fire breath left
+    double strike = 0;      ///< seconds the winged monster's attack frame is shown
+    double endT = 0;        ///< seconds since the winged monster fell
+    int blows = 0;          ///< blows so far
+    double spread = 0;      ///< seconds the fire has been spreading from the fight
+    double rebuildT0 = -1;  ///< when the rebuilding begins (the fight is over), or -1
+    /// Buildings by their distance from the middle of the fight, the nearest first: the order in
+    /// which the fire reaches them and later the rebuilding.
+    std::vector<std::pair<double, int>> order;
+    size_t nextIgnite = 0;  ///< the first one in `order` that is not alight yet
+  } clash_;
   /// How muddy each column is (1 right after the water has been over it, fading in time).
   std::vector<float> mud_;
   /// Depth of the flood water at column x, in rows from the bottom of the screen.

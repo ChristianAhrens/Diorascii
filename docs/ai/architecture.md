@@ -77,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach maul`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood poach maul clash`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -138,7 +138,19 @@ The code is in `src/core/disasters.cpp`:
   face with the meadow at the bottom, so its feet go to the row of its prey (never above the skyline) and it walks to the
   nearest grounded life (distance counts rows three times) and kills whatever comes under its body (`claim`); it never
   lashes, so it crosses the scene after its prey; flyers are out of its reach.
-Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field). The mountains' is a creature: thuds every 0.55 s and a roar now and then (`yetiLevel` is the `nearness` of the tag `beast`).
+- `clashStep` (city): the lizard `lizard_titan` carries the show and calls `winged_titan` in; phases: arriving, fighting
+  (26 s, blows in turns: blue breath from the lizard, violet from the winged one, or both; each is a harmless `Tongue` with
+  `fire` set, drawn as a broad stream of `*#%&@` that holds and dies away), the winged one falls, the lizard walks off and
+  `e.x = -1000` parks the entity while `stepBuildings` (factored out of `blazeStep`) rebuilds the ruins; `ruinBuilding` puts
+  a building into the existing `Ruin` state, so rendering and rebuilding are shared with the fire. The monsters are 60x33
+  cells; the fight needs at least 110x28. The devastation is ordered by distance from `meetX` (`Clash::order`): from the
+  start of the fight the front moves out at 4.5 columns/s up to 45% of the width, each building catches fire (`Burning`,
+  `Building::hold`), burns 4.5 s and is `ruinBuilding`-ed; ruins stay held until the fight is over, then the rebuilding
+  front starts from the middle at the same speed and releases the holds (minimum smoulder 7 s), so the middle is rebuilt
+  first. Everything grounded and moving on the street (not the train, not the avenue cars) gets `Entity::fleeing` when the
+  fight is called and every step while it lasts: `World::step` runs it straight off the screen at 14+ cells/s away from
+  `meetX` and puts its `onDeath` into `restock_`, which the clash keeps holding back until phase 3.
+Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it. The desert's is the chop of a rotor (noise gated at 11.5 Hz) over a whine, with a crack for every rifle shot (the counter `shots`, another field). The mountains' is a creature: thuds every 0.55 s and a roar now and then (`yetiLevel` is the `nearness` of the tag `beast`). The city's monsters step and roar in the same way, bigger and slower (tag `titan`), the winged one's screech being a second voice gated by the field `winged` (nearness of `winged_titan`; it is never chosen without it), and every stream of fire roars by the field `flames` (`World::flameLevel()`: the swell of the fire-stream tongues; noise up to 2800 Hz over a deep body, with a slow random swell and faint crackles; no periodic modulation, which sounded like flapping).
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals, shots) that only count as events when they increase; the first value seen is the baseline.
 

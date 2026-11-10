@@ -436,6 +436,9 @@ void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 /// The leaking submarine (see World::leakStep).
 void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
 
+/// The monster fight (see World::clashStep).
+void clash(Entity& e, World& w, double dt) { w.clashStep(e, dt); }
+
 /// The yeti (see World::maulStep).
 void maul(Entity& e, World& w, double dt) { w.maulStep(e, dt); }
 
@@ -458,7 +461,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
       {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
-      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}};
+      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -983,6 +986,16 @@ bool World::lash(const Entity& a) {
   return true;
 }
 
+double World::flameLevel() const {
+  double level = 0;
+  for (const Tongue& t : tongues_) {
+    if (!t.fire) continue;
+    const double reach = std::max(t.reach, 0.01);
+    level = std::max(level, t.age < reach ? t.age / reach : t.age > t.dur - 0.3 ? std::max(0.0, (t.dur - t.age) / 0.3) : 1.0);
+  }
+  return level;
+}
+
 void World::stepTongues(double dt) {
   for (size_t i = tongues_.size(); i-- > 0;) {
     Tongue& t = tongues_[i];
@@ -1002,7 +1015,7 @@ void World::stepTongues(double dt) {
     }
     if (!t.hit && t.age >= t.reach) {
       t.hit = true;
-      if (alive) {
+      if (alive && !t.harmless) {
         claim(*v, t.effect);
         if (!t.shot) noteCrushed(1);
       }
@@ -1016,6 +1029,35 @@ void World::stepTongues(double dt) {
 
 void World::renderTongues(Frame& out, Style style, const Light& light) const {
   for (const Tongue& t : tongues_) {
+    if (t.fire) {  // a stream of flames: it shoots out, holds, and dies away
+      const double reach = std::max(t.reach, 0.01);
+      const double p = t.age < reach ? t.age / reach : t.age > t.dur - 0.3 ? std::max(0.0, (t.dur - t.age) / 0.3) : 1.0;
+      const double dx = t.x1 - t.x0, dy = t.y1 - t.y0;
+      const double len = std::sqrt(dx * dx + dy * dy * 4.0);
+      const int samples = std::max(3, static_cast<int>(len * 2));
+      static const char32_t kFlames[] = {U'*', U'#', U'%', U'&', U'@', U'*'};
+      for (int s = 0; s <= samples; ++s) {
+        const double u = static_cast<double>(s) / samples;
+        if (u > p) break;
+        const double wobble = 0.9 * std::sin(u * len * 0.7 - t.age * 30.0) * u;
+        const int cx = static_cast<int>(std::floor(t.x0 + dx * u));
+        const int cy = static_cast<int>(std::floor(t.y0 + dy * u + wobble));
+        const int spread = 1 + static_cast<int>(u * 2.2);  // the stream widens as it goes
+        for (int off = -spread; off <= spread; ++off) {
+          const uint32_t h = hash2(cx * 7 + off, static_cast<int>(t.age * 24.0) + s);
+          if (off != 0 && h % 5 == 0) continue;  // ragged edges
+          if (!out.inBounds(cx, cy + off)) continue;
+          Cell& cell = out.at(cx, cy + off);
+          const double edge = static_cast<double>(std::abs(off)) / (spread + 1);
+          cell.ch = kFlames[h % 6];
+          cell.fg = shade(lerp(lerp(t.color, Rgb{255, 255, 255}, 0.65), t.color, edge), light);
+          cell.bg = style == Style::Full ? lerp(cell.bg, scale(t.color, 0.55), 0.6 * (1.0 - edge)) : cell.bg;
+          cell.bold = true;
+          cell.defaultFg = style == Style::Mono;
+        }
+      }
+      continue;
+    }
     // Out to the victim in the first part, back in again once it is crushed.
     const double p = t.hit ? std::max(0.0, 1.0 - (t.age - t.reach) / (t.dur - t.reach)) : std::min(1.0, t.age / t.reach);
     const double dx = t.x1 - t.x0, dy = t.y1 - t.y0;
@@ -1322,6 +1364,17 @@ void World::step(double dt) {
       continue;
     }
     e->age += dt;
+    if (e->fleeing) {  // in a panic: straight off the screen, and back (as a replacement) a while later
+      e->pauseLeft = 0;
+      e->x += e->vx * dt;
+      animate(*e, dt);
+      if ((e->vx > 0 && e->x > w_) || (e->vx < 0 && e->x + e->width() < 0)) {
+        e->dead = true;
+        if (e->onDeath) restock_.push_back({rng_.range(10.0, 40.0), std::move(e->onDeath)});
+        e->onDeath = nullptr;
+      }
+      continue;
+    }
     if (e->pauseLeft > 0) {  // busy (eating): stays frozen where it is
       e->pauseLeft = std::max(0.0, e->pauseLeft - dt);
       continue;

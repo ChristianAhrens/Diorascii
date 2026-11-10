@@ -1,0 +1,348 @@
+name: winged_titan
+facing: left
+habitat: ground
+solid: yes
+speed: 0..0
+tag: titan
+backing: 0.6
+mouth-row: 9
+--- art
+                                           ||/||||||\/\\|   
+        |/\/|\//|                       \|||\\///|\\//|\    
+  |\///||\|/||/|//                     \\||\/|///\|\\//     
+   |\/|//|\|\/\///\|                  |\//\////\|//\||      
+    \//\\\\/\\      \                /|/|\/|\//|\|\||\      
+     \|/|/|\\        -\              |\//\\||\|//\|/\       
+      ||/////         |             \|/\/|\\|/\||/|/        
+        |/|||          /           \||\\\/|\||\\/|/         
+        ||              \         /|||\|\|/|\/|\||          
+   |          /||        \       \||/|||/|||\/\\\|          
+        \_____/|//\/      \   -  /|\||/|/|/|                
+               /||\\\      --- -- \/                        
+                   |               |                        
+                 /-__               \                       
+              /- _/  |              |                       
+            /- /    /               |                       
+            | /     |        *      |                       
+           / /      |      ****     /                       
+          / |       |      ****    /                        
+          | /       \       **    /                         
+         | /         \_          |                          
+          _            |   ______ \                         
+                      /  _/      \ \                        
+                     /  /         \ \                       
+                    /  /           \ \                      
+                   |  |             | \                     
+                    | |             | |                     
+                    | |            /  /                     
+                    |  \           | |                      
+                    \  |           | |                      
+                     \ /          |  /                      
+                      _            \/                       
+                                                            
+--- mask
+                                           llllllllllllll   
+        lllllllll                       llllllllllllllll    
+  llllllllllllllll                     llllllllllllllll     
+   lllllllllllllllll                  llllllllllllllll      
+    llllllllllkkkkkkL                lllllllllllllllll      
+     llllllllkkkkkkkkLL              llllllllllllllll       
+      lllllllkkkkkkkkkL             llllllllllllllll        
+        lllllkkkkkkkkkkl           llllllllllllllll         
+        LlkkkkkkkkkkkkkkL         llllllllllllllll          
+   LkkkkkkkkkklllkkkkkkkkL       lllllllllllllllll          
+        LLLLLLllllllkkkkkkL   L  lllllllllll                
+               llllllkkkkkkLLLkLLkll                        
+                   LkkkkkkkkkkkkkkkL                        
+                 LLLLkkkkkkkkkkkkkkkL                       
+              LLkLL  LkkkkkkkkkkkkkkL                       
+            LLkL    LkkkkkkkkkkkkkkkL                       
+            LkL     LkkkkkkkkOkkkkkkL                       
+           LkL      LkkkkkkOOOOkkkkkL                       
+          LkL       LkkkkkkOOOOkkkkL                        
+          LkL       LkkkkkkkOOkkkkL                         
+         LkL         LLkkkkkkkkkkL                          
+          L            LkkkLLLLLLkL                         
+                      LkkLL      LkL                        
+                     LkkL         LkL                       
+                    LkkL           LkL                      
+                   LkkL             LkL                     
+                    LkL             LkL                     
+                    LkL            LkkL                     
+                    LkkL           LkL                      
+                    LkkL           LkL                      
+                     LkL          LkkL                      
+                      L            LL                       
+                                                            
+--- art
+                                                            
+                                                            
+                                                            
+                                                            
+              /-----\                                       
+             /       -\                                     
+             |        |                                     
+             |        |                                     
+        /---- ___      -\                                   
+   |         |   \__     \                                  
+        \__  |      \     \   -                             
+           |\|\/||\  |     --- --\      /\\\|/|             
+         \/\//|/||\--             --||\/\||/||/|\\          
+       |\/\\/\/|/                    ||/|/\||\\/||\/        
+     ||||/|/\\     |\                //\//|/\|||//||/|      
+   /|//\|//|    \\/|/                |/|///|/\|///\|\/\/    
+  |\|||\|\\\   /\|/|         *       ||\\\\|/|//\/|||/\/|\  
+   \||||/\/   \/|\/\       ****     /  \\/\/\|\|/\\\//\\/   
+    \\|/\|   /\/|\\ |      ****    /     /|/\//|///|\|\\    
+      \\//   \\\|   \       **    /        /\//|//||/\      
+       /|   /\       \_          |           /\/|\|||       
+         |_/           |   ______ \            \\\\         
+                      /  _/      \ \                        
+                     /  /         \ \                       
+                    /  /           \ \                      
+                   |  |             | \                     
+                    | |             | |                     
+                    | |            /  /                     
+                    |  \           | |                      
+                    \  |           | |                      
+                     \ /          |  /                      
+                      _            \/                       
+                                                            
+--- mask
+                                                            
+                                                            
+                                                            
+                                                            
+              LLLLLLL                                       
+             LkkkkkkkLL                                     
+             LkkkkkkkkL                                     
+             LkkkkkkkkL                                     
+        LLLLLkLLLkkkkkkLL                                   
+   LkkkkkkkkkL   LLLkkkkkL                                  
+        LLLkkL      LkkkkkL   L                             
+           llllllll  LkkkkkLLLkLLL      lllllll             
+         llllllllllLLkkkkkkkkkkkkkLLllllllllllllll          
+       llllllllllkkkkkkkkkkkkkkkkkkkklllllllllllllll        
+     lllllllllkkkkkllkkkkkkkkkkkkkkkklllllllllllllllll      
+   lllllllllkkkklllllkkkkkkkkkkkkkkkklllllllllllllllllll    
+  llllllllllkkklllllkkkkkkkkkOkkkkkkklllllllllllllllllllll  
+   llllllllkkkllllllkkkkkkkOOOOkkkkkL  llllllllllllllllll   
+    llllllkkkllllll LkkkkkkOOOOkkkkL     lllllllllllllll    
+      llllkkkllll   LkkkkkkkOOkkkkL        lllllllllll      
+       llkkkll       LLkkkkkkkkkkL           llllllll       
+         lLl           LkkkLLLLLLkL            llll         
+                      LkkLL      LkL                        
+                     LkkL         LkL                       
+                    LkkL           LkL                      
+                   LkkL             LkL                     
+                    LkL             LkL                     
+                    LkL            LkkL                     
+                    LkkL           LkL                      
+                    LkkL           LkL                      
+                     LkL          LkkL                      
+                      L            LL                       
+                                                            
+--- art
+                                                            
+                                                            
+                                            /|              
+                                          \////\|           
+              /-----\                   |\/|\//|\|\         
+             /       -\               \//\\||\|//\|/\\      
+             |        |             \|/\/|\\|/\||/|/|\\     
+             |        |           \\||\\\/|\||\\/|/\\\      
+        /---- ___      -\       \|/|||\|\|/|\/|\|||\\\      
+   |         |   \__     \      \\||/|||/|||\/\\\|\\\       
+        \____/      \     \   -   |\||/|/|/||/\\\||/        
+                     |     --- --\  ||\//\\\|/|/\\|         
+                   /-             -\ |\/\||/||/|\\|         
+                /--__               \  /|/\||\\/||          
+              /-__/  |              |    /|/\|||/           
+             / |    /               |     /|/\|/            
+            /  /    |        *      |       /|//            
+            | /     |      ****     /         \             
+           / |      |      ****    |   /-----\              
+           \_ -\    |       **      ---  ___  \             
+             |  ----                    |   | |             
+             |  _____               _   /   | |             
+             | |     |      _______/ | |    |  \            
+            /  |     |   __/         | |    |  |            
+            |  |     \  |           /  |    \  |            
+            |  /      | |           |  /     | |            
+            | |       |  \          | |      | |            
+            | |       |  |          | |      | |            
+            | |       |  /          | |      | |            
+            | |       | |           | |      | |            
+            | |      /  |           | |      | |            
+            | |      |  /           | |      | |            
+            \_/      \_/            \_/      \_/            
+--- mask
+                                                            
+                                                            
+                                            ll              
+                                          lllllll           
+              LLLLLLL                   lllllllllll         
+             LkkkkkkkLL               llllllllllllllll      
+             LkkkkkkkkL             lllllllllllllllllll     
+             LkkkkkkkkL           llllllllllllllllllll      
+        LLLLLkLLLkkkkkkLL       llllllllllllllllllllll      
+   LkkkkkkkkkL   LLLkkkkkL      lllllllllllllllllllll       
+        LLLLLL      LkkkkkL   L   llllllllllllllllll        
+                     LkkkkkLLLkLLL  lllllllllllllll         
+                   LLkkkkkkkkkkkkkLL llllllllllllll         
+                LLLLLkkkkkkkkkkkkkkkL  lllllllllll          
+              LLLLL  LkkkkkkkkkkkkkkL    llllllll           
+             LkL    LkkkkkkkkkkkkkkkL     llllll            
+            LkkL    LkkkkkkkkOkkkkkkL       llll            
+            LkL     LkkkkkkOOOOkkkkkL         l             
+           LkL      LkkkkkkOOOOkkkkL   LLLLLLL              
+           LLkLL    LkkkkkkkOOkkkkkkLLLkkLLLkkL             
+             LkkLLLLkkkkkkkkkkkkkkkkkkkkL   LkL             
+             LkkLLLLLkkkkkkkkkkkkkkkLkkkL   LkL             
+             LkL     LkkkkkkLLLLLLLL LkL    LkkL            
+            LkkL     LkkkLLL         LkL    LkkL            
+            LkkL     LkkL           LkkL    LkkL            
+            LkkL      LkL           LkkL     LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkL           LkL      LkL            
+            LkL      LkkL           LkL      LkL            
+            LkL      LkkL           LkL      LkL            
+            LLL      LLL            LLL      LLL            
+--- art
+                                                            
+                                                            
+                                            /|              
+                                          \////\|           
+              /-----\                   |\/|\//|\|\         
+             /       -\               \//\\||\|//\|/\\      
+             |        |             \|/\/|\\|/\||/|/|\\     
+             |        |           \\||\\\/|\||\\/|/\\\      
+        /---- ___      -\       \|/|||\|\|/|\/|\|||\\\      
+   |         |   \__     \      \\||/|||/|||\/\\\|\\\       
+        \____/      \     \   -   |\||/|/|/||/\\\||/        
+                     |     --- --\  ||\//\\\|/|/\\|         
+                   /-             -\ |\/\||/||/|\\|         
+                /--__               \  /|/\||\\/||          
+              /-__/  |              |    /|/\|||/           
+             / |    /               |     /|/\|/            
+            /  /    |        *      |       /|//            
+            | /     |      ****     /         \             
+           / |      |      ****    |   /------|             
+           \_ -\    |       **      ---  ___  |             
+             |  ----                    /   \  \            
+             \   ___                   |     \  \           
+              | |   |   _   _______    /      | |           
+              |  \  |  | \_/       |  /       \  \          
+              |  |  |  /           | /         \  \         
+              \  |  | |           / |           | |         
+               | | /  |          /  /           | |         
+               | | |  |          | |            | |         
+               | | |  /          | |            | |         
+               | | | |           | |            | |         
+               |  -  |           | |            | |         
+               |     /           | |            | |         
+               \____/            \_/            \_/         
+--- mask
+                                                            
+                                                            
+                                            ll              
+                                          lllllll           
+              LLLLLLL                   lllllllllll         
+             LkkkkkkkLL               llllllllllllllll      
+             LkkkkkkkkL             lllllllllllllllllll     
+             LkkkkkkkkL           llllllllllllllllllll      
+        LLLLLkLLLkkkkkkLL       llllllllllllllllllllll      
+   LkkkkkkkkkL   LLLkkkkkL      lllllllllllllllllllll       
+        LLLLLL      LkkkkkL   L   llllllllllllllllll        
+                     LkkkkkLLLkLLL  lllllllllllllll         
+                   LLkkkkkkkkkkkkkLL llllllllllllll         
+                LLLLLkkkkkkkkkkkkkkkL  lllllllllll          
+              LLLLL  LkkkkkkkkkkkkkkL    llllllll           
+             LkL    LkkkkkkkkkkkkkkkL     llllll            
+            LkkL    LkkkkkkkkOkkkkkkL       llll            
+            LkL     LkkkkkkOOOOkkkkkL         l             
+           LkL      LkkkkkkOOOOkkkkL   LLLLLLLL             
+           LLkLL    LkkkkkkkOOkkkkkkLLLkkLLLkkL             
+             LkkLLLLkkkkkkkkkkkkkkkkkkkkL   LkkL            
+             LkkkLLLkkkkkkkkkkkkkkkkkkkL     LkkL           
+              LkL   LkkkLkkkLLLLLLLkkkkL      LkL           
+              LkkL  LkkL LLL       LkkL       LkkL          
+              LkkL  LkkL           LkL         LkkL         
+              LkkL  LkL           LkL           LkL         
+               LkL LkkL          LkkL           LkL         
+               LkL LkkL          LkL            LkL         
+               LkL LkkL          LkL            LkL         
+               LkL LkL           LkL            LkL         
+               LkkLkkL           LkL            LkL         
+               LkkkkkL           LkL            LkL         
+               LLLLLL            LLL            LLL         
+--- art
+                                                            
+                                                            
+                                            /|              
+                                          \////\|           
+              /-----\                   |\/|\//|\|\         
+           /--       -\               \//\\||\|//\|/\\      
+       /-- _          |             \|/\/|\\|/\||/|/|\\     
+    /--_ |  |         |           \\||\\\/|\||\\/|/\\\      
+ /--  | | --           -\       \|/|||\|\|/|\/|\|||\\\      
+ \_____                  \      \\||/|||/|||\/\\\|\\\       
+        |   _____         \   -   |\||/|/|/||/\\\||/        
+      /-___/     \_        --- --\  ||\//\\\|/|/\\|         
+   |- _/           \_             -\ |\/\||/||/|\\|         
+    _                |              \  /|/\||\\/||          
+                     |              |    /|/\|||/           
+                    /               |     /|/\|/            
+                    |        *      |       /|//            
+                    |      ****     /         \             
+                    |      ****    |   /-----\              
+              /\    |       **      ---  ___  \             
+             /  ----                    |   | |             
+             |  _____               _   /   | |             
+             | |     |      _______/ | |    |  \            
+            /  |     |   __/         | |    |  |            
+            |  |     \  |           /  |    \  |            
+            |  /      | |           |  /     | |            
+            | |       |  \          | |      | |            
+            | |       |  |          | |      | |            
+            | |       |  /          | |      | |            
+            | |       | |           | |      | |            
+            | |      /  |           | |      | |            
+            | |      |  /           | |      | |            
+            \_/      \_/            \_/      \_/            
+--- mask
+                                                            
+                                                            
+                                            ll              
+                                          lllllll           
+              LLLLLLL                   lllllllllll         
+           LLLkkkkkkkLL               llllllllllllllll      
+       LLLkLkkkkkkkkkkL             lllllllllllllllllll     
+    LLLLkL  LkkkkkkkkkL           llllllllllllllllllll      
+ LLLkkL LkLLkkkkkkkkkkkLL       llllllllllllllllllllll      
+ LLLLLLkkkkkkkkkkkkkkkkkkL      lllllllllllllllllllll       
+        LkkkLLLLLkkkkkkkkkL   L   llllllllllllllllll        
+      LLLLLL     LLkkkkkkkkLLLkLLL  lllllllllllllll         
+   LLkLL           LLkkkkkkkkkkkkkLL llllllllllllll         
+    L                LkkkkkkkkkkkkkkL  lllllllllll          
+                     LkkkkkkkkkkkkkkL    llllllll           
+                    LkkkkkkkkkkkkkkkL     llllll            
+                    LkkkkkkkkOkkkkkkL       llll            
+                    LkkkkkkOOOOkkkkkL         l             
+                    LkkkkkkOOOOkkkkL   LLLLLLL              
+              LL    LkkkkkkkOOkkkkkkLLLkkLLLkkL             
+             LkkLLLLkkkkkkkkkkkkkkkkkkkkL   LkL             
+             LkkLLLLLkkkkkkkkkkkkkkkLkkkL   LkL             
+             LkL     LkkkkkkLLLLLLLL LkL    LkkL            
+            LkkL     LkkkLLL         LkL    LkkL            
+            LkkL     LkkL           LkkL    LkkL            
+            LkkL      LkL           LkkL     LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkkL          LkL      LkL            
+            LkL       LkL           LkL      LkL            
+            LkL      LkkL           LkL      LkL            
+            LkL      LkkL           LkL      LkL            
+            LLL      LLL            LLL      LLL            

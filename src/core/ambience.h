@@ -63,6 +63,11 @@ struct AmbientParams {
   /// zero): the leaking submarine's hissing gas, the flood's rush, the poachers' helicopter, the
   /// yeti's roars and stamping, the monsters' roars and stamping, the rumble of the big meteor coming down.
   float menace = 0;
+  /// How strong the monsters' streams of fire are, from 0 to 1 (World::flameLevel()): a roaring whoosh.
+  float flames = 0;
+  /// How near the winged monster is, from 0 to 1 (World::nearness("winged_titan")): only while it is
+  /// alive does its shrill screech sound.
+  float winged = 0;
   /// Counts the poachers' rifle shots (World::shotCount()); each one cracks.
   unsigned shots = 0;
 };
@@ -269,6 +274,10 @@ class Ambience {
   float fireLow_[2][2] = {}, fireCrack_[2] = {}, planeLow_[2][2] = {};  ///< fire and jet filters
   float lowTrain_, lowTrainBand_, lowKlack_, lowFire_, lowJet_;  ///< their coefficients
   float menace_ = 0;                ///< smoothed strength of the second catastrophe
+  float flames_ = 0, wingedNear_ = 0;  ///< smoothed strength of the fire streams, and proximity of the winged monster
+  float flameLo_[2] = {}, flameHi_[2] = {};  ///< the two low-pass stages whose difference is the roar of fire, per ear
+  float lowFlameTop_, lowFlameBottom_;       ///< their coefficients
+  float flameWander_ = 0;                    ///< slow, uneven swelling of the roar
   double menacePhase_[2] = {};      ///< phases of its tones (the roar, the whine)
   float menaceLow_[2][2] = {};      ///< low-pass stages of its noise, per ear
   float menaceHigh_[2] = {};        ///< what the hiss and the rush take away, per ear

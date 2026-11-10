@@ -90,8 +90,10 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
-  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel(), world.yetiLevel()}));
+  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel(), world.rotorLevel(), world.yetiLevel(), world.titanLevel()}));
   p.shots = world.shotCount();
+  p.flames = static_cast<float>(world.flameLevel());
+  p.winged = static_cast<float>(world.nearness("winged_titan"));
   return p;
 }
 
@@ -110,6 +112,8 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowFloodTop_ = coeff(1.0f / 2300.0f / 6.28f);
   lowChop_ = coeff(1.0f / 650.0f / 6.28f);
   lowThump_ = coeff(1.0f / 190.0f / 6.28f);
+  lowFlameTop_ = coeff(1.0f / 2800.0f / 6.28f);
+  lowFlameBottom_ = coeff(1.0f / 320.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
   lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
   lowCar_ = coeff(1.0f / 230.0f / 6.28f);
@@ -655,6 +659,22 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
   if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
     bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level);
   }
+  if (p.kind == AmbientKind::City && flames_ > 1e-3f) {
+    // The streams of fire: one steady, rushing roar (broad noise over a deep body), only unevenly
+    // swelling and with a few faint crackles. Nothing in it beats in time.
+    flameWander_ += (noise(rng_) - flameWander_) * static_cast<float>(1.0 - std::exp(-kTwoPi * 2.0 * dt));
+    const float swell = 0.88f + 0.12f * std::clamp(flameWander_ * 45.0f, -1.0f, 1.0f);
+    for (int ch = 0; ch < 2; ++ch) {
+      const float n = noise(rng_) * noiseScale_;
+      flameHi_[ch] += (n - flameHi_[ch]) * lowFlameTop_;
+      flameLo_[ch] += (n - flameLo_[ch]) * lowFlameBottom_;
+      const float band = flameHi_[ch] - flameLo_[ch];  // the rush
+      const float body = flameLo_[ch];                 // the deep roar under it
+      float crackle = 0;
+      if (rng_.uniform() < 14.0 * dt) crackle = noise(rng_) * 0.18f;
+      out[ch] += (band * 3.2f + body * 1.8f + crackle) * swell * 0.7f * flames_;
+    }
+  }
   if (p.kind != AmbientKind::Mountains && p.kind != AmbientKind::City) return;
   // A creature: heavy steps and a roar now and then. The monsters of the city are bigger and slower.
   const bool big = p.kind == AmbientKind::City;
@@ -667,7 +687,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
   if (t_ >= nextMenaceRoar_) {
     menaceRoarStart_ = t_;
     menaceRoarDur_ = rng_.range(1.3, 2.0);
-    menaceRoarVoice_ = big ? (menaceRoarVoice_ + 1) % 2 : 0;
+    menaceRoarVoice_ = big && wingedNear_ > 0.5f ? (menaceRoarVoice_ + 1) % 2 : 0;  // the screech needs the winged one alive
     nextMenaceRoar_ = t_ + menaceRoarDur_ + rng_.range(2.0, 4.5);
   }
   const double rt = t_ - menaceRoarStart_;
@@ -678,14 +698,14 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
     const double hz = menaceRoarVoice_ == 1 ? 520.0 + 380.0 * std::sin(3.14159265 * u) : (big ? 58.0 : 96.0) + 50.0 * std::sin(3.14159265 * std::pow(u, 0.8));
     menacePhase_[0] += kTwoPi * hz * dt;
     const double tone = std::tanh(2.2 * std::sin(menacePhase_[0]) + 1.1 * std::sin(2 * menacePhase_[0] + 0.5) + 0.5 * std::sin(3 * menacePhase_[0] + 1.0));
-    const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f : 0.14f);
+    const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f * wingedNear_ : 0.14f);
     out[0] += roar;
     out[1] += roar;
   }
 }
 
 void Ambience::render(const AmbientParams& p, float* out, int frames) {
-  const float kPresence = coeff(0.6f), kRain = coeff(1.5f), kNight = coeff(3.0f), kVolume = coeff(0.05f), kStorm = coeff(2.0f), kSlide = coeff(0.4f);
+  const float kPresence = coeff(0.6f), kRain = coeff(1.5f), kNight = coeff(3.0f), kVolume = coeff(0.05f), kStorm = coeff(2.0f), kSlide = coeff(0.4f), kFast = coeff(12.0f);
   const float lowRoll = coeff(1.0f / 0.35f / 6.28f);
   const float rollScale = 1.0f / (0.577f * std::sqrt(lowRoll / 2.0f));
   const float lowRain = coeff(1.0f / 2500.0f / 6.28f);
@@ -723,6 +743,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(planeNear_, p.kind == AmbientKind::City ? p.plane : 0.0f, kStorm);
     approach(fireNear_, p.kind == AmbientKind::City ? p.fire : 0.0f, kRain);
     approach(menace_, p.menace, kStorm);
+    approach(flames_, p.kind == AmbientKind::City ? p.flames : 0.0f, kFast);
+    approach(wingedNear_, p.kind == AmbientKind::City ? (p.winged > 0.0f ? 1.0f : 0.0f) : 0.0f, kFast);
     approach(volume_, p.volume, kVolume);
 
     // Gusts: slow swells plus a random drift, so they never repeat evenly.

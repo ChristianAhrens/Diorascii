@@ -433,6 +433,9 @@ void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 /// The leaking submarine (see World::leakStep).
 void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
 
+/// The flood (see World::floodStep).
+void flood(Entity& e, World& w, double dt) { w.floodStep(e, dt); }
+
 /// The avalanche: the powder cloud at the head of the slide (see World::slideStep).
 void avalanche(Entity& e, World& w, double dt) { w.slideStep(e, dt); }
 
@@ -446,7 +449,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
       {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
-      {"leak", leak}};
+      {"leak", leak}, {"flood", flood}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -541,6 +544,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   // The river takes at most half of the ground, so there is always some bank left.
   riverRows_ = std::clamp(sc.riverRows, 0, groundRows / 2);
   riverTopY_ = h_ - riverRows_;
+  mud_.assign(static_cast<size_t>(std::max(w_, 0)), 0.0f);
   if (!sc.hasMedium || sc.skyFraction >= 1.0) {
     surfaceY_ = seabedY_;
   } else {
@@ -1324,6 +1328,7 @@ void World::step(double dt) {
 
   stepTongues(dt);
   stepToxin(dt);
+  stepFlood(dt);
   if (!avenues_.empty()) stepCity(dt);
 
   if (!scene_->events.empty() && !eventAlive) {
@@ -1659,6 +1664,12 @@ void World::renderBackground(Frame& out, Style style, const Light& light) const 
           c.fg = scale(surfaceFg, 0.7);
         }
       }
+      if (const double m = mudAt(x); m > 0.01 && y >= seabedY_) {  // the flood has been here
+        const Rgb mud = backdrop({112, 84, 52}, light);
+        c.bg = lerp(c.bg, mud, (riverRows_ > 0 && y >= riverTopY_ ? 0.55 : 0.85) * m);
+        c.fg = scale(c.bg, 1.25);
+        if (y < riverTopY_ || riverRows_ == 0) c.ch = h % 4 == 0 ? U'.' : h % 7 == 0 ? U',' : U' ';
+      }
       if (hasMedium_ && y == surfaceY_ && sc.surfaceGlyphs.size() == 3) {  // animated waterline
         const double v = std::sin(x * 0.45 + time_ * 1.6) + 0.5 * std::sin(x * 0.17 - time_ * 0.7);
         c.ch = v > 0.5 ? sc.surfaceGlyphs[0] : v > -0.5 ? sc.surfaceGlyphs[1] : sc.surfaceGlyphs[2];
@@ -1787,6 +1798,7 @@ void World::render(Frame& out, Style style) const {
   if (!backDrawn) renderCityBack(out, style, l);
   if (!streetDrawn) renderStreet(out, style, l);
   renderToxin(out, style, l);
+  renderFlood(out, style, l);
   renderTongues(out, style, l);
   if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
     for (int y = 0; y < h_; ++y) {

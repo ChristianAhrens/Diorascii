@@ -333,6 +333,13 @@ class World {
   /// Drives the leaking submarine (the `leak` behavior): it drives through the sea and leaves a
   /// trail of poison behind it that spreads while it passes and lingers after it has gone.
   void leakStep(Entity& e, double dt);
+  /// How loud the rush of the flood is, from 0 (none) to 1; sound follows it.
+  double floodLevel() const { return floodLevel_; }
+  /// How muddy column x is after a flood, 0 to 1.
+  double mudAt(int x) const { return x >= 0 && static_cast<size_t>(x) < mud_.size() ? mud_[static_cast<size_t>(x)] : 0.0; }
+  /// Drives the flood (the `flood` behavior): the river bursts its banks and a wall of water runs
+  /// across the land, tearing off everything it reaches, then recedes and leaves mud behind.
+  void floodStep(Entity& e, double dt);
   /// Moves an avalanche entity one step down the mountain, scarring what it passes and wiping out
   /// what it buries. Called by the `avalanche` behavior.
   void slideStep(Entity& e, double dt);
@@ -625,6 +632,26 @@ class World {
   double puffRadius(const Toxin::Puff& p) const;
   /// Strength of the cloud for the sound.
   double toxinLevel_ = 0;
+  /// The flood: a wall of water runs in from one side, stands over the land for a while and then
+  /// recedes.
+  struct Flood {
+    bool active = false;   ///< a flood is under way
+    bool started = false;  ///< it has begun (the entity that stands for it may leave after it)
+    int dir = 1;           ///< side it comes from: 1 from the left, -1 from the right
+    double age = 0;        ///< seconds since it began
+    double depthMax = 0;   ///< depth of the water at its highest, in rows
+    double recede = 0;     ///< how far the water has withdrawn, 0 to 1
+  } flood_;
+  /// How loud the flood is right now.
+  double floodLevel_ = 0;
+  /// How muddy each column is (1 right after the water has been over it, fading in time).
+  std::vector<float> mud_;
+  /// Depth of the flood water at column x, in rows from the bottom of the screen.
+  double floodDepth(int x) const;
+  /// Advances the flood, tears off what it reaches and lets the mud dry.
+  void stepFlood(double dt);
+  /// Draws the flood water over the land.
+  void renderFlood(Frame& out, Style style, const Light& light) const;
   /// Spreads and fades the poison cloud, and kills what it covers.
   void stepToxin(double dt);
   /// Tints the sea where the poison cloud lies.

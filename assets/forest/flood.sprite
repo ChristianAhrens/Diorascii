@@ -1,0 +1,7 @@
+name: flood
+facing: right
+habitat: ground
+speed: 0..0
+behaviors: flood
+--- art
+ 

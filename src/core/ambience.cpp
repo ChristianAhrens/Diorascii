@@ -90,7 +90,7 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
-  p.menace = static_cast<float>(std::max({world.toxinLevel()}));
+  p.menace = static_cast<float>(std::max({world.toxinLevel(), world.floodLevel()}));
   return p;
 }
 
@@ -105,6 +105,8 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
   lowRoar_ = coeff(1.0f / 420.0f / 6.28f);
   lowHiss_ = coeff(1.0f / 1100.0f / 6.28f);
+  lowFlood_ = coeff(1.0f / 420.0f / 6.28f);
+  lowFloodTop_ = coeff(1.0f / 2300.0f / 6.28f);
   lowThump_ = coeff(1.0f / 190.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
   lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
@@ -629,6 +631,12 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
       case AmbientKind::Aquarium: {  // poison gas: a hiss that wells up, and glugging bubbles
         menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowHiss_;
         out[ch] = (n - menaceHigh_[ch]) * 0.3f * level * (0.7f + 0.3f * static_cast<float>(std::sin(kTwoPi * 0.7 * t_ + ch)));
+        break;
+      }
+      case AmbientKind::Forest: {  // a flood: the deep roar of rushing water and the hiss of its surface
+        menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowFloodTop_;
+        const float swell = 0.75f + 0.25f * static_cast<float>(std::sin(kTwoPi * 0.31 * t_ + 1.7 * ch));
+        out[ch] = (menaceLow_[ch][1] * 3.2f + (n - menaceHigh_[ch]) * 0.06f + menaceHigh_[ch] * 0.28f) * 0.55f * level * swell;
         break;
       }
       default: break;

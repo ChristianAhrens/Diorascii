@@ -270,6 +270,7 @@ class Ambience {
   float menaceLow_[2][2] = {};      ///< low-pass stages of its noise, per ear
   float menaceHigh_[2] = {};        ///< what the hiss and the rush take away, per ear
   float lowHiss_, lowThump_;        ///< coefficients of the hiss and of the low stages
+  float lowFlood_, lowFloodTop_;    ///< coefficients of the flood's rush
   unsigned seenImpacts_ = 0;
   bool impactsSynced_ = false;
 };

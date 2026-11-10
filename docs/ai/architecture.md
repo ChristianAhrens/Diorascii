@@ -77,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak flood`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -125,7 +125,12 @@ The code is in `src/core/disasters.cpp`:
   stern; `puffRadius` grows each puff at 6 cells/s up to `reach` (the height of the sea, rows counting 2.2 times); the cloud
   is the union of the puffs. `stepToxin` kills `life` inside any puff, delays everything in `restock_` and starts the
   linger/fade timers when the submarine has left; `renderToxin` tints the water by the deepest puff per cell.
-Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles.
+- `floodStep` (forest): an invisible `flood` sprite starts `flood_`, a wall of water at 17 cells/s from a random side, depth
+  `floodDepth(x)` full within 2 columns of the front. `renderFlood` draws the first 14 columns behind the front sparse
+  (foam glyphs only, no fill) and fills them in to solid. `stepFlood` rips off whatever has water at its feet (`life` or
+  `grounded`, so flying birds are spared), spawns `log` effects, sets `mud_` per column (fades over 110 s, drawn in
+  `renderBackground`) and holds back replanting for 25-75 s after the water has gone.
+Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles. The forest's is the rush of water: low-passed noise with a hiss over it.
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals) that only count as events when they increase; the first value seen is the baseline.
 

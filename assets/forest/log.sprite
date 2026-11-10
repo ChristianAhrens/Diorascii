@@ -1,0 +1,12 @@
+name: log
+facing: right
+habitat: sky
+speed: 0..0
+ttl: 3..5
+random-frame: yes
+fps: 4
+color: #7a5430
+--- art
+=oO=-
+--- art
+-=Oo=

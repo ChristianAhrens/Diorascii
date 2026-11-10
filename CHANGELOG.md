@@ -10,6 +10,9 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a second catastrophe to the forest: a flood whose wave front is sparse foam that fills in to a wall of muddy water, tearing off all trees and life and leaving mud and bare ground that is replanted only slowly, with the rush of the water and the behavior `flood`
+- Added a second catastrophe to the aquarium, which replaces the kraken one time in five: a grey submarine drives through the sea and leaves a trail of poison that spreads while it passes and kills everything it reaches, and the sea fills with life again afterwards, with the hiss and the bubbling of the gas (`AmbientParams::menace`) and the behavior `leak`
+- Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting
 - Added a second catastrophe to the aquarium, which replaces the kraken one time in five: a grey submarine drives through the sea and leaves a trail of poison that spreads while it passes and kills everything it reaches, and the sea fills with life again afterwards, with the hiss and the bubbling of the gas (`AmbientParams::menace`) and the behavior `leak`
 - Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting
 - Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting

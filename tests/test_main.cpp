@@ -178,7 +178,7 @@ TEST(embedded_assets_all_load) {
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
                         "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
-                        "submarine", "toxinpuff"})
+                        "submarine", "toxinpuff", "flood", "log"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -3638,7 +3638,7 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
 TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
   AssetPack pack = AssetPack::embedded();
   struct Case { const char* scene; const char* first; const char* second; };
-  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}}) {
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}}) {
     auto scene = pack.scene(c.scene);
     CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
     if (!scene || scene->rare.size() != 2) continue;
@@ -3721,6 +3721,44 @@ TEST(a_leaking_submarine_poisons_the_whole_sea_and_everything_alive_in_it_dies) 
   CHECK(gone && alive >= life / 2);  // the cloud and the wreck are gone, and the sea fills up again
 }
 
+TEST(a_flood_tears_everything_off_the_bank_and_leaves_mud_and_the_land_bare_for_a_while) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("forest"), 160, 36, 3);
+  auto plants = [&] {
+    size_t n = 0;
+    for (auto& e : world.entities()) n += (e->grounded && !e->life && !e->dead && e->sprite->name() != "flood");
+    return n;
+  };
+  const size_t before = plants();
+  CHECK(before > 30);
+  world.triggerRare(RarePick::Other);
+  double peak = 0, muddy = 0;
+  size_t fewest = before;
+  bool rained = false, water = false;
+  for (int i = 0; i < 700; ++i) {  // 35 seconds: the water has come and gone
+    world.step(0.05);
+    peak = std::max(peak, world.floodLevel());
+    fewest = std::min(fewest, plants());
+    rained |= world.raining();
+    if (i == 200) {  // the water stands over the land
+      Frame f;
+      world.render(f);
+      const Cell& c = f.at(80, world.height() - 2);
+      water = c.bg.r > c.bg.b;  // brown, not the blue of the stream
+    }
+  }
+  for (int x = 0; x < world.width(); ++x) muddy = std::max(muddy, world.mudAt(x));
+  CHECK(peak > 0.9 && rained && water);
+  CHECK(fewest <= before / 10);          // the trees, bushes and flowers are torn off
+  CHECK(muddy > 0.5);                    // the mud is still there
+  CHECK(plants() < before / 2);          // and not much has grown back yet
+  for (int i = 0; i < 2400; ++i) world.step(0.05);  // two more minutes
+  CHECK(plants() >= before * 9 / 10);    // it is replanted in the end
+  double mud = 0;
+  for (int x = 0; x < world.width(); ++x) mud = std::max(mud, world.mudAt(x));
+  CHECK(mud == 0);
+}
+
 TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
   constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
   auto rms = [&](const AmbientParams& p) {
@@ -3731,7 +3769,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
     for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
     return std::sqrt(sum / double(buf.size() / 2));
   };
-  for (AmbientKind kind : {AmbientKind::Aquarium}) {
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest}) {
     AmbientParams calm;
     calm.kind = kind;
     AmbientParams menace = calm;
@@ -3743,7 +3781,7 @@ TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_an
 
 TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium"}) {
+  for (const char* name : {"aquarium", "forest"}) {
     for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
       for (double hour : {3.0, 12.0, 19.0}) {
         World world(pack, pack.scene(name), w, h, 7);
@@ -3762,7 +3800,7 @@ TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
 
 TEST(the_second_catastrophes_are_deterministic_per_seed) {
   AssetPack pack = AssetPack::embedded();
-  for (const char* name : {"aquarium"}) {
+  for (const char* name : {"aquarium", "forest"}) {
     std::string a, b;
     for (std::string* out : {&a, &b}) {
       World world(pack, pack.scene(name), 120, 32, 11);

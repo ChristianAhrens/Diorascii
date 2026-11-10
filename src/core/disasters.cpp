@@ -1,5 +1,5 @@
 /// @file core/disasters.cpp
-/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium).
+/// @brief The second catastrophes of the scenes: the leaking submarine's poison cloud (aquarium), the flood (forest).
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +17,19 @@ constexpr double kToxinSpeed = 6.0;
 constexpr double kCellAspect = 2.2;
 /// Seconds the cloud stays thick once it covers the sea, and the seconds it then takes to thin out.
 constexpr double kToxinLinger = 9.0, kToxinFade = 12.0;
+
+/// Cells per second the front of the flood runs, and the columns over which the water rises behind it
+/// (it is as deep as it gets almost at once).
+constexpr double kFloodSpeed = 17.0, kFloodRise = 2.0;
+/// Columns behind the front over which the water goes from a sparse, wavy look to the solid flood.
+constexpr double kWaveLength = 14.0;
+/// Seconds the water stands over the land once it has covered it, and the seconds it takes to recede.
+constexpr double kFloodHold = 8.0, kFloodRecede = 9.0;
+/// Seconds the mud takes to dry, and how long the torn-off things stay away at the least after the
+/// flood is over, at the most.
+constexpr double kMudDry = 110.0, kReplantMin = 25.0, kReplantMax = 75.0;
+/// Seconds of downpour the flood brings.
+constexpr double kFloodRain = 24.0;
 
 /// Palette of the poison: a sickly green.
 constexpr Rgb kToxinColor{150, 210, 40};
@@ -124,6 +137,103 @@ void World::renderToxin(Frame& out, Style style, const Light& light) const {
         c.fg = shade(scale(kToxinColor, 1.15), light);
         c.defaultFg = style == Style::Mono;
       }
+    }
+  }
+}
+
+void World::floodStep(Entity& e, double dt) {
+  if (!flood_.started) {  // the river bursts its banks
+    flood_ = Flood{};
+    flood_.active = flood_.started = true;
+    flood_.dir = rng_.chance(0.5) ? 1 : -1;
+    flood_.depthMax = std::max(4.0, static_cast<double>(h_ - seabedY_) + 2.0);
+    startRain(kFloodRain);
+    e.x = flood_.dir > 0 ? 0 : w_ - 1;
+    return;
+  }
+  if (!flood_.active) e.dead = true;
+  (void)dt;
+}
+
+double World::floodDepth(int x) const {
+  if (!flood_.active) return 0;
+  const double dist = flood_.dir > 0 ? x : w_ - 1 - x;
+  const double rise = std::clamp((flood_.age * kFloodSpeed - dist) / kFloodRise, 0.0, 1.0);
+  return flood_.depthMax * rise * (1.0 - flood_.recede);
+}
+
+void World::stepFlood(double dt) {
+  for (float& m : mud_) m = std::max(0.0f, m - static_cast<float>(dt / kMudDry));
+  if (!flood_.active) {
+    floodLevel_ = 0;
+    return;
+  }
+  flood_.age += dt;
+  const double covered = (w_ + kFloodRise) / kFloodSpeed;  // when the water has reached the far side
+  flood_.recede = std::clamp((flood_.age - covered - kFloodHold) / kFloodRecede, 0.0, 1.0);
+  if (flood_.recede >= 1.0) {
+    flood_.active = false;
+    return;
+  }
+  const double front = flood_.age * kFloodSpeed;
+  floodLevel_ = std::min(1.0, 0.25 + front / (w_ + kFloodRise)) * (1.0 - flood_.recede);
+  for (int x = 0; x < w_; ++x) {
+    if (floodDepth(x) > 0.5) mud_[static_cast<size_t>(x)] = 1.0f;
+  }
+  // Whatever the water reaches at its feet is torn off: trees, bushes, animals on the bank and on the river.
+  for (auto& o : entities_) {
+    if (o->dead || o->isRare || !o->destructible || !(o->life || o->grounded)) continue;
+    const int column = std::clamp(static_cast<int>(o->x + o->width() / 2.0), 0, w_ - 1);
+    const double feet = o->y + o->height() - 1;
+    if (floodDepth(column) < h_ - feet) continue;
+    const bool plant = !o->life;
+    claim(*o, "splash");
+    if (plant) {  // a trunk goes down the flood
+      spawnEffect("log", o->x + o->width() / 2.0, h_ - flood_.depthMax + rng_.range(0, 1), 3, flood_.dir * kFloodSpeed * 0.75, 0);
+    }
+  }
+  // Branches and logs ride the front.
+  if (flood_.recede == 0 && front < w_ && rng_.chance(9 * dt)) {
+    const double x = flood_.dir > 0 ? front - rng_.range(0, kFloodRise) : w_ - 1 - front + rng_.range(0, kFloodRise);
+    spawnEffect("log", x, h_ - flood_.depthMax + rng_.range(0, 2), 3, flood_.dir * kFloodSpeed * 0.8, 0);
+  }
+  // What was torn off is not replanted for a good while: the land stays devastated.
+  const double remaining = covered + kFloodHold + kFloodRecede - flood_.age;
+  for (auto& r : restock_) {
+    if (r.left < remaining + kReplantMin) r.left = remaining + rng_.range(kReplantMin, kReplantMax);
+  }
+}
+
+void World::renderFlood(Frame& out, Style style, const Light& light) const {
+  if (!flood_.active) return;
+  const Rgb deep = backdrop({104, 78, 46}, light), shallow = backdrop({150, 116, 70}, light);
+  const double front = flood_.age * kFloodSpeed;
+  for (int x = 0; x < w_; ++x) {
+    const int depth = static_cast<int>(std::floor(floodDepth(x)));
+    if (depth < 1) continue;
+    // Just behind the front the water is a sparse tumble of waves; it fills in to the solid flood.
+    const double behind = front - (flood_.dir > 0 ? x : w_ - 1 - x);
+    const double solid = std::clamp(behind / kWaveLength, 0.0, 1.0);
+    for (int y = h_ - depth; y < h_; ++y) {
+      if (y < 0) continue;
+      Cell& c = out.at(x, y);
+      const bool top = y == h_ - depth;
+      const double wave = std::sin(x * 0.7 - time_ * 5.0 * flood_.dir + y * 1.3) + std::sin(x * 0.31 - time_ * 3.0);
+      const bool filled = solid >= 1.0 || (hash2(x * 5 + y, static_cast<int>(time_ * 6)) % 100) < solid * 100.0 - 5.0;
+      if (!filled) {  // a gap in the waves: only a splash of foam on the land behind
+        if (hash2(x, y + static_cast<int>(time_ * 8)) % 3 == 0) {
+          c.ch = wave > 0.4 ? U'~' : wave > -0.4 ? U'-' : U'\'';
+          c.fg = shade(scale(shallow, 1.6), light);
+          c.defaultFg = style == Style::Mono;
+        }
+        continue;
+      }
+      c.bg = lerp(shallow, deep, std::min(1.0, 0.25 + 0.15 * (y - (h_ - depth))));
+      c.fg = shade(scale(shallow, 1.5), light);
+      c.ch = top ? (wave > 0.2 ? U'~' : U'-') : wave > 1.0 ? U'~' : wave > 0.2 ? U'-' : (hash2(x, y) % 6 == 0 ? U'.' : U' ');
+      c.bold = top;
+      c.defaultBg = style != Style::Full;
+      c.defaultFg = style == Style::Mono;
     }
   }
 }

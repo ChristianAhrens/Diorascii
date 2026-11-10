@@ -38,6 +38,8 @@ struct Options {
   int dumpSteps = -1;  // >= 0: headless, print the frame after N steps and exit
   /// Headless mode: summon the scene's rare event at this step (--rare).
   int dumpRare = -1;
+  /// With --rare-other: summon the scene's second catastrophe instead (--rare-other).
+  bool dumpRareOther = false;
   /// Headless mode: press the action key at this step (--act).
   int dumpAct = -1;    // with --dump: press the action key at this step
   /// Size used by --dump.
@@ -80,12 +82,13 @@ void usage() {
       "  --size WxH       size for --dump (default 100x30)\n"
       "  --act N          with --dump: trigger the scene's action at step N\n"
       "  --rare N         with --dump: summon the scene's rare event at step N\n"
+      "  --rare-other N   ...or its second, less likely catastrophe\n"
       "  --hour H         start at this time of day, 0 to 24 (scenes with a day and night cycle)\n"
       "  --realtime       let the time of day follow this computer's clock\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
-      "keys: m/enter/esc menu | left/right scene | c style | t time of day | f action (feed, rain, meteor...) | x rare event | a sound | i info | p pause | r restart | q quit");
+      "keys: m/enter/esc menu | left/right scene | c style | t time of day | f action (feed, rain, meteor...) | x rare event (X: the second one) | a sound | i info | p pause | r restart | q quit");
 }
 
 /// Parses the command line. Returns false on an unknown or malformed option.
@@ -98,6 +101,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--scene") { const char* v = next(); if (!v) return false; o.scene = v; }
     else if (a == "--fps") { const char* v = next(); if (!v) return false; o.fps = std::atof(v); if (o.fps < 1) o.fps = 1; }
     else if (a == "--dump") { const char* v = next(); if (!v) return false; o.dumpSteps = std::atoi(v); }
+    else if (a == "--rare-other") { const char* v = next(); if (!v) return false; o.dumpRare = std::atoi(v); o.dumpRareOther = true; }
     else if (a == "--rare") { const char* v = next(); if (!v) return false; o.dumpRare = std::atoi(v); }
     else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
     else if (a == "--realtime") o.realtime = true;
@@ -194,7 +198,7 @@ int main(int argc, char** argv) {
     }
     for (int i = 0; i < opt.dumpSteps; ++i) {
       if (i == opt.dumpAct) world.interact();
-      if (i == opt.dumpRare) world.triggerRare();
+      if (i == opt.dumpRare) world.triggerRare(opt.dumpRareOther ? RarePick::Other : RarePick::Weighted);
       world.step(1.0 / 20);
     }
     Frame frame;

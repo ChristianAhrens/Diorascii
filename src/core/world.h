@@ -39,6 +39,13 @@ enum class Zone {
   LowAir    ///< the air over the forest and the valley, where small birds fly
 };
 
+/// Which of a scene's rare catastrophes to send.
+enum class RarePick {
+  Weighted,  ///< any, by the weights in the scene file (the common one four times in five)
+  Common,    ///< the one with the highest weight
+  Other      ///< the one with the lowest weight: the scene's second catastrophe
+};
+
 /// A live thing in the world: a sprite with a position, motion and behaviors.
 struct Entity {
   /// Unique within the world (0 until it has joined it); lets a tongue find its victim again.
@@ -337,7 +344,10 @@ class World {
   TimeMode timeMode() const { return timeMode_; }
   /// Summons one of the scene's rare catastrophes now. Returns false if the scene has none or
   /// one is already under way.
-  bool triggerRare();
+  /// @param pick which one: a weighted pick (like the scheduled ones), the scene's most likely
+  ///        catastrophe, or its least likely one (the second), so that either can be seen without
+  ///        waiting for the chance
+  bool triggerRare(RarePick pick = RarePick::Weighted);
   /// Wipes out entities: all life (kills == "life") or the sprites named in kills. Each victim
   /// shows `effect`, and is brought back some seconds later. The attacker itself is spared.
   /// @param from,to only victims whose middle column lies in this range are taken (default: all)
@@ -485,8 +495,8 @@ class World {
   void spawnSeaweed();
   /// Sends one weighted-random scene event.
   void spawnEvent();
-  /// Sends one weighted-random rare catastrophe.
-  void spawnRare();
+  /// Sends one rare catastrophe, see RarePick.
+  void spawnRare(RarePick pick = RarePick::Weighted);
   /// Number of cells in a habitat, used for per-cells populations.
   double areaFor(const std::string& habitat) const;
   /// Picks a starting row for a sprite of the given height in its habitat.

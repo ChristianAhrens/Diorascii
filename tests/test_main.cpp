@@ -1508,19 +1508,19 @@ TEST(a_rare_event_can_be_summoned_but_only_one_at_a_time) {
   AssetPack pack = rarePack();
   World world(pack, pack.scene("t"), 120, 30, 4);
   CHECK(world.countTag("beast") == 0);
-  CHECK(world.triggerRare());
+  CHECK(world.triggerRare(RarePick::Common));
   CHECK(world.countTag("beast") == 1);
-  CHECK(!world.triggerRare());  // one is already under way
+  CHECK(!world.triggerRare(RarePick::Common));  // one is already under way
   AssetPack none = miniPack("--- population\n", {});
   World quiet(none, none.scene("t"), 60, 20, 1);
-  CHECK(!quiet.triggerRare());  // this scene has none
+  CHECK(!quiet.triggerRare(RarePick::Common));  // this scene has none
 }
 
 TEST(a_catastrophe_strikes_once_halfway_across_and_wipes_out_all_life_but_nothing_else) {
   AssetPack pack = rarePack("life: yes\n");  // the attacker is itself a living thing, and still spares itself
   World world(pack, pack.scene("t"), 120, 30, 4);
   CHECK(countSprite(world, "fish") == 30 && countSprite(world, "rock") == 1);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   // Look the attacker up each time instead of keeping a pointer: if it were wiped out too, it would be freed.
   auto beastNow = [&]() -> Entity* {
     for (auto& e : world.entities()) {
@@ -1587,7 +1587,7 @@ TEST(a_catastrophe_can_wipe_out_named_sprites_only_and_what_was_planted_is_plant
   for (auto& e : world.entities()) {
     if (e->sprite->name() == "flag") flagX = e->x;
   }
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   world.step(0.05);
   CHECK(world.killedCount() == 2);
@@ -1607,13 +1607,13 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
   for (const Case& c : {Case{"aquarium", "kraken"}, Case{"forest", "thundercloud"}, Case{"desert", "sandworm"},
                         Case{"moon", "alien"}}) {
     auto scene = pack.scene(c.scene);
-    CHECK(scene && scene->rare.size() == 1 && scene->rare[0].sprite == c.attacker);
+    CHECK(scene && scene->rare.size() >= 1u && scene->rare[0].sprite == c.attacker);
     World world(pack, scene, 160, 36, 3);
     const bool animals = std::string(c.scene) != "moon";
     size_t lifeBefore = 0;
     for (auto& e : world.entities()) lifeBefore += e->life;
     CHECK(!animals || lifeBefore > 10);
-    CHECK(world.triggerRare());
+    CHECK(world.triggerRare(RarePick::Common));
     // A storm strikes everything at once; an alien, a worm and a kraken take things as they come
     // to them, so wait for them to have crossed the scene.
     const bool lashes = std::string(c.scene) == "desert" || std::string(c.scene) == "aquarium";
@@ -1654,7 +1654,7 @@ TEST(the_moon_alien_only_destroys_the_rover_and_the_flag_and_both_are_replaced_l
   World world(pack, pack.scene("moon"), 120, 30, 5);
   size_t rocks = countSprite(world, "rock"), landers = countSprite(world, "lander");
   CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 3000 && countSprite(world, "alien") > 0; ++i) world.step(0.05);  // until it has crossed
   // The flag stands still and is always taken; the rover drives about and may slip past the alien.
   CHECK(world.killedCount() >= 1 && world.killedCount() <= 2);
@@ -1680,7 +1680,7 @@ TEST(a_sweeping_catastrophe_takes_each_victim_as_its_middle_passes_it) {
   }
   CHECK(flags.size() == 2);
   std::sort(flags.begin(), flags.end());
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   Entity* alien = nullptr;
   for (auto& e : world.entities()) {
     if (e->sprite->name() == "alien") alien = e.get();
@@ -1762,7 +1762,7 @@ TEST(a_strike_can_light_up_the_screen_with_two_quick_flashes) {
   CHECK(!world.flashing());
   Frame calm;
   world.render(calm, Style::Full);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   CHECK(world.killedCount() == 30);
   CHECK(world.flashing());  // the instant it strikes
@@ -1786,7 +1786,7 @@ TEST(a_catastrophe_can_bring_rain_and_always_darkens_the_scene_while_it_is_there
   AssetPack pack = rarePack("storm-rain: 6\ntag: gloom\n", "action: weather rain\n",
                             {"name: rain\nfacing: right\ntag: rain\nbehaviors: rain\n--- art\n\\\n"});
   World world(pack, pack.scene("t"), 120, 30, 4);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   CHECK(!world.raining());
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   CHECK(world.raining());  // it rains from the strike on
@@ -1794,7 +1794,7 @@ TEST(a_catastrophe_can_bring_rain_and_always_darkens_the_scene_while_it_is_there
   CHECK(world.overcast() > 0.3);  // and the sky is dark
   AssetPack dry = rarePack("tag: gloom\n");  // no weather action: no rain, but still dark
   World dark(dry, dry.scene("t"), 120, 30, 4);
-  dark.triggerRare();
+  dark.triggerRare(RarePick::Common);
   for (int i = 0; i < 100; ++i) dark.step(0.05);
   CHECK(!dark.raining());
   CHECK(dark.overcast() > 0.3);
@@ -1806,7 +1806,7 @@ TEST(a_strike_can_drop_a_bolt_that_reaches_the_ground_under_the_attacker) {
   AssetPack pack = rarePack("strike-sprite: bolt\n", "",
                             {"name: bolt\ntag: bolt\nfps: 10\nloop: no\ndie-after-animation: yes\n--- art\n|\n|\n|\n|\n|\n--- art\n/\n/\n/\n/\n/\n"});
   World world(pack, pack.scene("t"), 120, 30, 4);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   world.step(0.05);
   Entity* bolt = nullptr;
@@ -2166,7 +2166,7 @@ TEST(world_storm_proximity_follows_the_thundercloud_across_the_scene) {
   AssetPack pack = AssetPack::embedded();
   World w(pack, pack.scene("forest"), 100, 30, 3);
   CHECK(w.stormProximity() == 0.0);  // no cloud yet
-  CHECK(w.triggerRare());
+  CHECK(w.triggerRare(RarePick::Common));
   double lo = 1, hi = 0;
   for (int i = 0; i < 4000; ++i) {
     w.step(1.0 / 20);
@@ -2362,7 +2362,7 @@ TEST(the_mountains_span_the_whole_height_from_a_meadow_and_stream_to_snowy_peaks
   AssetPack pack = AssetPack::embedded();
   auto scene = pack.scene("mountains");
   CHECK(scene && scene->mountains && scene->riverRows > 0 && scene->dayNight);
-  CHECK(scene->action.kind == SceneDef::Action::Kind::Weather && scene->rare.size() == 1);
+  CHECK(scene->action.kind == SceneDef::Action::Kind::Weather && scene->rare.size() >= 1);
   CHECK(!pack.scene("forest")->mountains);
   for (int h : {24, 40, 70}) {
     World world(pack, scene, 140, h, 5);
@@ -2598,8 +2598,8 @@ TEST(an_avalanche_rips_down_a_snowy_flank_through_the_forest_into_the_stream) {
   for (auto& e : world.entities()) lifeBefore += e->life;
   CHECK(firsBefore > 10 && lifeBefore > 10);
   CHECK(world.avalancheLevel() == 0);
-  CHECK(world.triggerRare());
-  CHECK(!world.triggerRare());  // one at a time
+  CHECK(world.triggerRare(RarePick::Common));
+  CHECK(!world.triggerRare(RarePick::Common));  // one at a time
   CHECK(allOf(world, "avalanche").size() == 1);
 
   bool snow = false, rock = false, forest = false, meadow = false, stream = false;
@@ -2642,7 +2642,7 @@ TEST(an_avalanche_rips_down_a_snowy_flank_through_the_forest_into_the_stream) {
 TEST(the_avalanche_scars_the_picture_and_the_stream_shows_again_when_it_fades) {
   AssetPack pack = AssetPack::embedded();
   World world(pack, quietMountains(pack), 140, 40, 7);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 240; ++i) world.step(0.05);  // 12 s: it has reached the stream
   int sx = -1;
   for (int x = 0; x < world.width() && sx < 0; ++x) {
@@ -2665,7 +2665,7 @@ TEST(avalanches_survive_tiny_and_odd_sizes) {
   for (int w : {1, 2, 5, 40, 200}) {
     for (int h : {1, 2, 4, 9, 24, 90}) {
       World world(pack, pack.scene("mountains"), w, h, 11);
-      world.triggerRare();
+      world.triggerRare(RarePick::Common);
       world.interact();
       Frame f;
       for (int i = 0; i < 500; ++i) world.step(0.05);
@@ -2716,7 +2716,7 @@ TEST(the_mountains_sound_like_wind_a_stream_an_eagle_and_roar_in_a_storm_and_an_
   World world(pack, pack.scene("mountains"), 140, 40, 7);
   CHECK(ambientFor(world).kind == AmbientKind::Mountains);
   CHECK(ambientFor(world).avalanche == 0.0f);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   float loudest = 0;
   for (int i = 0; i < 300; ++i) {
     world.step(0.05);
@@ -2759,7 +2759,7 @@ TEST(a_sandworm_bellows_as_it_crosses_and_crunches_each_thing_it_swallows) {
   AssetPack pack = AssetPack::embedded();
   World world(pack, pack.scene("desert"), 160, 36, 3);
   CHECK(ambientFor(world).worm == 0.0f && ambientFor(world).crushes == 0);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   float nearest = 0;
   for (int i = 0; i < 1500; ++i) {
     world.step(0.05);
@@ -2773,7 +2773,7 @@ TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed
   AssetPack pack = AssetPack::embedded();
   World world(pack, pack.scene("desert"), 160, 36, 3);
   world.setTimeMode(World::TimeMode::Day);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   bool lashed = false, beforeHit = false, drawn = false;
   unsigned crushedAtStart = 0;
   for (int i = 0; i < 1500 && !(lashed && world.tongueCount() == 0); ++i) {
@@ -2800,7 +2800,7 @@ TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed
   CHECK(world.tongueCount() == 0);             // one tongue at a time, and it is gone afterwards
   // The alien, which has no reach, never lashes.
   World moon(pack, pack.scene("moon"), 120, 30, 5);
-  moon.triggerRare();
+  moon.triggerRare(RarePick::Common);
   for (int i = 0; i < 600; ++i) {
     moon.step(0.05);
     CHECK(moon.tongueCount() == 0);
@@ -2862,7 +2862,7 @@ TEST(the_city_hums_with_traffic_honks_now_and_then_and_has_sirens_trains_planes_
     nearest = std::max(nearest, ambientFor(world).siren);
   }
   CHECK(nearest > 0.9f);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   float blaze = 0;
   for (int i = 0; i < 400; ++i) {
     world.step(0.05);
@@ -2889,7 +2889,7 @@ TEST(the_fire_engine_wails_slowly_and_drives_off_without_its_siren) {
     CHECK(ambientFor(world).wail == 0.0f);  // the ambulance does not wail
   }
   CHECK(siren > 0.9f);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   float wails = 0;
   bool left = false, quiet = true;
   for (int i = 0; i < 20 * 100; ++i) {
@@ -2947,7 +2947,7 @@ TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
   World world(pack, quietMountains(pack), 140, 40, 7);
   world.setTimeMode(World::TimeMode::Day);
   CHECK(world.squealCount() == 0);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 1200; ++i) world.step(0.05);
   CHECK(world.squealCount() > 0 && world.squealCount() <= world.killedCount());  // animals only, not the trees
   CHECK(ambientFor(world).squeals == world.squealCount());
@@ -3243,7 +3243,7 @@ TEST(sometimes_the_fire_gets_out_of_hand_spreads_and_burns_buildings_down_which_
   world.setHour(12);
   world.setTimeMode(World::TimeMode::Day);
   world.forceFireOutcome(true);
-  CHECK(world.triggerRare());
+  CHECK(world.triggerRare(RarePick::Common));
   size_t mostTroubled = 0, mostRuined = 0;
   double engineLeft = -1, lastBurn = -1, allRebuilt = -1;
   bool cordonedWhileRuined = false, sprayedNoEffect = false;
@@ -3274,7 +3274,7 @@ TEST(sometimes_the_fire_gets_out_of_hand_spreads_and_burns_buildings_down_which_
   World ruin(pack, pack.scene("city"), 200, 40, 3);
   ruin.setTimeMode(World::TimeMode::Day);
   ruin.forceFireOutcome(true);
-  ruin.triggerRare();
+  ruin.triggerRare(RarePick::Common);
   for (int i = 0; i < 20 * 70 && ruin.ruinedBuildings() == 0; ++i) ruin.step(0.05);
   CHECK(ruin.ruinedBuildings() > 0);
   for (int i = 0; i < 20 * 6; ++i) ruin.step(0.05);  // it has fallen in
@@ -3317,7 +3317,7 @@ TEST(a_fire_engine_parks_at_the_fire_sprays_it_and_the_site_is_cordoned_off_unti
   world.setHour(12);
   world.setTimeMode(World::TimeMode::Day);
   world.forceFireOutcome(false);
-  CHECK(world.triggerRare());
+  CHECK(world.triggerRare(RarePick::Common));
   CHECK(!world.cordoned());
   bool parked = false, sprayed = false, left = false, cordonWhileLeft = false, everCordoned = false, barriers = false;
   size_t waiting = 0;
@@ -3541,8 +3541,8 @@ TEST(a_skyscraper_burns_with_smoke_and_a_fire_engine_then_is_renovated_quickly) 
   const size_t buildings = world.buildingCount();
   CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);
   world.forceFireOutcome(false);  // the fire engine wins
-  CHECK(world.triggerRare());
-  CHECK(!world.triggerRare());  // one at a time
+  CHECK(world.triggerRare(RarePick::Common));
+  CHECK(!world.triggerRare(RarePick::Common));  // one at a time
   double fiercest = 0;
   bool smoke = false, engine = false, scaffold = false, flames = false;
   size_t burning = 0;
@@ -3568,7 +3568,7 @@ TEST(a_skyscraper_burns_with_smoke_and_a_fire_engine_then_is_renovated_quickly) 
   CHECK(scaffold);                                      // then scaffolding goes up
   CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);  // renovated within the minute
   CHECK(world.buildingCount() == buildings);
-  CHECK(world.triggerRare());  // and it can happen again
+  CHECK(world.triggerRare(RarePick::Common));  // and it can happen again
 }
 
 TEST(the_session_menu_shows_the_version_and_the_copyright) {

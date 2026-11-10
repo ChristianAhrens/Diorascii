@@ -69,6 +69,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   menu_.addChoice("audio", "Sound", {"off", "on"}, 0);
   menu_.addButton("action", scenes_[sceneIdx_]->action.label);
   menu_.addButton("rare", "Rare event");
+  menu_.addButton("rare2", "Other rare event");
   menu_.addButton("resume", "Resume");
   if (config.quitEntry) menu_.addButton("quit", "Quit");
   menu_.setFooter({"diorascii " DIORASCII_VERSION, "Copyright (c) 2026 Christian Ahrens"});
@@ -138,6 +139,7 @@ void Session::handle(Action a) {
     case Action::Info: info_ = !info_; menu_.setValue("info", info_); break;
     case Action::Interact: flush(); runAction(); break;
     case Action::Rare: flush(); world_->triggerRare(); break;
+    case Action::RareOther: flush(); world_->triggerRare(RarePick::Other); break;
     case Action::Audio: setSound(!sound_); break;
     case Action::Redraw: rebuildPending_ = true; ++seed_; break;
     case Action::Style:
@@ -178,6 +180,7 @@ void Session::applyMenuEvents() {
     else if (ev.id == "audio") setSound(ev.value == 1);
     else if (ev.id == "action") { flush(); runAction(); }
     else if (ev.id == "rare") { flush(); world_->triggerRare(); }
+    else if (ev.id == "rare2") { flush(); world_->triggerRare(RarePick::Other); }
     else if (ev.id == "resume") menu_.close();
     else if (ev.id == "quit") quit_ = true;
   }

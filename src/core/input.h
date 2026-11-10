@@ -34,7 +34,8 @@ enum class Action {
   Menu,   ///< open / close the menu
   Style,  ///< cycle full -> terminal -> mono colors
   Time,   ///< cycle the time of day: cycle -> dawn -> day -> dusk -> night -> real time
-  Rare,   ///< summon the scene's rare event right now
+  Rare,   ///< summon the scene's rare event right now (usually the common one, see World::triggerRare)
+  RareOther,  ///< summon the scene's second, less likely catastrophe right now
   Audio,  ///< toggle the ambient sound
 };
 

@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting
 - Added side streets to the City: on wide enough screens one to three streets run off into the city and meet the main street at a crossing; cars turn off the main road into them and drive away, and others come down them and turn onto the main road. Scene key `avenues`, sprite headers `behaviors: drive` and `turns`
 - Added the soundscape of the City: traffic, passing cars, horns, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it), trains with their clatter and horn, a faint jet for the planes, and the crackle of the fire
 - Added the fire to the City: the rare event (`x`) sets a skyscraper alight, with flames, smoke and a fire engine; when it has burnt out the building is wrapped in scaffolding and renovated with new looks. Sometimes the fire gets out of hand, spreads to 3 to 5 more buildings and burns them to the ground; they are rebuilt from the rubble over the following minute and a half. The fire engine leaves as soon as the last fire is out

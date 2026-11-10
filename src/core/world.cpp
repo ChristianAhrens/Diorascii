@@ -831,14 +831,22 @@ void World::spawnEvent() {
   }
 }
 
-void World::spawnRare() {
+void World::spawnRare(RarePick pick) {
   double total = 0;
   for (const auto& ev : scene_->rare) total += ev.weight;
   if (total <= 0) return;
-  double pick = rng_.range(0, total);
+  double roll = rng_.range(0, total);
+  if (pick != RarePick::Weighted) {  // the most or the least likely one
+    const auto by = [](const auto& a, const auto& b) { return a.weight < b.weight; };
+    const auto chosen = pick == RarePick::Other ? std::min_element(scene_->rare.begin(), scene_->rare.end(), by)
+                                                : std::max_element(scene_->rare.begin(), scene_->rare.end(), by);
+    roll = 0;
+    for (auto it = scene_->rare.begin(); it != chosen; ++it) roll += it->weight;
+    roll += chosen->weight / 2.0;  // lands inside its share
+  }
   for (const auto& ev : scene_->rare) {
-    pick -= ev.weight;
-    if (pick > 0) continue;
+    roll -= ev.weight;
+    if (roll > 0) continue;
     if (auto sprite = pack_->find(ev.sprite)) {
       spawnCreature(sprite, false, true);
       if (!incoming_.empty()) incoming_.back()->isRare = true;
@@ -847,12 +855,12 @@ void World::spawnRare() {
   }
 }
 
-bool World::triggerRare() {
+bool World::triggerRare(RarePick pick) {
   if (scene_->rare.empty()) return false;
   for (const auto& e : entities_) {
     if (e->isRare && !e->dead) return false;
   }
-  spawnRare();
+  spawnRare(pick);
   flushIncoming();
   return true;
 }

@@ -114,6 +114,13 @@ audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Un
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 
+**Second catastrophes** (2026-11-10). Every scene lists a second sprite in
+`--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`
+(`Weighted`, `Common`, `Other`) lets `triggerRare` choose: `x` and the timer are weighted, `X` (`Action::RareOther`), the
+menu entry *Other rare event* and `--rare-other` take the lowest weight; tests take `Common` so that fixed seeds keep the
+first catastrophe. The second catastrophes run as `isRare` entities, so the one-at-a-time rule and the rare timer work as
+before; they are `World` members wrapped by thin behaviors in the table of `world.cpp`.
+
 Event sounds are driven by counters (flashes, impacts, crushes, squeals) that only count as events when they increase; the first value seen is the baseline.
 
 One `AmbientKind` per scene (`Silent, Forest, Aquarium, Desert, Moon, Mountains, City`) with a hand-written

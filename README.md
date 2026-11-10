@@ -62,7 +62,7 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 
 ## Usage
 
-    diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
+    diorascii                       # m menu, left/right scene, f action, x rare event (X: the second one), c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
@@ -70,12 +70,13 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
     diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20
+    diorascii --dump 400 --rare-other 20  # ...or its second, less likely catastrophe
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
     diorascii --realtime            # let the time of day follow this computer's clock
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
-The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, resume
+The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, the other rare event, resume
 and quit, and shows the version and the copyright at the bottom. It is drawn into the same cell grid as the scene and driven only by abstract
 actions (up, down, left, right, select, back), so any input device can use it.
 

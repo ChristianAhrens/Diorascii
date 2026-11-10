@@ -10,6 +10,8 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a second catastrophe to the aquarium, which replaces the kraken one time in five: a grey submarine drives through the sea and leaves a trail of poison that spreads while it passes and kills everything it reaches, and the sea fills with life again afterwards, with the hiss and the bubbling of the gas (`AmbientParams::menace`) and the behavior `leak`
+- Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting
 - Added a choice of which rare catastrophe to summon: `x` picks by the scene's odds as before, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) the scene's least likely one, so that the second catastrophes can be seen without waiting
 - Added side streets to the City: on wide enough screens one to three streets run off into the city and meet the main street at a crossing; cars turn off the main road into them and drive away, and others come down them and turn onto the main road. Scene key `avenues`, sprite headers `behaviors: drive` and `turns`
 - Added the soundscape of the City: traffic, passing cars, horns, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it), trains with their clatter and horn, a faint jet for the planes, and the crackle of the fire

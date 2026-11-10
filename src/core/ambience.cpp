@@ -90,6 +90,7 @@ AmbientParams ambientFor(const World& world) {
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
   p.squeals = world.squealCount();
+  p.menace = static_cast<float>(std::max({world.toxinLevel()}));
   return p;
 }
 
@@ -103,6 +104,8 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowTornado_ = coeff(1.0f / 170.0f / 6.28f);
   lowMoon_ = coeff(1.0f / 120.0f / 6.28f);
   lowRoar_ = coeff(1.0f / 420.0f / 6.28f);
+  lowHiss_ = coeff(1.0f / 1100.0f / 6.28f);
+  lowThump_ = coeff(1.0f / 190.0f / 6.28f);
   lowCrunch_ = coeff(1.0f / 480.0f / 6.28f);
   lowGulp_ = coeff(1.0f / 520.0f / 6.28f);
   lowCar_ = coeff(1.0f / 230.0f / 6.28f);
@@ -612,6 +615,30 @@ float Ambience::coeff(float seconds) const {
   return 1.0f - std::exp(-1.0f / (static_cast<float>(rate_) * seconds));
 }
 
+void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
+  out[0] = out[1] = 0;
+  if (menace_ < 1e-3f) return;
+  const double dt = 1.0 / rate_;
+  const float level = menace_;
+  for (int ch = 0; ch < 2; ++ch) {
+    const float n = noise(rng_) * noiseScale_;
+    menaceLow_[ch][0] += (n - menaceLow_[ch][0]) * lowThump_;
+    menaceLow_[ch][1] += (menaceLow_[ch][0] - menaceLow_[ch][1]) * lowThump_;
+    out[ch] = 0;
+    switch (p.kind) {
+      case AmbientKind::Aquarium: {  // poison gas: a hiss that wells up, and glugging bubbles
+        menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowHiss_;
+        out[ch] = (n - menaceHigh_[ch]) * 0.3f * level * (0.7f + 0.3f * static_cast<float>(std::sin(kTwoPi * 0.7 * t_ + ch)));
+        break;
+      }
+      default: break;
+    }
+  }
+  if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
+    bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level);
+  }
+}
+
 void Ambience::render(const AmbientParams& p, float* out, int frames) {
   const float kPresence = coeff(0.6f), kRain = coeff(1.5f), kNight = coeff(3.0f), kVolume = coeff(0.05f), kStorm = coeff(2.0f), kSlide = coeff(0.4f);
   const float lowRoll = coeff(1.0f / 0.35f / 6.28f);
@@ -650,6 +677,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(trainNear_, p.kind == AmbientKind::City ? p.train : 0.0f, kRain);
     approach(planeNear_, p.kind == AmbientKind::City ? p.plane : 0.0f, kStorm);
     approach(fireNear_, p.kind == AmbientKind::City ? p.fire : 0.0f, kRain);
+    approach(menace_, p.menace, kStorm);
     approach(volume_, p.volume, kVolume);
 
     // Gusts: slow swells plus a random drift, so they never repeat evenly.
@@ -758,6 +786,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenImpacts_ = p.impacts;
     }
+    float menaceOut[2];
+    menaceSample(p, menaceOut);
     float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0}, city[2] = {0, 0};
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
@@ -793,7 +823,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
         thunder += crackLow_[ch] * crackEnv * 0.85f + rumbleLow_[ch][1] * rumbleEnv * 17.0f;
       }
 
-      const float sample = (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
+      const float sample = menaceOut[ch] + (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
                            aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
                            desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
                            moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +

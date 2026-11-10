@@ -430,6 +430,9 @@ void drive(Entity& e, World& w, double dt) { w.driveStep(e, dt); }
 /// A fire in the city: the skyscraper burns, then is renovated (see World::blazeStep).
 void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 
+/// The leaking submarine (see World::leakStep).
+void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
+
 /// The avalanche: the powder cloud at the head of the slide (see World::slideStep).
 void avalanche(Entity& e, World& w, double dt) { w.slideStep(e, dt); }
 
@@ -442,7 +445,8 @@ BehaviorFn findBehavior(const std::string& name) {
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
-      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine}};
+      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
+      {"leak", leak}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -1319,6 +1323,7 @@ void World::step(double dt) {
   }
 
   stepTongues(dt);
+  stepToxin(dt);
   if (!avenues_.empty()) stepCity(dt);
 
   if (!scene_->events.empty() && !eventAlive) {
@@ -1781,6 +1786,7 @@ void World::render(Frame& out, Style style) const {
   }
   if (!backDrawn) renderCityBack(out, style, l);
   if (!streetDrawn) renderStreet(out, style, l);
+  renderToxin(out, style, l);
   renderTongues(out, style, l);
   if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
     for (int y = 0; y < h_; ++y) {

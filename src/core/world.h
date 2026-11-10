@@ -328,6 +328,11 @@ class World {
   double scarAt(int x, int y) const;
   /// How loud the avalanche is, from 0 (none) to 1 (it is thundering down); sound follows it.
   double avalancheLevel() const { return slideLevel_; }
+  /// How strong the poison cloud of the leaking submarine is, from 0 (none) to 1; sound follows it.
+  double toxinLevel() const { return toxinLevel_; }
+  /// Drives the leaking submarine (the `leak` behavior): it drives through the sea and leaves a
+  /// trail of poison behind it that spreads while it passes and lingers after it has gone.
+  void leakStep(Entity& e, double dt);
   /// Moves an avalanche entity one step down the mountain, scarring what it passes and wiping out
   /// what it buries. Called by the `avalanche` behavior.
   void slideStep(Entity& e, double dt);
@@ -600,6 +605,30 @@ class World {
   unsigned crushes_ = 0, squeals_ = 0;
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
+  /// The poison trail of the submarine: a puff is left behind it every column or so, and every
+  /// puff spreads (round, as cells go) until the trail fills the height of the sea. It lingers
+  /// once the submarine has gone and then thins out; it kills what it covers.
+  struct Toxin {
+    bool active = false;      ///< a trail exists
+    bool sourceGone = false;  ///< the submarine has left the screen
+    double age = 0;           ///< seconds since the first puff
+    double gone = 0;          ///< seconds since the submarine left
+    double reach = 0;         ///< radius at which a puff covers the sea from top to bottom
+    double strength = 0;      ///< 0 to 1: thick while it lingers, thin again as it fades
+    /// One puff: where it was left, and when (in `age`).
+    struct Puff {
+      double x = 0, y = 0, born = 0;
+    };
+    std::vector<Puff> puffs;  ///< in the order they were left
+  } toxin_;
+  /// How far the puff has spread by now.
+  double puffRadius(const Toxin::Puff& p) const;
+  /// Strength of the cloud for the sound.
+  double toxinLevel_ = 0;
+  /// Spreads and fades the poison cloud, and kills what it covers.
+  void stepToxin(double dt);
+  /// Tints the sea where the poison cloud lies.
+  void renderToxin(Frame& out, Style style, const Light& light) const;
   /// Seconds until the next rare event; negative means none is scheduled yet.
   double rareTimer_ = 0;
   /// A wiped-out entity waiting to be brought back.

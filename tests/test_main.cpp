@@ -177,7 +177,8 @@ TEST(embedded_assets_all_load) {
                         "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
-                        "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche"})
+                        "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
+                        "submarine", "toxinpuff"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -3632,6 +3633,147 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
   CHECK(s.world().entityCount() >= before);  // the scene's action ran without a crash
   s.handle(Action::Rare);
   s.step(0.05);
+}
+
+TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
+  AssetPack pack = AssetPack::embedded();
+  struct Case { const char* scene; const char* first; const char* second; };
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}}) {
+    auto scene = pack.scene(c.scene);
+    CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
+    if (!scene || scene->rare.size() != 2) continue;
+    CHECK(std::fabs(scene->rare[1].weight / (scene->rare[0].weight + scene->rare[1].weight) - 0.2) < 1e-9);
+    // The pick can be told: the common one, or the second one.
+    World common(pack, scene, 160, 36, 3), other(pack, scene, 160, 36, 3);
+    CHECK(common.triggerRare(RarePick::Common) && countSprite(common, c.first) == 1 && countSprite(common, c.second) == 0);
+    CHECK(other.triggerRare(RarePick::Other) && countSprite(other, c.second) == 1 && countSprite(other, c.first) == 0);
+    // A weighted pick sends the second one about one time in five.
+    int seconds = 0;
+    const int runs = 150;
+    for (int seed = 1; seed <= runs; ++seed) {
+      World w(pack, scene, 60, 30, static_cast<uint64_t>(seed));
+      w.triggerRare();
+      seconds += countSprite(w, c.second) > 0 ? 1 : 0;
+    }
+    CHECK(seconds >= runs * 10 / 100 && seconds <= runs * 32 / 100);
+  }
+}
+
+TEST(the_second_catastrophe_can_be_summoned_from_the_session_with_its_own_key_and_menu_entry) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  config.seed = 5;
+  config.scene = 0;  // the aquarium comes first
+  Session s = makeSession(pack, config);
+  s.handle(Action::RareOther);
+  s.step(0.05);
+  CHECK(s.world().countSprite("submarine") == 1 && s.world().countSprite("kraken") == 0);
+  Session menu = makeSession(pack, config);
+  menu.handle(Action::Menu);
+  Frame f;
+  menu.render(f);
+  CHECK(f.toText().find("Other rare event") != std::string::npos);
+}
+
+TEST(a_leaking_submarine_poisons_the_whole_sea_and_everything_alive_in_it_dies) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("aquarium"), 160, 36, 3);
+  size_t life = 0;
+  for (auto& e : world.entities()) life += e->life;
+  CHECK(life > 15);
+  world.triggerRare(RarePick::Other);
+  double peak = 0;
+  size_t alive = life, fewest = life;
+  bool tinted = false, gone = false, trailBehind = false;
+  for (int i = 0; i < 2400; ++i) {
+    world.step(0.05);
+    if (!trailBehind && countSprite(world, "submarine") == 1) {  // it drives on, the poison spreads behind it
+      for (auto& e : world.entities()) {
+        if (e->sprite->name() != "submarine") continue;
+        const double front = e->movingRight() ? e->x + e->width() : e->x;
+        const double back = e->movingRight() ? e->x - 18 : e->x + e->width() + 18;
+        const double ahead = e->movingRight() ? front + 18 : front - 18;
+        if (back > 2 && back < world.width() - 2 && ahead > 2 && ahead < world.width() - 2) {
+          Frame f;
+          world.render(f);
+          const int y = world.surfaceY() + 4;
+          const Cell& b = f.at(static_cast<int>(back), y);
+          const Cell& a = f.at(static_cast<int>(ahead), y);
+          trailBehind = b.bg.g > b.bg.b + 20 && !(a.bg.g > a.bg.b + 20);
+        }
+      }
+    }
+    peak = std::max(peak, world.toxinLevel());
+    alive = 0;
+    for (auto& e : world.entities()) alive += (e->life && !e->dead);
+    fewest = std::min(fewest, alive);
+    if (world.toxinLevel() > 0.99 && !tinted) {  // the sea has turned green where the cloud lies
+      Frame f;
+      world.render(f);
+      const Cell& c = f.at(80, world.surfaceY() + 4);
+      tinted = c.bg.g > c.bg.b;
+    }
+    gone |= i > 100 && countSprite(world, "submarine") == 0 && world.toxinLevel() == 0;
+  }
+  CHECK(peak > 0.99);
+  CHECK(fewest == 0 && world.killedCount() >= life);  // all of it, and it was the cloud that did it
+  CHECK(tinted && trailBehind);
+  CHECK(gone && alive >= life / 2);  // the cloud and the wreck are gone, and the sea fills up again
+}
+
+TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
+  constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
+  auto rms = [&](const AmbientParams& p) {
+    Ambience a(kRate, 1);
+    std::vector<float> buf(static_cast<size_t>(kRate) * 6 * 2);
+    a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+    double sum = 0;
+    for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
+    return std::sqrt(sum / double(buf.size() / 2));
+  };
+  for (AmbientKind kind : {AmbientKind::Aquarium}) {
+    AmbientParams calm;
+    calm.kind = kind;
+    AmbientParams menace = calm;
+    menace.menace = 1;
+    CHECK(rms(menace) > rms(calm) * 1.5);
+    CHECK(rms(menace) < 0.3);  // loud, but well below a storm
+  }
+}
+
+TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"aquarium"}) {
+    for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
+      for (double hour : {3.0, 12.0, 19.0}) {
+        World world(pack, pack.scene(name), w, h, 7);
+        world.setHour(hour);
+        world.triggerRare(RarePick::Other);
+        Frame f;
+        for (int i = 0; i < 700; ++i) {
+          world.step(0.1);
+          if (i % 70 == 0) world.render(f);
+        }
+        CHECK(f.width() == w && f.height() == h);
+      }
+    }
+  }
+}
+
+TEST(the_second_catastrophes_are_deterministic_per_seed) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"aquarium"}) {
+    std::string a, b;
+    for (std::string* out : {&a, &b}) {
+      World world(pack, pack.scene(name), 120, 32, 11);
+      world.triggerRare(RarePick::Other);
+      for (int i = 0; i < 500; ++i) world.step(0.1);
+      Frame f;
+      world.render(f);
+      *out = f.toText();
+    }
+    CHECK(a == b);
+  }
 }
 
 int main() {

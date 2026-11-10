@@ -77,7 +77,7 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 behaviors; `world.cpp` maps names to functions in one table:
 
 `swim fly bob rise sink emit_bubbles seek_food hunt walk ballistic meteorite wander hop rain
-chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine`
+chase twister emit_dust catastrophe ledge soar avalanche blaze drive engine leak`
 
 Catastrophe sprites (behavior `catastrophe`) choose how they strike with sprite headers (README has
 the reference): `strike-mode` `centre` (all victims at once at `strike-at`: thunderstorm), `sweep`
@@ -120,6 +120,12 @@ noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch 
 menu entry *Other rare event* and `--rare-other` take the lowest weight; tests take `Common` so that fixed seeds keep the
 first catastrophe. The second catastrophes run as `isRare` entities, so the one-at-a-time rule and the rare timer work as
 before; they are `World` members wrapped by thin behaviors in the table of `world.cpp`.
+The code is in `src/core/disasters.cpp`:
+- `leakStep` (aquarium): the grey submarine drives across the sea and leaves a `Toxin::Puff` about every column at its
+  stern; `puffRadius` grows each puff at 6 cells/s up to `reach` (the height of the sea, rows counting 2.2 times); the cloud
+  is the union of the puffs. `stepToxin` kills `life` inside any puff, delays everything in `restock_` and starts the
+  linger/fade timers when the submarine has left; `renderToxin` tints the water by the deepest puff per cell.
+Sound: one field, `AmbientParams::menace` (the largest of the catastrophes' levels: `toxinLevel`, `floodLevel`, `rotorLevel`, `yetiLevel`, `titanLevel`, `asteroidLevel`, as far as they exist), synthesised by `menaceSample` per scene kind and copied in both audio backends. The aquarium's is a hiss of high-passed noise with glugging bubbles.
 
 Event sounds are driven by counters (flashes, impacts, crushes, squeals) that only count as events when they increase; the first value seen is the baseline.
 

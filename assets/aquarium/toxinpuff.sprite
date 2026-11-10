@@ -1,0 +1,15 @@
+name: toxinpuff
+fps: 7
+loop: no
+die-after-animation: yes
+color: #a6d628
+--- art
+ o
+--- art
+ %%
+%%%%
+ %%
+--- art
+ .  .
+.      .
+ .  .

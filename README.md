@@ -168,7 +168,7 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 | Scene | What you hear |
 |---|---|
 | Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
-| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale the growl of the kraken as it nears, and a muffled double gulp for every animal its tentacles swallow |
+| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale the growl of the kraken as it nears, and a muffled double gulp for every animal its tentacles swallow. In the poisoned sea there is the hiss of gas and the glugging of bubbles |
 | Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears, bellows with a very deep, trumpeting roar while it crosses, and each animal it swallows is chewed with a series of low, grumbling crunches |
 | Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way, and every animal it buries lets out a short, muffled squeal |
 | City | a steady murmur of traffic that thins out at night, cars passing by with a sinking engine note, a horn (sometimes two honks, sometimes one long blast) from time to time, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it once the fire is out), trains that rumble and beat out the regular "klack-klack, klack-klack" of the wheels over the rail joints and sound their horn as they arrive, a faint jet when a plane is on its approach, and the roar and crackle of a burning skyscraper |
@@ -181,9 +181,15 @@ two to five minutes) and wipes out life. It is announced by its arrival: it cros
 scene, strikes halfway across, and moves on. Press `x`, or choose *Rare event* in the menu,
 to summon it right away instead of waiting.
 
+Every scene has a **second catastrophe** (see below), which replaces the first one
+one time in five (the weights in the scene's `--- rare` list are 1 and 0.25). Press `X` (shift),
+or choose *Other rare event* in the menu (`--rare-other` for `--dump`), to see it right away;
+a plain `x` picks by the odds like the timer does.
+
 | Scene | Catastrophe | What happens |
 |---|---|---|
 | Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and it **lashes out with tentacles at the animals around it** as it goes: whatever a tentacle reaches (fish, jellyfish, eels, crabs, shark, whale) bursts into ink, and animals out of reach survive |
+| Aquarium | Leaking submarine | **second catastrophe**: a grey submarine (a solid hull with a dashed and slashed outline) **drives through the sea at mid depth and leaves a trail of poison behind it**; every puff of the trail spreads while the submarine passes on, until the cloud fills the sea from top to bottom, and **every animal it reaches dies**. The water turns sickly green along the trail; after the submarine has left, the cloud lingers and thins out, and the sea slowly fills with life again |
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
 | Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **lashes out a tongue at the animals on the ground ahead of it and swallows each one it reaches** (what flies is spared) |
 | Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
@@ -320,6 +326,7 @@ Behaviors:
 | `rain` | a raindrop: falls to its landing row, makes a splash and is gone |
 | `ledge` | on a mountain: walks (or hops, with a `hop-period`) along a ledge of its `zone`, turns round where the zone or the mountain ends and now and then climbs to another ledge |
 | `soar` | on a mountain: flies across the scene and swoops up and down within its `zone` band, now and then diving (frames: wings up, wings down, gliding, diving) |
+| `leak` | the aquarium's leaking submarine: drives through the sea and leaves a trail of poison puffs that spread while it passes (until they fill the sea from top to bottom) and kill what they cover; the trail lingers and thins out after the submarine has gone |
 | `avalanche` | the powder cloud of an avalanche: creaks on a snowy flank, then rips down it, scarring the land and burying what stands in its way |
 | `drive` | a city vehicle: drives along the main road in its lane, can turn off into side streets (`turns`) and shows its five views as it turns; stops in front of a cordon |
 | `engine` | the fire engine: drives to the burning building with its siren, parks, sprays water, leaves without the siren once no building burns, and cordons the site with barriers while it stays |
@@ -379,7 +386,8 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     shark   3
 
     --- rare                        # <sprite> <weight>; one catastrophe at a time, on a slow timer
-    kraken  1
+    kraken  1                       # the weights are the odds: this second one comes one time in five
+    submarine  0.25                 # (the highest weight is the common one, the lowest is what `X` summons)
 
 The scene's colors are its daytime look; the night look is derived from them. The
 river takes at most half of the ground rows at the bottom, and a ground of more than a

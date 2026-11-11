@@ -1,0 +1,30 @@
+<map id="src/core/menu.cpp" name="src/core/menu.cpp">
+<area shape="rect" id="Node000001" title="Menu navigation and rendering." alt="" coords="313,5,453,33"/>
+<area shape="rect" id="Node000002" href="$menu_8h.html" title="Modal ASCII menu driven by abstract actions." alt="" coords="288,81,390,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="377,32,356,69,352,66,373,36"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="498,157,558,184"/>
+<area shape="poly" id="edge13_Node000001_Node000004" title=" " alt="" coords="392,31,419,67,454,107,500,147,495,147,450,111,415,70,391,36"/>
+<area shape="rect" id="Node000011" title=" " alt="" coords="465,81,549,109"/>
+<area shape="poly" id="edge12_Node000001_Node000011" title=" " alt="" coords="405,31,474,72,469,73,405,36"/>
+<area shape="rect" id="Node000012" href="$utf8_8h.html" title="UTF&#45;8 encoding and decoding." alt="" coords="32,157,123,184"/>
+<area shape="poly" id="edge14_Node000001_Node000012" title=" " alt="" coords="356,36,119,152,117,147,356,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="126,232,184,260"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="285,107,235,126,210,140,188,158,170,187,161,218,156,215,165,185,183,155,207,136,233,121,289,104"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="373,107,487,152,482,153,373,112"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="329,232,391,260"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="342,107,359,218,354,216,339,111"/>
+<area shape="rect" id="Node000006" href="$frame_8h.html" title="Styled character cells and the frame buffer frontends render from." alt="" coords="197,157,302,184"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="325,108,279,149,275,145,321,111"/>
+<area shape="rect" id="Node000010" href="$input_8h.html" title="Abstract input actions every frontend translates its devices into." alt="" coords="376,157,475,184"/>
+<area shape="poly" id="edge11_Node000002_Node000010" title=" " alt="" coords="355,107,401,147,396,147,354,112"/>
+<area shape="poly" id="edge6_Node000006_Node000003" title=" " alt="" coords="235,183,185,225,182,221,230,186"/>
+<area shape="poly" id="edge8_Node000006_Node000005" title=" " alt="" coords="270,182,331,224,326,224,269,187"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="5,232,102,260"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="213,187,104,229,101,224,216,183"/>
+<area shape="rect" id="Node000008" href="$color_8h.html" title="RGB colors and simple color math." alt="" coords="208,232,304,260"/>
+<area shape="poly" id="edge9_Node000006_Node000008" title=" " alt="" coords="252,183,256,218,251,216,249,187"/>
+<area shape="rect" id="Node000009" title=" " alt="" coords="224,308,289,336"/>
+<area shape="poly" id="edge10_Node000008_Node000009" title=" " alt="" coords="258,259,258,294,254,291,254,262"/>
+<area shape="poly" id="edge15_Node000012_Node000003" title=" " alt="" coords="92,182,133,221,128,222,91,188"/>
+<area shape="poly" id="edge16_Node000012_Node000007" title=" " alt="" coords="74,182,65,218,60,216,72,187"/>
+</map>

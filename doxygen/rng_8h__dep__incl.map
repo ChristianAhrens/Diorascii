@@ -1,0 +1,34 @@
+<map id="src/core/rng.h" name="src/core/rng.h">
+<area shape="rect" id="Node000001" title="Small deterministic random number generator." alt="" coords="368,5,478,33"/>
+<area shape="rect" id="Node000002" href="$ambience_8h.html" title="Procedurally synthesized ambient sound for a scene." alt="" coords="266,81,418,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="400,42,358,83,355,78,395,45"/>
+<area shape="rect" id="Node000009" href="$world_8h.html" title="The simulation: entities, behaviors, layout and rendering." alt="" coords="500,81,624,109"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="462,38,540,80,534,81,461,43"/>
+<area shape="rect" id="Node000003" href="$session_8h.html" title="The interactive application state shared by every frontend." alt="" coords="366,157,499,184"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="371,116,419,156,414,156,369,121"/>
+<area shape="rect" id="Node000006" href="$audio_8h.html" title="Plays the synthesized ambience on the default sound device." alt="" coords="18,157,150,184"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="280,116,131,159,129,154,282,111"/>
+<area shape="rect" id="Node000008" href="$ambience_8cpp.html" title="Procedurally synthesized ambient sound." alt="" coords="174,157,341,184"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="318,118,274,158,271,154,313,120"/>
+<area shape="rect" id="Node000004" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="177,232,309,260"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="387,190,277,234,276,229,382,191"/>
+<area shape="rect" id="Node000005" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="333,232,481,260"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="425,197,413,234,410,230,421,201"/>
+<area shape="poly" id="edge6_Node000006_Node000004" title=" " alt="" coords="127,189,217,231,212,233,126,194"/>
+<area shape="rect" id="Node000007" href="$audio_8cpp.html" title="Playback device wrapper around miniaudio." alt="" coords="5,232,153,260"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="84,198,82,233,77,231,80,202"/>
+<area shape="poly" id="edge11_Node000009_Node000003" title=" " alt="" coords="528,116,456,159,454,154,523,118"/>
+<area shape="poly" id="edge10_Node000009_Node000004" title=" " alt="" coords="555,122,539,157,513,187,484,198,432,210,310,235,309,230,431,205,482,192,509,182,534,154,551,125"/>
+<area shape="poly" id="edge12_Node000009_Node000008" title=" " alt="" coords="490,114,313,159,312,153,495,112"/>
+<area shape="rect" id="Node000010" href="$city_8cpp.html" title="The city scene: skyline of skyscrapers, elevated railway, street and street lamps." alt="" coords="855,232,980,260"/>
+<area shape="poly" id="edge13_Node000009_Node000010" title=" " alt="" coords="639,98,687,104,738,115,790,131,839,154,863,172,883,192,912,233,907,231,879,196,859,176,836,159,788,136,737,120,686,110,639,103"/>
+<area shape="rect" id="Node000011" href="$disasters_8cpp.html" title="The second catastrophes of the scenes: the leaking submarine&#39;s poison cloud (aquarium),..." alt="" coords="506,232,668,260"/>
+<area shape="poly" id="edge14_Node000009_Node000011" title=" " alt="" coords="568,122,587,233,582,231,564,126"/>
+<area shape="rect" id="Node000012" href="$shading_8h.html" title="How the light of the time of day and the weather changes colors, shared by the renderers of the world..." alt="" coords="687,157,826,184"/>
+<area shape="poly" id="edge15_Node000009_Node000012" title=" " alt="" coords="611,112,724,156,719,156,610,117"/>
+<area shape="rect" id="Node000013" href="$world_8cpp.html" title="Simulation, behaviors and scene rendering." alt="" coords="692,232,831,260"/>
+<area shape="poly" id="edge19_Node000009_Node000013" title=" " alt="" coords="590,116,677,182,745,232,740,231,673,186,589,121"/>
+<area shape="poly" id="edge16_Node000012_Node000010" title=" " alt="" coords="799,188,892,232,886,232,798,194"/>
+<area shape="poly" id="edge17_Node000012_Node000011" title=" " alt="" coords="715,190,618,234,616,229,710,191"/>
+<area shape="poly" id="edge18_Node000012_Node000013" title=" " alt="" coords="760,198,763,234,759,230,757,202"/>
+</map>

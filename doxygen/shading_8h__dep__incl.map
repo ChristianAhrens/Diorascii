@@ -1,0 +1,9 @@
+<map id="src/core/shading.h" name="src/core/shading.h">
+<area shape="rect" id="Node000001" title="How the light of the time of day and the weather changes colors, shared by the renderers of the world..." alt="" coords="166,5,306,33"/>
+<area shape="rect" id="Node000002" href="$city_8cpp.html" title="The city scene: skyline of skyscrapers, elevated railway, street and street lamps." alt="" coords="5,81,131,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="194,41,99,83,97,78,190,38"/>
+<area shape="rect" id="Node000003" href="$disasters_8cpp.html" title="The second catastrophes of the scenes: the leaking submarine&#39;s poison cloud (aquarium),..." alt="" coords="155,81,317,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="238,47,238,82,234,79,234,51"/>
+<area shape="rect" id="Node000004" href="$world_8cpp.html" title="Simulation, behaviors and scene rendering." alt="" coords="341,81,480,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="282,37,382,80,377,81,281,42"/>
+</map>

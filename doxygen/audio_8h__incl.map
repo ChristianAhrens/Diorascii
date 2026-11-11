@@ -1,0 +1,14 @@
+<map id="src/audio/audio.h" name="src/audio/audio.h">
+<area shape="rect" id="Node000001" title="Plays the synthesized ambience on the default sound device." alt="" coords="68,5,201,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,81,72,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="116,36,70,73,66,70,119,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="96,81,173,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="135,31,137,66,132,65,134,36"/>
+<area shape="rect" id="Node000004" href="$ambience_8h.html" title="Procedurally synthesized ambient sound for a scene." alt="" coords="196,81,326,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="157,31,228,72,223,74,157,36"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="228,232,294,260"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="259,107,249,157,249,184,255,219,251,216,244,185,244,156,255,111"/>
+<area shape="rect" id="Node000006" href="$rng_8h.html" title="Small deterministic random number generator." alt="" coords="258,157,344,184"/>
+<area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="269,107,289,143,284,142,267,112"/>
+<area shape="poly" id="edge6_Node000006_Node000005" title=" " alt="" coords="296,183,277,221,274,217,292,186"/>
+</map>

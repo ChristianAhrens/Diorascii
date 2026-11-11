@@ -7,7 +7,7 @@ fps: 3
 wipes: rover flag
 strike-effect: flash
 screen-flash: 0.3
-strike-at: 0.5
+strike-mode: sweep
 behaviors: catastrophe
 --- art
  \  |  /

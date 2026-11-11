@@ -3,10 +3,14 @@ glow: yes
 solid: yes
 habitat: sky
 --- art
- .-.
-(   )
- `-'
+  .--. 
+ /  o \
+| o    |
+ \   o/
+  '--'
 --- mask
- WWW
-WWWWW
- WWW
+  WWWW
+ WWwWWW
+WwWWWWWW
+ WWWWwW
+  WWWW

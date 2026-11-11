@@ -1,0 +1,24 @@
+name: kid
+facing: right
+habitat: ground
+behaviors: swim
+life: yes
+solid: yes
+sleeps: 0.8
+pool: any
+depth: 5..7
+feet-rows: 0..0
+speed: 1.5..3
+fps: 5
+--- art
+ o
+/\
+--- mask
+ t
+44
+--- art
+ o
+||
+--- mask
+ t
+kk

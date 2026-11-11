@@ -37,7 +37,8 @@ horse          per-cols   210
 gazelle        per-cols   120
 tumbleweed     per-cols   80
 vulture        per-cols   90
-cloud_small    per-cols   150
+cloud_small    per-cols   300
+cloud_small_l  per-cols   300
 bat            per-cols   70
 
 --- decor
@@ -60,3 +61,4 @@ lion           1
 
 --- rare
 sandworm       1
+helicopter     0.25

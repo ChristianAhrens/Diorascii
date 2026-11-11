@@ -6,6 +6,7 @@
 #include <chrono>
 #include <memory>
 
+#include "app/localclock.h"
 #include "app/session.h"
 #include "audio/audio.h"
 #include "core/assets.h"
@@ -103,6 +104,7 @@ static NSString* const kHintCountKey = @"menuHintCount";
 
 /// One frame: step, sound, draw.
 - (void)tick:(CADisplayLink*)link {
+  _session->setClockHour(dio::localClockHour());
   _session->step(kStep);
   _elapsed += kStep;
   if (_hintPending && _elapsed >= kHintDelay) {
@@ -181,7 +183,7 @@ static NSString* const kHintCountKey = @"menuHintCount";
   switch ([letter characterAtIndex:0]) {
     case 'm': _session->handle(dio::Action::Menu); return YES;
     case 'f': _session->handle(dio::Action::Interact); return YES;
-    case 'x': _session->handle(dio::Action::Rare); return YES;
+    case 'x': _session->handle([key.characters isEqualToString:@"X"] ? dio::Action::RareOther : dio::Action::Rare); return YES;
     case 'c': _session->handle(dio::Action::Style); return YES;
     case 't': _session->handle(dio::Action::Time); return YES;
     case 'a': _session->handle(dio::Action::Audio); return YES;

@@ -46,6 +46,41 @@ library gathering), extensible rendered items, same-or-better look, and an outlo
 - 08:33-10:01: Mountains scene (whole-height terrain, eagles, goats, bears, avalanche, snowstorm), sound tuned through listening feedback, README screenshots (cropped, rounded, shadowed), page videos re-encoded to 20 fps, Mountains button on the page. **1.1.1 tagged 11:03.**
 - Next announced by the owner: **v1.2.0 - tvOS support.**
 
+**2026-11-09** (after v1.2.0, unreleased on `develop`; owner's list of changes, then a plan, then work in eight scoped commits)
+- Sandstorm lighting and stars follow the time of day; real-time mode (`t` list order: appended last, not default; no seasonal times);
+  the moon gets a cycle (sun by lunar day, earth by night, black sky); the sun and moon grow to 8x5 (the owner
+  judged 10x6 too big); clouds in two sizes.
+- Catastrophes strike where the attacker is: alien sweeps, sandworm devours with a tongue, kraken lashes tentacles;
+  thunderstorm unchanged by the owner's wish. Sounds: worm bellow and chewing, avalanche squeal, kraken gulp. One
+  bug found by the owner ("I cannot hear it"): the audio backends did not forward the new parameters (F-19).
+- History was rewritten before pushing: the follow-up fixes (chewing, tongue, loudness, star dimming, gulp) were
+  folded into the commits they belong to (backup branch `backup/pre-rewrite-2026-11-09`, tree verified identical).
+
+- The owner asked for an entirely new scene: **City** (skyscrapers lower than the mountains, planes on approach to an
+  off-screen airport, street with lamps, people, shops, park, trains and a station, day/night, honking and car sounds,
+  F = ambulance with siren, x = a burning skyscraper that is quickly renovated). Built as procedural skyline + data
+  sprites, see [architecture](architecture.md) and F-22.
+
+**2026-11-10** The owner asked for a second catastrophe in every scene, 20% instead of the first one: a leaking submarine
+with a poison cloud (aquarium), a flood (forest), poachers in a helicopter (desert), a huge yeti coming over the ridge
+(mountains) and a fight between two giant monsters that ruins the city (city), with reference pictures for the last two
+and the yeti. The rare list was already weighted, so the odds are weights 1 and 0.25; the rest is five behaviors in
+`disasters.cpp`, five sprites plus effects, one sound field and the `X` key. The monster names from the pictures were not
+used for the sprites (`lizard_titan`, `winged_titan`; see F-23). Revised the same day after the owner's first look: the submarine grey and solid
+with an outline, driving through and leaving a spreading trail; the flood starting as a sparse wave; the monsters more clearly
+outlined and both spitting fire (blue and violet); and a second catastrophe for the moon, a big meteor that grows from afar
+and strikes across the whole width.
+
+**2026-11-11** (deployment, unreleased on `develop`)
+The owner asked for real installers: a Windows setup `.exe` (PATH, uninstall, upgrade over an older version), a notarized
+macOS installer built by the local script and swapped in by hand, and a Flatpak for Linux. Done: Inno Setup script, macOS
+`.pkg` (replacing the DMG), `.deb` and `.rpm` through CPack, workflows updated. The Flatpak was replaced by `.deb`/`.rpm`
+on the assistant's recommendation (command name `<app-id>`, sandbox; see architecture.md); the owner may overrule.
+Verified on macOS only: the ad-hoc `.pkg` builds, has the right payload and the tests pass. **Not verified:** the signed and
+notarized `.pkg` (needs the owner's keychain), the `._` AppleDouble entries seen in the payload listing (probably the
+`com.apple.provenance` attribute of the build host), the Inno Setup script and the Windows install/upgrade/uninstall test, the
+`.deb`/`.rpm` builds and their dependency detection, and the workflow YAML beyond syntax.
+
 ## What was not done, on purpose
 
 - No classic mode, no curses backend, no scripting layer, no ECS.

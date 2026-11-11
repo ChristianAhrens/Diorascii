@@ -1,0 +1,17 @@
+name: cloud_small_l
+facing: right
+habitat: sky
+solid: yes
+speed: 0.8..2
+depth: 28..30
+behaviors: swim
+--- art
+   _.---._
+ _(       )_
+(           )-.
+ `-._____.-'
+--- mask
+   WWWWWWW
+ WWWWWWWWWWW
+WWWWWWWWWWWWWWW
+ WWWWWWWWWWW

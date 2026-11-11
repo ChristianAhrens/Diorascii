@@ -1,0 +1,62 @@
+name: truck
+facing: right
+habitat: ground
+feet-rows: 1..-2
+traffic: yes
+rush: yes
+pool: any
+backing: 0.55
+behaviors: drive
+turns: 0.25
+speed: 4..7
+depth: 8..12
+--- art
+  ____________________
+ |  C A R G O          |__
+ |▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄|[_]\
+'(O)(O)------(O)(O)---'
+--- mask
+  WWWWWWWWWWWWWWWWWWWW
+ W  1 1 1 1 K          WWW
+ WWWWWWWWWWWWWWWWWWWWWWcWcW
+WKKKKKKWWWWWWKKKKKKWWWW
+--- art
+         ________
+        |        |\
+        |▄▄▄▄▄▄▄▄|▄|
+       '(O)(O)--(O)'
+--- mask
+         WWWWWWWW
+        W        WW
+        WWWWWWWWWWWW
+       WKKKKKKWWKKKW
+--- art
+          ________
+         |        |
+         |▄▄▄▄▄▄▄▄|
+        '(O)(O)(O)'
+--- mask
+          WWWWWWWW
+         W        W
+         WWWWWWWWWW
+        WKKKKKKKKKW
+--- art
+           .----.
+         _/[==]\_
+        |▄|*▄▄▄▄▄*|
+       '(O)(O)--(O)'
+--- mask
+           WWWWWW
+         WWccccWW
+        WWWyWWWWWyW
+       WKKKKKKWWKKKW
+--- art
+          .----.
+         /[====]\
+        |*▄▄▄▄▄▄*|
+       '(O)(O)(O)(O)'
+--- mask
+          WWWWWW
+         WccccccW
+        WyWWWWWWyW
+       WKKKKKKKKKKKKW

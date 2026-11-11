@@ -1,0 +1,16 @@
+name: kiosk
+facing: right
+habitat: ground
+speed: 0..0
+depth: 21
+solid: yes
+--- art
+ .------.
+/ NEWS   \
+|  [__]  |
+|________|
+--- mask
+ nnnnnnnn
+n rrr    n
+n  wwww  n
+nnnnnnnnnn

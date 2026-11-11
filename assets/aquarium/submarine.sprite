@@ -1,0 +1,54 @@
+name: submarine
+facing: right
+habitat: medium
+speed: 8..10
+depth: 2
+fps: 4
+solid: yes
+backing: 0.5
+strike-at: 0.5
+behaviors: leak
+--- art
+                  /-  |               
+                  ||                  
+            /-----  --\               
+ /-\      /-           \              
+/_  ------              -----\        
+  |                           --\     
+  \_        o             o   ___|    
+_   \_____              _____/        
+ /-\      \____________/              
+ \_/                                  
+--- mask
+                  LLllL               
+                  LL                  
+            LLLLLLllLLL               
+ LLL      LLlllllllllllL              
+LLllLLLLLLllllllllllllllLLLLLL        
+l LlllllllllllllllllllllllllllLLL     
+l LLllllllllClllllllllllllClllLLLL    
+L   LLLLLLllllllllllllllLLLLLL        
+ LLL      LLLLLLLLLLLLLL              
+ LLL                                  
+--- art
+                  /-  |               
+                  ||                  
+            /-----  --\               
+ /-\      /-           \              
+ |  ------              -----\        
+ |                            --\     
+ \__        o             o   ___|    
+    \_____              _____/        
+ /-\      \____________/              
+ \_/                                  
+--- mask
+                  LLllL               
+                  LL                  
+            LLLLLLllLLL               
+ LLL      LLlllllllllllL              
+ LllLLLLLLllllllllllllllLLLLLL        
+ LllllllllllllllllllllllllllllLLL     
+ LLLllllllllClllllllllllllClllLLLL    
+    LLLLLLllllllllllllllLLLLLL        
+ LLL      LLLLLLLLLLLLLL              
+ LLL                                  

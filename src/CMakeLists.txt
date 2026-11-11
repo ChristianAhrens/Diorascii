@@ -22,6 +22,8 @@ add_library(diorascii_core STATIC
   core/menu.cpp
   core/assets.cpp
   core/world.cpp
+  core/city.cpp
+  core/disasters.cpp
   core/ambience.cpp
   "${EMBED_CPP}")
 target_include_directories(diorascii_core PUBLIC

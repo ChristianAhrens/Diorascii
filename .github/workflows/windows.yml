@@ -20,7 +20,33 @@ jobs:
       - name: Package
         working-directory: build/release
         run: cpack -C Release
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          cmake --install build/release --config Release --prefix staging/root
+          & $iscc "/DAppVersion=$(bash scripts/release-notes.sh --latest)" "/DSourceDir=$PWD\staging\root" "/DOutputDir=$PWD\staging" packaging\windows\diorascii.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # Install, check the PATH entry from a fresh process, upgrade over it, uninstall.
+      - name: Test the installer
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem staging\Diorascii-*-Setup.exe).FullName
+          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=addtopath' -Wait
+          $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          if ($machine -notlike "*Diorascii\bin*") { throw "not on the PATH: $machine" }
+          & "$env:ProgramFiles\Diorascii\bin\diorascii.exe" --version
+          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=addtopath' -Wait
+          $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          if (([regex]::Matches($machine, 'Diorascii\\bin')).Count -ne 1) { throw "PATH entry duplicated or missing: $machine" }
+          Start-Process "$env:ProgramFiles\Diorascii\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          if (Test-Path "$env:ProgramFiles\Diorascii\bin\diorascii.exe") { throw "not uninstalled" }
+          $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          if ($machine -like "*Diorascii*") { throw "PATH entry left behind: $machine" }
       - uses: actions/upload-artifact@v4
         with:
           name: diorascii-windows
-          path: build/release/diorascii-*.zip
+          path: |
+            build/release/diorascii-*.zip
+            staging/Diorascii-*-Setup.exe

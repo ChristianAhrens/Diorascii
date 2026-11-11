@@ -140,10 +140,30 @@ install(FILES LICENSE README.md DESTINATION share/doc/diorascii)
 set(CPACK_PACKAGE_NAME diorascii)
 set(CPACK_PACKAGE_VERSION ${DIORASCII_VERSION_STRING})
 set(CPACK_PACKAGE_VENDOR "Diorascii contributors")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "ASCII-art scenes for the terminal")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ChristianAhrens/Diorascii")
+set(CPACK_PACKAGE_CONTACT "Christian Ahrens")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 if(WIN32)
   set(CPACK_GENERATOR ZIP)
 else()
   set(CPACK_GENERATOR TGZ)
+endif()
+
+# Linux packages (`cpack -G DEB`, `cpack -G RPM`; not in the default generators because the RPM
+# one needs rpmbuild). They install to /usr, so `diorascii` lands in the PATH, and the package
+# manager provides upgrades and removal. A development build's "-dev+<commit>" suffix becomes
+# "~dev+<commit>", which both formats accept and sort before the release.
+if(UNIX AND NOT APPLE)
+  set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
+  string(REPLACE "-dev" "~dev" CPACK_PACKAGE_VERSION "${DIORASCII_VERSION_STRING}")
+  set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+  set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+  set(CPACK_DEBIAN_PACKAGE_SECTION games)
+  set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+  set(CPACK_RPM_PACKAGE_LICENSE MIT)
+  set(CPACK_RPM_PACKAGE_GROUP "Amusements/Graphics")
+  # /usr and its standard subfolders belong to the filesystem package, not to this one.
+  set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION /usr/share/doc)
 endif()
 include(CPack)

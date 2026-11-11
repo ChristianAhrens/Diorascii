@@ -49,9 +49,10 @@ struct SceneDef {
   ///   impact <sprite>  a meteorite strikes the ground and digs a crater
   ///   weather <sprite> [<funnel>]  rain or a sandstorm for a while (the sprite is the drop or grain);
   ///                    with a funnel sprite, half of the time a tornado crosses the scene instead
+  ///   summon <sprite>  a visitor comes through (an ambulance), one at a time
   struct Action {
     /// Which action the scene offers.
-    enum class Kind { None, Drop, Impact, Weather };
+    enum class Kind { None, Drop, Impact, Weather, Summon };
     /// What the action key does.
     Kind kind = Kind::None;
     /// Sprite that is dropped or hurled, depending on kind.
@@ -102,6 +103,13 @@ struct SceneDef {
   Rgb snowA{238, 244, 250}, snowB{206, 220, 238};
   /// Characters scattered over the forest belt, the rock and the snow.
   std::u32string forestGlyphs = U"^\"'^ ,", rockGlyphs = U".:  ,'", snowGlyphs = U"*. .  ";
+  /// True for a city scene: a skyline of skyscrapers behind a street. The ground rows are the
+  /// street (sidewalk, road, sidewalk), and an elevated railway runs through it if there is room.
+  bool city = false;
+  /// How many side streets running off into the city (at most; fewer on narrow screens).
+  int avenues = 0;
+  /// Height of the skyscrapers as shares of the sky above the street (shortest..tallest).
+  std::pair<double, double> skyline{0.3, 0.62};
   /// Rows at the bottom of the ground that are a flowing river (0 = no river).
   int riverRows = 0;
   /// River colors from the bank down to the deepest row.
@@ -112,6 +120,9 @@ struct SceneDef {
   Rgb overcastTint{0, 0, 0};
   /// How strongly the scene turns towards overcastTint at full cloud cover, 0 to 1 (0 = no tint).
   double overcastTintAmount = 0;
+  /// True for a scene without an atmosphere (the moon): the cycle then only brightens and darkens
+  /// the ground a little, while the sky stays black and the stars stay out, and there is no glow.
+  bool airless = false;
   /// True if the scene has a day and night cycle (sun, moon, stars, dimming light).
   bool dayNight = false;
   double dayLength = 180;  ///< seconds one full day takes

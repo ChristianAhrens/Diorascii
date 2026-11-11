@@ -140,7 +140,8 @@ std::vector<Action> Terminal::poll(int timeoutMs) {
       case 'm': case 'M': actions.push_back(Action::Menu); break;
       case 'c': case 'C': actions.push_back(Action::Style); break;
       case 't': case 'T': actions.push_back(Action::Time); break;
-      case 'x': case 'X': actions.push_back(Action::Rare); break;
+      case 'x': actions.push_back(Action::Rare); break;
+      case 'X': actions.push_back(Action::RareOther); break;
       case 'a': case 'A': actions.push_back(Action::Audio); break;
       case ' ': actions.push_back(Action::Pause); break;
       case '\r': case '\n': actions.push_back(Action::Select); break;

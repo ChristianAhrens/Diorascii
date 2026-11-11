@@ -8,7 +8,12 @@ fps: 3
 tag: gloom
 wipes: life
 strike-effect: inkburst
-strike-at: 0.5
+strike-mode: devour
+strike-aim: around
+strike-reach: 20
+strike-lashes: 3
+mouth-row: 7
+lash-color: #c46ae0
 behaviors: catastrophe
 --- art
              _____________________

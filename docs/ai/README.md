@@ -1,6 +1,6 @@
 # AI collaboration docs
 
-Written 2026-11-08 (at v1.1.1) from the Claude Code sessions that built the project, including
+Updated 2026-11-10 for the unreleased work after v1.2.0. Written 2026-11-08 (at v1.1.1) from the Claude Code sessions that built the project, including
 those held before the repository was renamed to `Diorascii`. Where a statement comes from a session
 rather than from the code, it is marked as such. Verify against the code before relying on it.
 

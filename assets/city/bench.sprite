@@ -1,0 +1,14 @@
+name: bench
+facing: right
+habitat: ground
+speed: 0..0
+depth: 9
+solid: yes
+--- art
+o  o
+|__|_
+ ||||
+--- mask
+t  t
+1nnnn
+ n  n

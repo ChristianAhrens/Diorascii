@@ -106,16 +106,46 @@ jobs:
         working-directory: staging
         run: tar czf "Diorascii-${{ github.ref_name }}-${{ matrix.name }}.tar.gz" "Diorascii-${{ github.ref_name }}-${{ matrix.name }}"
 
+      # .deb (Debian, Ubuntu) and .rpm (Fedora, openSUSE) install /usr/bin/diorascii, so it is in the
+      # PATH, and the package manager upgrades and removes it. rpmbuild comes with the "rpm" package.
+      - name: Package (deb, rpm)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm
+          cd build/${{ matrix.preset }}
+          cpack -G DEB
+          cpack -G RPM
+          cd ../..
+          cp build/${{ matrix.preset }}/diorascii*.deb "staging/Diorascii-${{ github.ref_name }}-${{ matrix.name }}.deb"
+          cp build/${{ matrix.preset }}/diorascii*.rpm "staging/Diorascii-${{ github.ref_name }}-${{ matrix.name }}.rpm"
+
+      # Setup .exe built with Inno Setup (packaging/windows/diorascii.iss): installs to Program Files,
+      # adds the PATH entry, registers an uninstaller and upgrades an older install in place.
+      - name: Package (installer)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ github.ref_name }}" `
+            "/DSourceDir=$PWD\staging\Diorascii-${{ github.ref_name }}-${{ matrix.name }}" `
+            "/DOutputDir=$PWD\staging" packaging\windows\diorascii.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload release asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         working-directory: staging
-        run: >
-          gh release upload "${{ github.ref_name }}"
-          --repo "${{ github.repository }}"
-          --clobber
-          Diorascii-${{ github.ref_name }}-${{ matrix.name }}.*
+        run: |
+          # Every file of this platform (the staged directory is not a file and is skipped).
+          assets=()
+          for f in Diorascii-${{ github.ref_name }}-${{ matrix.name }}*; do
+            [ -f "$f" ] && assets+=("$f")
+          done
+          echo "Uploading: ${assets[*]}"
+          gh release upload "${{ github.ref_name }}" --repo "${{ github.repository }}" --clobber "${assets[@]}"
 
   # Only runs when every platform built, passed its tests and uploaded its asset.
   publish:

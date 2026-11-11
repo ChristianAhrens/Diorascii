@@ -1,0 +1,28 @@
+name: jogger
+facing: right
+habitat: ground
+behaviors: swim
+life: yes
+solid: yes
+sleeps: 0.8
+pool: any
+depth: 5..7
+feet-rows: -1..-1
+speed: 4..6
+fps: 8
+--- art
+ o
+\|/
+/ \
+--- mask
+ t
+333
+kkk
+--- art
+ o
+/|\
+ |
+--- mask
+ t
+333
+ k

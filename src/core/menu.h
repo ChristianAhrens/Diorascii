@@ -49,6 +49,10 @@ class Menu {
   /// Currently selected option of a choice.
   size_t value(const std::string& id) const;
 
+  /// Sets lines of small print shown at the bottom of the box, below the hint (the version and the
+  /// copyright). They are left out when the box would not fit.
+  void setFooter(std::vector<std::string> lines) { footer_ = std::move(lines); }
+
   /// Shows the menu and starts consuming input.
   void open() { open_ = true; }
   /// Hides the menu.
@@ -74,6 +78,8 @@ class Menu {
 
   /// Title shown at the top of the box.
   std::string title_;
+  /// Small print below the hint.
+  std::vector<std::string> footer_;
   /// Entries in display order.
   std::vector<Item> items_;
   /// Index of the highlighted entry.

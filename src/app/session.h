@@ -32,6 +32,8 @@ class Session {
     Style style = Style::Full;
     /// Start time of day in hours; negative means each scene's own start time.
     double hour = -1;
+    /// Start in the real-time mode (the time of day follows the host clock, see setClockHour()).
+    bool realtime = false;
     /// Show the info line from the start.
     bool info = false;
     /// Ask for ambient sound from the start.
@@ -71,6 +73,9 @@ class Session {
   const Menu& menu() const { return menu_; }
   /// Shows a message in the middle of the screen for a moment.
   void toast(const std::string& text, double seconds);
+  /// Tells the session the host's local time of day in hours (0 to 24, fractional). The frontend
+  /// calls this every frame; it only matters while the time mode is World::TimeMode::Realtime.
+  void setClockHour(double hour) { clockHour_ = hour; }
   /// Frame rate shown on the info line; the frontend measures it.
   void setMeasuredFps(double fps) { fps_ = fps; }
 
@@ -90,6 +95,8 @@ class Session {
   void flush();
   /// Switches to scene `idx` (wrapping) and shows its title; the world is rebuilt lazily.
   void switchScene(size_t idx);
+  /// In the real-time mode, sets the world's time of day from the host clock.
+  void syncClock();
   /// Turns the sound request on or off and keeps the menu in step.
   void setSound(bool on);
   /// Runs the scene's action and confirms it on screen.
@@ -109,8 +116,10 @@ class Session {
   uint64_t seed_;
   /// Render style.
   Style style_;
-  /// How the clock runs (cycle, dawn, day, dusk, night); survives scene switches and restarts.
+  /// How the clock runs (cycle, dawn, day, dusk, night, real time); survives scene switches and restarts.
   World::TimeMode timeMode_ = World::TimeMode::Cycle;
+  /// Host time of day in hours as last reported by the frontend; negative until it reports.
+  double clockHour_ = -1;
   /// Phase (0..1) of the day to start the next world at; negative means the scene's own.
   double carriedPhase_;
   /// The simulation.

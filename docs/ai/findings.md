@@ -16,12 +16,18 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-08 | M | Scene-specific logic baked into the "generic" core | to investigate in a dedicated, plain-language step |
 | F-09 | M | miniaudio runtime linking on Apple | to investigate in a dedicated, plain-language step |
 | F-10 | M | `package-macos.sh` pollutes the shared build dir; `dist/` not ignored | fixed, uncommitted |
-| F-11 | M | Notarized macOS assets are a manual, undocumented step | deferred: 1.1.x stay ad-hoc, 1.2.0 supersedes |
+| F-11 | M | Notarized macOS assets are a manual step | documented in README Releasing; the asset is now a .pkg (2026-11-11) |
 | F-12 | L | Sound design is unheard by the assistant; lightning crack unfinished | todo |
 | F-13 | L | Project memory was not carried over after the directory rename | done (see below) |
 | F-14 | L | Copyright holder / vendor naming is inconsistent | todo |
 | F-15 | L | No sanitizer, lint or `build.ps1` evidence in CI | todo |
 | F-16 | L | Documentation drift risks | todo |
+| F-18 | M | Unverified art and sound of the 2026-11-09 work | open |
+| F-19 | M | Audio parameters are copied by hand in two backends | open |
+| F-20 | L | Real-time mode: time zones, DST, tvOS | open |
+| F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
+| F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
+| F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -104,7 +110,9 @@ baseline, so local release builds there report `0.1.0`). Workaround:
 or unset the variable afterwards. Also `dist/` (script output) is not in `.gitignore`.
 
 ## F-11 Notarized release assets (M)
-CI produces ad-hoc signed DMGs; the notarized one is built locally and swapped into the GitHub
+(Update 2026-11-11: the asset is now a `.pkg`, the manual swap is documented in the README. The installers
+for Windows/Linux and the notarized `.pkg` run are **unverified**: see the unverified list in the 2026-11-11
+history entry.) CI produces ad-hoc signed DMGs; the notarized one is built locally and swapped into the GitHub
 release by hand (`gh` is not installed). Done for 1.0.0 (2026-11-07). The sessions do not show it
 for 1.1.0 or 1.1.1, so those releases may still carry only the ad-hoc DMG - **check the releases
 page**. The release checklist (build locally on the tag, upload with `--clobber` or via the web UI)
@@ -175,3 +183,60 @@ behaviors, actions, scenes or formats change, update README, CHANGELOG, `docs/ai
 - Remote input: the grid view is focusable and keyboard presses arrive (seen in the log); their handling (keyboard keys, not remote button types) was added afterwards and still needs a run to confirm. The remote's own swipe/click path is untested.
 - Deployment target is tvOS 17.0 (a guess); `connect:to:format:` is deprecated from tvOS 27.
 - iOS is not wired up; the shared pieces (Session, audio_apple) are ready for it.
+
+## F-18 Unverified art and sound of the 2026-11-09 work (M)
+Written after v1.2.0 and listed in CHANGELOG `[Unreleased]`. Judged by the owner by ear and eye
+(accepted unless noted): the sandworm's bellow and the avalanche squeal, the worm's chewing (after one
+retune) and loudness. **Never heard or seen by the assistant:** the kraken's gulp; the look of the worm's
+tongue and the kraken's tentacles in a real terminal (glyphs `= | / \ @`, colors `lash-color`,
+reach 14 and 20, three tentacles); the moon's lighter/darker ground and its 13x8 sun; the 8x5
+sun and moon in each scene; the larger clouds. Tunables are single values: `strike-reach`,
+`strike-lashes`, `lash-color`, `mouth-row` in the sprites; gains and filters in `src/core/ambience.cpp`.
+
+## F-19 Audio parameters are copied by hand in two backends (M)
+`src/audio/audio.cpp` and `audio_apple.mm` each copy every `AmbientParams` field into atomics and back.
+A new field that is forgotten in either backend is silent in the real program while the synthesis tests
+pass; this happened on 2026-11-09 (sandworm, crush and squeal sounds). Noted in `ambience.h` and
+the conventions. **Options:** one shared header with an atomic mirror of `AmbientParams` used by both
+backends, or a compile-time check on the field count.
+
+## F-20 Real-time mode (L)
+`dio::localClockHour()` uses `std::localtime` (not thread safe; called from the main thread only). Not
+verified: other time zones, daylight-saving changes, the tvOS build calling `setClockHour`, a host clock
+set wrongly. The mode ignores `dayLength` and the scene's `start-hour`. No seasonal sunrise or sunset
+(owner: not for now).
+
+## F-21 Scene logic in the core; fragile fixed-seed tests (L)
+Adds to F-08: `strike-mode`, tongues and tentacles, `airless` and the crush/squeal counters are generic
+mechanisms but `ambientFor` still names `"sandworm"` and the synths are per scene. Fixed-seed tests
+depend on the order of the population list: adding the larger clouds changed the random stream and the
+goat test had to move to seed 7. Prefer asserting on properties over particular seeds when touching them.
+
+## F-22 The City scene (M)
+Added 2026-11-09 in six commits (shading header, summon action and lanes, scene, fire, sound, docs). Judged only from
+text renders, tests and measured levels. **Never seen in a real terminal:** the skyline colors and window
+patterns, the street and lamp pools, how people and cars sit on their lanes (cars of different speeds in one lane
+overlap), the shop and park layout at other widths (decor uses fixed margins and may overlap on narrow screens),
+the sprite masks (written quickly; check with `--gallery`), the flames, scaffolding and crane, the train and the
+planes. **Never heard:** traffic, horns, siren, train, jet and fire (levels were tuned relative to the other
+scenes: calm about 0.035 RMS, events up to about 0.08). Decisions to confirm: buildings are generated to
+the terminal height (`skyline: 0.32..0.62` of the sky), the ambulance and fire engine are both `tag: siren`, the
+fire is an invisible `blaze` sprite so that the rare scheduler is reused, headlights are not lit at night, the railway
+needs a sky of at least 16 rows. Revised the same day after the owner's first look: flatter street (4 rows), taller and more varied buildings, a visible viaduct, vehicles and planes drawn with solid block glyphs (`█`; they vanish in no style, unlike solid mask blocks in Mono). Side streets with turning cars were added after that (cars keep their side-view sprite in the avenue; the trapezoid is a flat painting, not perspective). The plane was redrawn after the owner's pictogram (30x7: far wing above, near wing below, blue-tipped fin, window row, blue belly stripe; the first 4-row version with wings was judged unrecognisable), rush-hour traffic, a longer fire-engine stay with barriers and blue water jets were added at the owner's request (the look of all of it is unseen by the assistant). The vehicles, train and planes were redrawn as line art with a darkened backing after the solid blocks read as blobs (owner); the fire engine now fights the fire and cordons the site (owner). After the owner's screenshot the side streets were redone (broad crossing, short, behind the building rows, glimpses through gaps), cars got five views (side, rear and front, with three-quarters in between), the traffic and crowds were thinned and the planes made slim (20x3); still unseen by the assistant in a terminal. The train sound was reworked to a klack-klack rhythm (only the rhythm is tested, not how it sounds). Fires sometimes get out of hand (30%): 3-5 more buildings burn down and are rebuilt after about 1.5 minutes (look and timing unseen by the assistant; the rubble drawing is a first draft). The landing page (`pages/`), its videos and the README screenshots got the City on 2026-11-11 (owner's recordings, a
+simple skyline button icon drawn by the assistant). Adds to F-08: the city is data plus about 350 lines of C++ in `city.cpp`.
+
+## F-23 The second catastrophes (M)
+Added 2026-11-10. Judged only from text renders, headless runs, tests and measured levels; **never seen in a terminal or
+heard**: the green trail and the brown flood water (the sparse front) (colors and glyphs), the submarine, helicopter, yeti and the two
+monsters (drawn by a silhouette rasteriser, solid dark bodies with outline glyphs, 60x33 cells; the yeti 27x17), the
+mud, the tracer lines, the roars and thuds (only RMS ratios are tested, at least 1.5 times the calm level). **Decisions to
+confirm:** (1) *names*: the owner's pictures show Godzilla, a MUTO and a yeti; Godzilla and MUTO are trademarks of
+Toho and Legendary, so the sprites are named `lizard_titan` and `winged_titan` and the docs say "giant lizard" and
+"winged monster" (the art is original, drawn from silhouettes and not from the pictures); say if the real names are
+wanted. (2) The flood and the yeti spare what flies (birds, butterflies); the helicopter shoots everything. (3) The
+yeti appears standing on the highest ridge rather than rising behind it (entities are always drawn over the
+terrain). (4) The moon's big meteor is a sprite of 8 frames on one canvas (a bigger rock inside a 28x14 cell), so the "growing" is stepwise; the impact digs a crater to the ground-row limit (at most 3 rows) across the width. (5) In the city the fire spreads out from the fight to about 45% of the width (about 28 buildings on a 150-column screen) and nothing else reacts: people and cars carry on, no cordon, no fire
+engine; the winged monster only dies, there is no wreck. (6) A screen under 28 rows or narrower than 110 columns
+cancels the monster fight silently (no room); the yeti is 17 rows tall, so it fills most of a 24-row screen.
+(7) `World::clashStep`, `maulStep` and the others are special-purpose code in the generic core (adds to F-08, F-21).
+Fixed-seed tests of the first catastrophes now call `triggerRare(RarePick::Common)`.

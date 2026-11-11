@@ -1,6 +1,7 @@
 // Dependency-free test runner: each TEST registers itself, main() runs them all.
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -11,6 +12,7 @@
 #include "core/ambience.h"
 #include "core/assets.h"
 #include "core/menu.h"
+#include "version.h"
 #include "core/world.h"
 #include "term/vt.h"
 
@@ -175,7 +177,8 @@ TEST(embedded_assets_all_load) {
                         "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
                         "lightning", "spark", "sandworm", "alien", "fir_big", "fir_small", "shrub", "dwarf_pine",
                         "crag", "ice_spire", "goat", "red_deer", "bear", "finch", "golden_eagle",
-                        "cloud_wisp", "snowpuff", "snowflake", "pounce", "avalanche"})
+                        "cloud_wisp", "cloud_big_l", "cloud_small_l", "cloud_wisp_l", "snowpuff", "snowflake", "pounce", "avalanche",
+                        "submarine", "toxinpuff", "flood", "log", "helicopter", "yeti", "lizard_titan", "winged_titan", "asteroid"})
     CHECK(pack.find(n) != nullptr);
   const auto scenes = pack.scenes();
   CHECK(scenes.size() >= 2);
@@ -348,6 +351,21 @@ TEST(menu_closes_with_back_and_leaves_other_actions_alone) {
   m.open();
   CHECK(m.handle(Action::Menu));
   CHECK(!m.isOpen());
+}
+
+TEST(menu_shows_its_footer_below_the_hint_and_still_fits) {
+  Menu m = sampleMenu();
+  m.setFooter({"diorascii 9.9.9", "Copyright (c) 2026 Someone"});
+  m.open();
+  Frame f(60, 24);
+  m.render(f, Style::Full);
+  const std::string text = f.toText();
+  const size_t hint = text.find("esc: close"), version = text.find("diorascii 9.9.9"), copy = text.find("Copyright (c) 2026 Someone");
+  CHECK(hint != std::string::npos && version != std::string::npos && copy != std::string::npos);
+  CHECK(hint < version && version < copy);  // in that order, from the top
+  Frame tiny(30, 6);  // too small for the box: the one-line fallback, without small print
+  m.render(tiny, Style::Full);
+  CHECK(tiny.toText().find("Copyright") == std::string::npos);
 }
 
 TEST(menu_set_value_is_silent_and_clamped) {
@@ -687,16 +705,91 @@ TEST(time_modes_freeze_the_clock_and_cycle_resumes_from_there) {
 }
 
 TEST(scenes_without_a_cycle_ignore_the_time_of_day) {
-  AssetPack pack = AssetPack::embedded();
-  World moon(pack, pack.scene("moon"), 60, 24, 1);
-  CHECK(!moon.hasDayNight());
-  const double before = moon.phase();
-  moon.setTimeMode(World::TimeMode::Night);
-  CHECK(moon.timeMode() == World::TimeMode::Cycle);  // unchanged
-  for (int i = 0; i < 200; ++i) moon.step(0.05);
-  CHECK(moon.phase() == before);
-  const Light l = moon.light();
+  AssetPack pack = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\n", {});
+  World still(pack, pack.scene("t"), 60, 24, 1);
+  CHECK(!still.hasDayNight());
+  const double before = still.phase();
+  still.setTimeMode(World::TimeMode::Night);
+  CHECK(still.timeMode() == World::TimeMode::Cycle);  // unchanged
+  for (int i = 0; i < 200; ++i) still.step(0.05);
+  CHECK(still.phase() == before);
+  const Light l = still.light();
   CHECK(l.day == 1 && l.sun == 1 && l.glow == 0 && l.stars == 1);
+}
+
+TEST(the_moon_follows_a_cycle_of_sun_and_earth_with_a_black_sky_and_a_ground_that_changes_a_little) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("moon"), 100, 30, 1);
+  CHECK(world.hasDayNight() && world.scene().airless);
+  Frame day, night;
+  world.setPhase(0.5);
+  world.render(day);
+  const Light noon = world.light();
+  world.setPhase(0.0);
+  world.render(night);
+  const Light midnight = world.light();
+  CHECK(noon.stars == 1 && midnight.stars == 1 && midnight.glow == 0);  // stars all the time, no glow
+  CHECK(day.at(3, 0).bg == night.at(3, 0).bg);                          // the sky stays black
+  const int gy = world.seabedY() + 1;
+  auto sum = [](Rgb c) { return c.r + c.g + c.b; };
+  const int d = sum(day.at(3, gy).bg), n = sum(night.at(3, gy).bg);
+  CHECK(n < d && n > d * 0.6);  // darker at night, but only a little: still a grey
+  // The sun by day and the earth by night, high in the sky: yellow cells against blue ones.
+  auto count = [](const Frame& f, int rows, auto pred) {
+    int k = 0;
+    for (int y = 0; y < rows; ++y) for (int x = 0; x < f.width(); ++x) k += pred(f.at(x, y)) ? 1 : 0;
+    return k;
+  };
+  auto yellow = [](const Cell& c) { return c.bg.r > 200 && c.bg.g > 180 && c.bg.b < 120; };
+  auto blue = [](const Cell& c) { return c.bg.b > c.bg.r + 60 && c.bg.b > 120; };
+  CHECK(count(day, world.surfaceY(), yellow) > 20 && count(day, world.surfaceY(), blue) == 0);
+  CHECK(count(night, world.surfaceY(), blue) > 10 && count(night, world.surfaceY(), yellow) == 0);
+}
+
+TEST(the_sun_and_moon_are_larger_than_a_single_glyph_and_a_low_sky_cuts_them_off_at_the_top) {
+  AssetPack pack = AssetPack::embedded();
+  CHECK(pack.find("sun_big")->width() == 8 && pack.find("sun_big")->height() == 5);
+  CHECK(pack.find("moon_big")->width() == 8 && pack.find("moon_big")->height() == 5);
+  World world(pack, pack.scene("aquarium"), 80, 24, 1);  // the aquarium's sky is a few rows only
+  CHECK(world.surfaceY() < 5);
+  world.setPhase(0.5);  // the sun at the top of its arc
+  Frame f;
+  world.render(f);
+  auto yellow = [](const Cell& c) {
+    return (c.bg.r > 200 && c.bg.g > 180 && c.bg.b < 120) || (c.ch != U' ' && c.fg.r > 200 && c.fg.g > 180 && c.fg.b < 120);
+  };
+  int top = 0, bottom = 0;
+  for (int x = 0; x < f.width(); ++x) {
+    top += yellow(f.at(x, 0)) ? 1 : 0;
+    bottom += yellow(f.at(x, world.surfaceY() - 1)) ? 1 : 0;
+  }
+  CHECK(top > 0 && bottom > 0);  // the sun fills the sky's rows, only its top is cut off
+}
+
+TEST(scenes_mix_clouds_of_the_usual_size_with_larger_ones) {
+  AssetPack pack = AssetPack::embedded();
+  const std::pair<const char*, const char*> pairs[] = {{"cloud_big", "cloud_big_l"}, {"cloud_small", "cloud_small_l"},
+                                                       {"cloud_wisp", "cloud_wisp_l"}};
+  for (const auto& p : pairs) {
+    CHECK(pack.find(p.second)->width() > pack.find(p.first)->width());
+    CHECK(pack.find(p.second)->height() > pack.find(p.first)->height());
+  }
+  for (const char* scene : {"forest", "desert", "mountains"}) {
+    World world(pack, pack.scene(scene), 300, 40, 1);
+    int usual = 0, large = 0;
+    for (auto& e : world.entities()) {
+      const std::string& n = e->sprite->name();
+      usual += (n == "cloud_big" || n == "cloud_small" || n == "cloud_wisp") ? 1 : 0;
+      large += (n == "cloud_big_l" || n == "cloud_small_l" || n == "cloud_wisp_l") ? 1 : 0;
+    }
+    CHECK(usual > 0 && large > 0);
+  }
+}
+
+TEST(the_sun_over_the_moon_is_larger_than_the_earth) {
+  AssetPack pack = AssetPack::embedded();
+  CHECK(pack.find("sun_corona")->width() > pack.find("earth")->width());
+  CHECK(pack.find("sun_corona")->height() > pack.find("earth")->height());
 }
 
 TEST(stars_come_out_only_at_night_in_scenes_with_a_cycle) {
@@ -1144,6 +1237,31 @@ TEST(a_sandstorm_blows_one_way_across_the_whole_scene_and_tints_the_light) {
   CHECK(world.light().haze < 0.01);
 }
 
+TEST(a_sandstorm_at_night_stays_dark) {
+  AssetPack pack = stormPack("day-night: yes\n");
+  auto bright = [&](double hour) {
+    World world(pack, pack.scene("t"), 80, 30, 1);
+    world.setHour(hour);
+    world.interact();
+    for (int i = 0; i < 80; ++i) world.step(0.05);
+    Frame f;
+    world.render(f);
+    const Rgb c = f.at(5, 0).bg;
+    return c.r + c.g + c.b;
+  };
+  CHECK(bright(0) < bright(12) / 2);  // the storm at midnight is far darker than at noon
+}
+
+TEST(a_storm_at_night_hides_the_stars) {
+  AssetPack pack = stormPack("day-night: yes\nstars: 3\n");
+  World world(pack, pack.scene("t"), 80, 30, 1);
+  world.setHour(0);
+  CHECK(world.light().stars == 1);  // a clear night
+  world.interact();
+  for (int i = 0; i < 60; ++i) world.step(0.05);
+  CHECK(world.light().stars < 0.25);  // the dust hides them
+}
+
 TEST(a_tornado_crosses_the_scene_whirls_up_sand_and_darkens_the_sky) {
   AssetPack pack = stormPack();
   uint64_t seed = 0;
@@ -1391,19 +1509,19 @@ TEST(a_rare_event_can_be_summoned_but_only_one_at_a_time) {
   AssetPack pack = rarePack();
   World world(pack, pack.scene("t"), 120, 30, 4);
   CHECK(world.countTag("beast") == 0);
-  CHECK(world.triggerRare());
+  CHECK(world.triggerRare(RarePick::Common));
   CHECK(world.countTag("beast") == 1);
-  CHECK(!world.triggerRare());  // one is already under way
+  CHECK(!world.triggerRare(RarePick::Common));  // one is already under way
   AssetPack none = miniPack("--- population\n", {});
   World quiet(none, none.scene("t"), 60, 20, 1);
-  CHECK(!quiet.triggerRare());  // this scene has none
+  CHECK(!quiet.triggerRare(RarePick::Common));  // this scene has none
 }
 
 TEST(a_catastrophe_strikes_once_halfway_across_and_wipes_out_all_life_but_nothing_else) {
   AssetPack pack = rarePack("life: yes\n");  // the attacker is itself a living thing, and still spares itself
   World world(pack, pack.scene("t"), 120, 30, 4);
   CHECK(countSprite(world, "fish") == 30 && countSprite(world, "rock") == 1);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   // Look the attacker up each time instead of keeping a pointer: if it were wiped out too, it would be freed.
   auto beastNow = [&]() -> Entity* {
     for (auto& e : world.entities()) {
@@ -1470,7 +1588,7 @@ TEST(a_catastrophe_can_wipe_out_named_sprites_only_and_what_was_planted_is_plant
   for (auto& e : world.entities()) {
     if (e->sprite->name() == "flag") flagX = e->x;
   }
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   world.step(0.05);
   CHECK(world.killedCount() == 2);
@@ -1490,30 +1608,40 @@ TEST(every_scene_has_a_rare_catastrophe_and_it_strikes_when_summoned) {
   for (const Case& c : {Case{"aquarium", "kraken"}, Case{"forest", "thundercloud"}, Case{"desert", "sandworm"},
                         Case{"moon", "alien"}}) {
     auto scene = pack.scene(c.scene);
-    CHECK(scene && scene->rare.size() == 1 && scene->rare[0].sprite == c.attacker);
+    CHECK(scene && scene->rare.size() >= 1u && scene->rare[0].sprite == c.attacker);
     World world(pack, scene, 160, 36, 3);
     const bool animals = std::string(c.scene) != "moon";
     size_t lifeBefore = 0;
     for (auto& e : world.entities()) lifeBefore += e->life;
     CHECK(!animals || lifeBefore > 10);
-    CHECK(world.triggerRare());
+    CHECK(world.triggerRare(RarePick::Common));
+    // A storm strikes everything at once; an alien, a worm and a kraken take things as they come
+    // to them, so wait for them to have crossed the scene.
+    const bool lashes = std::string(c.scene) == "desert" || std::string(c.scene) == "aquarium";
+    const bool sweeps = std::string(c.scene) == "moon" || lashes;
+    const size_t flyers = countSprite(world, "vulture") + countSprite(world, "bat");
     bool struck = false;
-    for (int i = 0; i < 3000 && !struck; ++i) {
+    for (int i = 0; i < 3000 && !(struck && (!sweeps || countSprite(world, c.attacker) == 0)); ++i) {
       world.step(0.05);
       struck = world.killedCount() > 0;
     }
     CHECK(struck);
     if (!struck) continue;
-    if (animals) {
+    if (sweeps) {
+      CHECK(world.killedCount() >= 1 && countSprite(world, "flag") == 0);  // the flag stands still: always taken
+    }
+    if (lashes) {  // the worm and the kraken take what they reach, one by one (the worm not what flies)
+      CHECK(world.crushCount() == world.killedCount() && world.crushCount() > 3);
+      CHECK(countSprite(world, "vulture") + countSprite(world, "bat") == flyers);
+    } else if (animals) {
       size_t aliveLife = 0;
       for (auto& e : world.entities()) aliveLife += (e->life && !e->dead);
       CHECK(aliveLife == 0);                      // everything alive is gone, in a single moment
       CHECK(world.killedCount() > 0);
       CHECK(world.restockPending() >= lifeBefore);  // and every one of them comes back later, one by one
     } else {
-      CHECK(countSprite(world, "rover") == 0 && countSprite(world, "flag") == 0);  // the alien's targets
-      CHECK(world.killedCount() == 2 + 0 || world.killedCount() >= 1);
-      CHECK(countSprite(world, "alien") == 1);
+      CHECK(countSprite(world, "flag") == 0);  // the alien's stationary target
+      CHECK(countSprite(world, "alien") == 0);  // it has crossed and gone
     }
     if (std::string(c.scene) == "forest") {
       CHECK(world.flashing());                    // lightning
@@ -1527,12 +1655,62 @@ TEST(the_moon_alien_only_destroys_the_rover_and_the_flag_and_both_are_replaced_l
   World world(pack, pack.scene("moon"), 120, 30, 5);
   size_t rocks = countSprite(world, "rock"), landers = countSprite(world, "lander");
   CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
-  world.triggerRare();
-  for (int i = 0; i < 3000 && world.killedCount() == 0; ++i) world.step(0.05);
-  CHECK(world.killedCount() == 2);
+  world.triggerRare(RarePick::Common);
+  for (int i = 0; i < 3000 && countSprite(world, "alien") > 0; ++i) world.step(0.05);  // until it has crossed
+  // The flag stands still and is always taken; the rover drives about and may slip past the alien.
+  CHECK(world.killedCount() >= 1 && world.killedCount() <= 2);
+  CHECK(countSprite(world, "flag") == 0);
   CHECK(countSprite(world, "rock") == rocks && countSprite(world, "lander") == landers);  // nothing else
   for (int i = 0; i < 1500; ++i) world.step(0.05);  // well over a minute later
   CHECK(countSprite(world, "rover") == 1 && countSprite(world, "flag") == 1);
+}
+
+TEST(a_sweeping_catastrophe_takes_each_victim_as_its_middle_passes_it) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 6\nrare-first: 1000..1000\n--- population\nrover count 1\n"
+      "--- decor\nflag left 10\nflag right 10\n--- rare\nalien 1\n",
+      {"name: alien\nfacing: right\nhabitat: ground\nspeed: 12..12\nwipes: flag\nstrike-effect: puff\n"
+       "strike-mode: sweep\nbehaviors: catastrophe\n--- art\nAAA\nAAA\n",
+       "name: rover\nhabitat: ground\nspeed: 0..0\n--- art\nrr\n",
+       "name: flag\nhabitat: ground\n--- art\n|>\n|\n",
+       "name: puff\ntag: puff\nfps: 8\nloop: no\ndie-after-animation: yes\n--- art\n*\n--- art\n.\n"});
+  World world(pack, pack.scene("t"), 120, 30, 6);
+  std::vector<double> flags;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "flag") flags.push_back(e->x + e->width() / 2.0);
+  }
+  CHECK(flags.size() == 2);
+  std::sort(flags.begin(), flags.end());
+  world.triggerRare(RarePick::Common);
+  Entity* alien = nullptr;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "alien") alien = e.get();
+  }
+  CHECK(alien != nullptr);
+  if (!alien) return;
+  const bool right = alien->vx > 0;
+  size_t seen = 0;
+  for (int i = 0; i < 600 && countSprite(world, "alien") > 0; ++i) {
+    world.step(0.05);
+    alien = nullptr;  // the world frees it once it has left
+    for (auto& e : world.entities()) {
+      if (e->sprite->name() == "alien") alien = e.get();
+    }
+    if (!alien) break;
+    const double middle = alien->x + alien->width() / 2.0;
+    // Not taken before the alien's middle has reached it...
+    for (double f : flags) {
+      const bool reached = right ? middle >= f - 1.5 : middle <= f + 1.5;
+      if (!reached) {
+        size_t standing = 0;
+        for (auto& e : world.entities()) standing += (e->sprite->name() == "flag" && !e->dead && std::fabs(e->x + e->width() / 2.0 - f) < 0.01);
+        CHECK(standing == 1);
+      }
+    }
+    seen = world.killedCount();
+  }
+  CHECK(seen == 2);  // ...and both in the end, one after the other
+  CHECK(countSprite(world, "rover") == 1);  // not a named victim
 }
 
 TEST(a_wipe_also_takes_what_was_spawned_in_the_same_step) {
@@ -1585,7 +1763,7 @@ TEST(a_strike_can_light_up_the_screen_with_two_quick_flashes) {
   CHECK(!world.flashing());
   Frame calm;
   world.render(calm, Style::Full);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   CHECK(world.killedCount() == 30);
   CHECK(world.flashing());  // the instant it strikes
@@ -1609,7 +1787,7 @@ TEST(a_catastrophe_can_bring_rain_and_always_darkens_the_scene_while_it_is_there
   AssetPack pack = rarePack("storm-rain: 6\ntag: gloom\n", "action: weather rain\n",
                             {"name: rain\nfacing: right\ntag: rain\nbehaviors: rain\n--- art\n\\\n"});
   World world(pack, pack.scene("t"), 120, 30, 4);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   CHECK(!world.raining());
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   CHECK(world.raining());  // it rains from the strike on
@@ -1617,7 +1795,7 @@ TEST(a_catastrophe_can_bring_rain_and_always_darkens_the_scene_while_it_is_there
   CHECK(world.overcast() > 0.3);  // and the sky is dark
   AssetPack dry = rarePack("tag: gloom\n");  // no weather action: no rain, but still dark
   World dark(dry, dry.scene("t"), 120, 30, 4);
-  dark.triggerRare();
+  dark.triggerRare(RarePick::Common);
   for (int i = 0; i < 100; ++i) dark.step(0.05);
   CHECK(!dark.raining());
   CHECK(dark.overcast() > 0.3);
@@ -1629,7 +1807,7 @@ TEST(a_strike_can_drop_a_bolt_that_reaches_the_ground_under_the_attacker) {
   AssetPack pack = rarePack("strike-sprite: bolt\n", "",
                             {"name: bolt\ntag: bolt\nfps: 10\nloop: no\ndie-after-animation: yes\n--- art\n|\n|\n|\n|\n|\n--- art\n/\n/\n/\n/\n/\n"});
   World world(pack, pack.scene("t"), 120, 30, 4);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 600 && world.killedCount() == 0; ++i) world.step(0.05);
   world.step(0.05);
   Entity* bolt = nullptr;
@@ -1989,7 +2167,7 @@ TEST(world_storm_proximity_follows_the_thundercloud_across_the_scene) {
   AssetPack pack = AssetPack::embedded();
   World w(pack, pack.scene("forest"), 100, 30, 3);
   CHECK(w.stormProximity() == 0.0);  // no cloud yet
-  CHECK(w.triggerRare());
+  CHECK(w.triggerRare(RarePick::Common));
   double lo = 1, hi = 0;
   for (int i = 0; i < 4000; ++i) {
     w.step(1.0 / 20);
@@ -2185,7 +2363,7 @@ TEST(the_mountains_span_the_whole_height_from_a_meadow_and_stream_to_snowy_peaks
   AssetPack pack = AssetPack::embedded();
   auto scene = pack.scene("mountains");
   CHECK(scene && scene->mountains && scene->riverRows > 0 && scene->dayNight);
-  CHECK(scene->action.kind == SceneDef::Action::Kind::Weather && scene->rare.size() == 1);
+  CHECK(scene->action.kind == SceneDef::Action::Kind::Weather && scene->rare.size() >= 1);
   CHECK(!pack.scene("forest")->mountains);
   for (int h : {24, 40, 70}) {
     World world(pack, scene, 140, h, 5);
@@ -2303,7 +2481,7 @@ TEST(goats_deer_and_bears_stay_in_their_zones_birds_and_eagles_in_theirs) {
 
 TEST(goats_leap_in_hops_and_wander_between_ledges) {
   AssetPack pack = AssetPack::embedded();
-  World world(pack, quietMountains(pack), 160, 44, 6);
+  World world(pack, quietMountains(pack), 160, 44, 7);
   world.setTimeMode(World::TimeMode::Day);
   Entity* goat = allOf(world, "goat").front();
   const double x0 = goat->x, row0 = goat->anchorY;
@@ -2421,8 +2599,8 @@ TEST(an_avalanche_rips_down_a_snowy_flank_through_the_forest_into_the_stream) {
   for (auto& e : world.entities()) lifeBefore += e->life;
   CHECK(firsBefore > 10 && lifeBefore > 10);
   CHECK(world.avalancheLevel() == 0);
-  CHECK(world.triggerRare());
-  CHECK(!world.triggerRare());  // one at a time
+  CHECK(world.triggerRare(RarePick::Common));
+  CHECK(!world.triggerRare(RarePick::Common));  // one at a time
   CHECK(allOf(world, "avalanche").size() == 1);
 
   bool snow = false, rock = false, forest = false, meadow = false, stream = false;
@@ -2465,7 +2643,7 @@ TEST(an_avalanche_rips_down_a_snowy_flank_through_the_forest_into_the_stream) {
 TEST(the_avalanche_scars_the_picture_and_the_stream_shows_again_when_it_fades) {
   AssetPack pack = AssetPack::embedded();
   World world(pack, quietMountains(pack), 140, 40, 7);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   for (int i = 0; i < 240; ++i) world.step(0.05);  // 12 s: it has reached the stream
   int sx = -1;
   for (int x = 0; x < world.width() && sx < 0; ++x) {
@@ -2488,7 +2666,7 @@ TEST(avalanches_survive_tiny_and_odd_sizes) {
   for (int w : {1, 2, 5, 40, 200}) {
     for (int h : {1, 2, 4, 9, 24, 90}) {
       World world(pack, pack.scene("mountains"), w, h, 11);
-      world.triggerRare();
+      world.triggerRare(RarePick::Common);
       world.interact();
       Frame f;
       for (int i = 0; i < 500; ++i) world.step(0.05);
@@ -2539,13 +2717,241 @@ TEST(the_mountains_sound_like_wind_a_stream_an_eagle_and_roar_in_a_storm_and_an_
   World world(pack, pack.scene("mountains"), 140, 40, 7);
   CHECK(ambientFor(world).kind == AmbientKind::Mountains);
   CHECK(ambientFor(world).avalanche == 0.0f);
-  world.triggerRare();
+  world.triggerRare(RarePick::Common);
   float loudest = 0;
   for (int i = 0; i < 300; ++i) {
     world.step(0.05);
     loudest = std::max(loudest, ambientFor(world).avalanche);
   }
   CHECK(loudest > 0.9f);
+}
+
+// RMS of the `seconds` after `after` replaces `before` in a running ambience (a counter that went up).
+static double rmsAfterChange(const AmbientParams& before, const AmbientParams& after, double seconds, uint64_t seed = 2) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, seed);
+  std::vector<float> warm(kRate * 2 * 2);
+  a.render(before, warm.data(), kRate * 2);
+  std::vector<float> buf(static_cast<size_t>(kRate * seconds) * 2);
+  a.render(after, buf.data(), static_cast<int>(buf.size() / 2));
+  double sum = 0;
+  for (float s : buf) {
+    CHECK(std::isfinite(s) && std::fabs(s) <= 1.0f);
+    sum += double(s) * s;
+  }
+  return std::sqrt(sum / double(buf.size()));
+}
+
+TEST(a_sandworm_bellows_as_it_crosses_and_crunches_each_thing_it_swallows) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Desert;
+  AmbientParams worm = calm;
+  worm.worm = 1;
+  CHECK(ambienceRms(worm, 10) > ambienceRms(calm, 10) * 2);  // a deep roar over the dry wind
+  AmbientParams crunch = calm;
+  crunch.crushes = 1;
+  CHECK(rmsAfterChange(calm, crunch, 0.6) > rmsAfterChange(calm, calm, 0.6) * 2);  // a crunch at once
+  AmbientParams moonCrunch = crunch;
+  moonCrunch.kind = AmbientKind::Moon;
+  AmbientParams moon = calm;
+  moon.kind = AmbientKind::Moon;
+  CHECK(rmsAfterChange(moon, moonCrunch, 0.6) < rmsAfterChange(moon, moon, 0.6) * 1.5);  // only the desert hears it
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  CHECK(ambientFor(world).worm == 0.0f && ambientFor(world).crushes == 0);
+  world.triggerRare(RarePick::Common);
+  float nearest = 0;
+  for (int i = 0; i < 1500; ++i) {
+    world.step(0.05);
+    nearest = std::max(nearest, ambientFor(world).worm);
+  }
+  CHECK(nearest > 0.9f);
+  CHECK(ambientFor(world).crushes > 3);
+}
+
+TEST(the_sandworm_lashes_out_a_tongue_that_reaches_a_victim_before_it_is_crushed) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  world.setTimeMode(World::TimeMode::Day);
+  world.triggerRare(RarePick::Common);
+  bool lashed = false, beforeHit = false, drawn = false;
+  unsigned crushedAtStart = 0;
+  for (int i = 0; i < 1500 && !(lashed && world.tongueCount() == 0); ++i) {
+    world.step(0.05);
+    if (world.tongueCount() == 0) continue;
+    if (!lashed) {
+      lashed = true;
+      crushedAtStart = world.crushCount();
+    }
+    Frame f;
+    world.render(f);
+    bool tongue = false;
+    for (int y = 0; y < f.height(); ++y) {
+      for (int x = 0; x < f.width(); ++x) {
+        const Cell& c = f.at(x, y);  // the tip: a red '@' (the storm dims the colors a little)
+        tongue |= c.ch == U'@' && c.fg.r > c.fg.g * 1.6 && c.fg.r > c.fg.b * 1.3;
+      }
+    }
+    drawn |= tongue;
+    if (world.crushCount() == crushedAtStart) beforeHit = true;  // out first: the victim is still alive
+  }
+  CHECK(lashed && drawn && beforeHit);
+  CHECK(world.crushCount() > crushedAtStart);  // and the lash crushed something
+  CHECK(world.tongueCount() == 0);             // one tongue at a time, and it is gone afterwards
+  // The alien, which has no reach, never lashes.
+  World moon(pack, pack.scene("moon"), 120, 30, 5);
+  moon.triggerRare(RarePick::Common);
+  for (int i = 0; i < 600; ++i) {
+    moon.step(0.05);
+    CHECK(moon.tongueCount() == 0);
+  }
+}
+
+TEST(the_kraken_gulps_down_what_its_tentacles_catch_with_a_muffled_sound) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Aquarium;
+  AmbientParams gulp = calm;
+  gulp.crushes = 1;
+  CHECK(rmsAfterChange(calm, gulp, 0.6) > rmsAfterChange(calm, calm, 0.6) * 1.5);
+  AmbientParams forest = calm;
+  forest.kind = AmbientKind::Forest;
+  AmbientParams forestGulp = forest;
+  forestGulp.crushes = 1;
+  CHECK(rmsAfterChange(forest, forestGulp, 0.6) < rmsAfterChange(forest, forest, 0.6) * 1.2);  // only the sea hears it
+}
+
+TEST(the_city_hums_with_traffic_honks_now_and_then_and_has_sirens_trains_planes_and_fire) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  const double quiet = ambienceRms(calm, 20);
+  CHECK(quiet > 0.01);
+  AmbientParams night = calm;
+  night.night = 1;
+  CHECK(ambienceRms(night, 20) < quiet * 0.8);  // fewer cars at night
+  AmbientParams siren = calm, train = calm, plane = calm, fire = calm;
+  siren.siren = 1;
+  train.train = 1;
+  plane.plane = 1;
+  fire.fire = 1;
+  CHECK(ambienceRms(siren, 10) > quiet * 1.4);
+  CHECK(ambienceRms(train, 10) > quiet * 1.3);
+  CHECK(ambienceRms(plane, 10) > quiet * 1.2);
+  CHECK(ambienceRms(fire, 10) > quiet * 1.4);
+  // A horn is a short, loud burst above the traffic: the loudest 50 ms of a minute against the average.
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  std::vector<float> buf(static_cast<size_t>(kRate * 60) * 2);
+  a.render(calm, buf.data(), static_cast<int>(buf.size() / 2));
+  double best = 0, sum = 0;
+  for (size_t i = 0; i + 800 < buf.size(); i += 800) {
+    double s = 0;
+    for (size_t k = 0; k < 800; ++k) s += double(buf[i + k]) * buf[i + k];
+    best = std::max(best, std::sqrt(s / 800));
+    sum += s;
+  }
+  CHECK(best > std::sqrt(sum / double(buf.size())) * 1.5);
+
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  CHECK(ambientFor(world).kind == AmbientKind::City);
+  CHECK(ambientFor(world).siren == 0.0f && ambientFor(world).fire == 0.0f);
+  CHECK(world.interact() == 1);  // the ambulance
+  float nearest = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    nearest = std::max(nearest, ambientFor(world).siren);
+  }
+  CHECK(nearest > 0.9f);
+  world.triggerRare(RarePick::Common);
+  float blaze = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    blaze = std::max(blaze, ambientFor(world).fire);
+  }
+  CHECK(blaze == 1.0f);
+}
+
+TEST(the_fire_engine_wails_slowly_and_drives_off_without_its_siren) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  AmbientParams wail = calm;
+  wail.wail = 1;
+  CHECK(ambienceRms(wail, 10) > ambienceRms(calm, 10) * 1.4);
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.interact() == 1);  // the ambulance has the quick two-tone siren, the fire engine the slow wail
+  float siren = 0;
+  for (int i = 0; i < 400; ++i) {
+    world.step(0.05);
+    siren = std::max(siren, ambientFor(world).siren);
+    CHECK(ambientFor(world).wail == 0.0f);  // the ambulance does not wail
+  }
+  CHECK(siren > 0.9f);
+  world.triggerRare(RarePick::Common);
+  float wails = 0;
+  bool left = false, quiet = true;
+  for (int i = 0; i < 20 * 100; ++i) {
+    world.step(0.05);
+    wails = std::max(wails, ambientFor(world).wail);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "firetruck" || e->driveState != 2) continue;
+      left = true;
+      quiet &= e->tag.empty();  // leaving: the siren is off
+    }
+  }
+  CHECK(wails > 0.9f);
+  CHECK(left && quiet);
+  CHECK(ambientFor(world).wail == 0.0f);
+}
+
+TEST(a_train_beats_out_klack_klack_pairs_with_a_pause_between) {
+  constexpr int kRate = 8000;
+  Ambience a(kRate, 4);
+  AmbientParams p;
+  p.kind = AmbientKind::City;
+  p.train = 1;
+  std::vector<float> buf(static_cast<size_t>(kRate * 14) * 2);
+  a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+  std::vector<double> env;  // 5 ms envelope of the left ear
+  for (size_t s = 0; s < 14 * 200; ++s) {
+    double e = 0;
+    for (size_t i = 0; i < kRate / 200; ++i) e += double(buf[(s * kRate / 200 + i) * 2]) * buf[(s * kRate / 200 + i) * 2];
+    env.push_back(std::sqrt(e / (kRate / 200)));
+  }
+  double peak = 0;
+  for (size_t i = 1600; i < env.size(); ++i) peak = std::max(peak, env[i]);  // after the horn has sounded
+  std::vector<double> onsets;
+  for (size_t i = 1601; i < env.size(); ++i) {
+    if (env[i] > 0.55 * peak && env[i - 1] <= 0.55 * peak && (onsets.empty() || i / 200.0 - onsets.back() > 0.08)) onsets.push_back(i / 200.0);
+  }
+  CHECK(onsets.size() >= 10);
+  // Intervals alternate: a short one inside a pair (about 0.18 s), a long one between pairs (about 0.35 s).
+  int shortThenLong = 0, pairs = 0;
+  for (size_t i = 1; i + 1 < onsets.size(); ++i) {
+    const double d1 = onsets[i] - onsets[i - 1], d2 = onsets[i + 1] - onsets[i];
+    if (d1 > 0.12 && d1 < 0.26 && d2 > 0.28 && d2 < 0.5) ++shortThenLong;
+    if (d1 > 0.12 && d1 < 0.26) ++pairs;
+  }
+  CHECK(pairs >= 5 && shortThenLong >= 4);
+}
+
+TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
+  AmbientParams calm;
+  calm.kind = AmbientKind::Mountains;
+  AmbientParams buried = calm;
+  buried.squeals = 1;
+  CHECK(rmsAfterChange(calm, buried, 0.5) > rmsAfterChange(calm, calm, 0.5) * 1.3);
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 140, 40, 7);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.squealCount() == 0);
+  world.triggerRare(RarePick::Common);
+  for (int i = 0; i < 1200; ++i) world.step(0.05);
+  CHECK(world.squealCount() > 0 && world.squealCount() <= world.killedCount());  // animals only, not the trees
+  CHECK(ambientFor(world).squeals == world.squealCount());
 }
 
 /// A session over the built-in scenes, 100 by 30 cells.
@@ -2634,8 +3040,10 @@ TEST(session_sound_is_a_request_the_frontend_can_refuse) {
 TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_changes_and_resizes) {
   AssetPack pack = AssetPack::embedded();
   const auto scenes = pack.scenes();
-  size_t withClock = 0, withoutClock = 0;
-  for (size_t i = 0; i < scenes.size(); ++i) (scenes[i]->dayNight ? withClock : withoutClock) = i;
+  size_t withClock = 0;
+  for (size_t i = 0; i < scenes.size(); ++i) {
+    if (scenes[i]->dayNight) withClock = i;
+  }
   Session::Config config;
   config.scene = withClock;
   config.hour = 22;
@@ -2649,9 +3057,530 @@ TEST(session_time_of_day_cycles_only_in_scenes_with_a_clock_and_survives_scene_c
   CHECK(s.world().width() == 120 && s.world().height() == 40);
   CHECK(s.world().timeMode() == World::TimeMode::Dawn);  // kept across the rebuild
 
-  Session m = makeSession(pack, [&] { Session::Config c; c.scene = withoutClock; return c; }());
+  AssetPack still = miniPack("medium: no\nsky-fraction: 1\nground-rows: 4\n", {});
+  Session m = makeSession(still);
   m.handle(Action::Time);
-  CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle on the moon
+  CHECK(m.world().timeMode() == World::TimeMode::Cycle);  // nothing to cycle in a scene without a clock
+}
+
+TEST(real_time_is_the_last_time_mode_and_follows_the_clock_the_frontend_reports) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  Session::Config config;
+  for (size_t i = 0; i < scenes.size(); ++i) {
+    if (scenes[i]->dayNight) config.scene = i;
+  }
+  Session s = makeSession(pack, config);
+  CHECK(s.world().timeMode() == World::TimeMode::Cycle);  // never the default
+  for (int i = 0; i < 4; ++i) s.handle(Action::Time);     // dawn, day, dusk, night
+  CHECK(s.world().timeMode() == World::TimeMode::Night);
+  s.setClockHour(15.5);
+  s.handle(Action::Time);  // the last one
+  CHECK(s.world().timeMode() == World::TimeMode::Realtime);
+  CHECK(std::fabs(s.world().phase() - 15.5 / 24.0) < 1e-6);
+  s.setClockHour(15.75);
+  for (int i = 0; i < 100; ++i) s.step(0.05);  // the world's own clock does not run on
+  CHECK(std::fabs(s.world().phase() - 15.75 / 24.0) < 1e-6);
+  s.resize(120, 40);  // kept across the rebuild
+  s.step(0.05);
+  CHECK(s.world().timeMode() == World::TimeMode::Realtime);
+  CHECK(std::fabs(s.world().phase() - 15.75 / 24.0) < 1e-6);
+  s.handle(Action::Time);  // and round again to the cycle
+  CHECK(s.world().timeMode() == World::TimeMode::Cycle);
+  Session::Config rt = config;
+  rt.realtime = true;
+  Session r = makeSession(pack, rt);
+  r.setClockHour(3);
+  r.step(0.05);
+  CHECK(r.world().timeMode() == World::TimeMode::Realtime && std::fabs(r.world().phase() - 3.0 / 24.0) < 1e-6);
+}
+
+TEST(summon_calls_one_visitor_at_a_time_and_feet_rows_and_traffic_place_vehicles_on_their_side) {
+  AssetPack pack = miniPack(
+      "medium: no\nsky-fraction: 1\nground-rows: 7\naction: summon van\n--- population\ncar count 40\n",
+      {"name: van\nfacing: right\nhabitat: ground\nspeed: 8..8\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nVV\n",
+       "name: car\nfacing: right\nhabitat: ground\nspeed: 4..6\nfeet-rows: 1..-2\ntraffic: yes\nbehaviors: swim\n--- art\nCC\nCC\n"});
+  World world(pack, pack.scene("t"), 100, 30, 3);
+  CHECK(world.scene().action.kind == SceneDef::Action::Kind::Summon);
+  CHECK(world.interact() == 1 && world.countSprite("van") == 1);
+  CHECK(world.interact() == 0);  // one at a time
+  const int rows = world.height() - world.seabedY();
+  const int mid = (1 + (rows - 2) + 1) / 2;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "car") continue;
+    const int feet = static_cast<int>(e->y) + e->height() - 1 - world.seabedY();  // ground row of the feet
+    CHECK(feet >= 1 && feet <= rows - 2);                                         // on the road, not the sidewalks
+    CHECK(e->movingRight() ? feet >= mid : feet < mid);                           // right: lower half, left: upper
+  }
+  for (int i = 0; i < 400 && world.countSprite("van") > 0; ++i) world.step(0.05);
+  CHECK(world.countSprite("van") == 0);  // it drove through and was not replaced
+  CHECK(world.interact() == 1);          // and may be called again
+  std::string err;
+  CHECK(SceneDef::parse("name: s\naction: summon\n", err) == nullptr);  // needs a sprite
+}
+
+TEST(the_city_has_a_skyline_lower_than_the_mountains_a_street_and_a_railway) {
+  AssetPack pack = AssetPack::embedded();
+  World city(pack, pack.scene("city"), 130, 40, 3);
+  World mountains(pack, pack.scene("mountains"), 130, 40, 3);
+  CHECK(city.city() && city.buildingCount() > 10);
+  int peak = 40;
+  for (int x = 0; x < 130; ++x) peak = std::min(peak, mountains.ridgeRow(x));
+  CHECK(city.skylineTop() > peak);          // no skyscraper reaches as high as the highest peak
+  CHECK(city.skylineTop() <= city.seabedY() - static_cast<int>(city.seabedY() * 0.6));  // but they fill a good part of the sky
+  CHECK(city.railRow() >= 0 && city.railRow() < city.seabedY());
+  Frame f;
+  city.setHour(12);
+  city.render(f);
+  const Rgb road = pack.scene("city")->groundB;
+  int roadCells = 0;
+  for (int y = city.seabedY(); y < 40; ++y) {
+    for (int x = 0; x < 130; ++x) roadCells += (f.at(x, y).bg == road) ? 1 : 0;
+  }
+  CHECK(roadCells > 130);  // asphalt, not the plain ground
+  CHECK(city.height() - city.seabedY() == 4);  // the main road is a narrow street
+  World tiny(pack, pack.scene("city"), 40, 8, 3);  // too small for a skyline or a railway
+  CHECK(tiny.buildingCount() == 0 && tiny.railRow() < 0);
+  CHECK(tiny.countSprite("station") == 0);
+}
+
+TEST(the_railway_is_a_visible_viaduct_and_the_vehicles_and_planes_are_detailed_line_art) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  Frame f;
+  world.setHour(12);
+  world.render(f);
+  const int rail = world.railRow();
+  CHECK(rail > 0);
+  // A dark deck with bright rails, a concrete beam below it, pillars further down and a wire above.
+  int deck = 0, beam = 0, pillars = 0, wire = 0;
+  for (int x = 0; x < 130; ++x) {
+    deck += (f.at(x, rail).ch == U'=' && f.at(x, rail).bg.r < 80) ? 1 : 0;
+    beam += (f.at(x, rail + 1).ch == U'_' && f.at(x, rail + 1).bg.r > 100) ? 1 : 0;
+    pillars += f.at(x, rail + 3).bg.r > 100 && f.at(x, rail + 3).bg.r < 150 && f.at(x, rail + 3).ch == U' ' ? 1 : 0;
+    wire += f.at(x, rail - 5).ch == U'-' ? 1 : 0;
+  }
+  CHECK(deck > 90 && beam > 90 && pillars > 10 && wire > 40);
+  // Vehicles, trains and planes are fine line art with many different glyphs, on a darkened backing
+  // so that they stand out against any background.
+  for (const char* name : {"car_sedan", "car_hatch", "taxi", "bus", "truck", "ambulance", "firetruck", "train", "plane"}) {
+    auto sprite = pack.find(name);
+    CHECK(sprite != nullptr);
+    if (!sprite) continue;
+    std::set<char32_t> glyphs;
+    size_t cells = 0;
+    for (const auto& row : sprite->frame(false, 0).art) {
+      for (char32_t ch : row) {
+        if (ch == U' ') continue;
+        glyphs.insert(ch);
+        ++cells;
+      }
+    }
+    CHECK(glyphs.size() >= 6 && cells > 20);
+    CHECK(sprite->props().num("backing", 0) >= 0.4);
+  }
+  CHECK(pack.find("plane")->width() >= 26 && pack.find("plane")->height() >= 6);  // a fuselage with a wing above and below it
+  CHECK(pack.find("firetruck")->width() >= 16 && pack.find("train")->height() >= 4);
+}
+
+TEST(side_streets_run_off_into_the_city_and_cars_turn_into_and_out_of_them) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  CHECK(world.avenues().size() >= 1);
+  World narrow(pack, pack.scene("city"), 50, 40, 3);
+  CHECK(narrow.avenues().empty());  // no room for a side street
+  World low(pack, pack.scene("city"), 150, 14, 3);
+  CHECK(low.avenues().empty());
+  // Nothing stands in the mouth of a side street, and the street is drawn: dashes up the middle and
+  // a crossing where it meets the main street.
+  for (const auto& a : world.avenues()) {
+    for (auto& e : world.entities()) {
+      if (e->dead || e->life || e->vx != 0 || !e->grounded || e->width() < 2) continue;
+      CHECK(e->x + e->width() <= a.cx - a.halfW - 3 || e->x >= a.cx + a.halfW + 3);
+    }
+  }
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  Frame f;
+  {
+    World bare(pack, pack.scene("city"), 150, 40, 3);  // the same streets with nobody on them
+    bare.entities().clear();
+    bare.setHour(12);
+    bare.setTimeMode(World::TimeMode::Day);
+    bare.render(f);
+  }
+  const auto& a = world.avenues().front();
+  int dashes = 0, crossing = 0;
+  for (int y = world.seabedY() - a.depth; y < world.seabedY() - 1; ++y) dashes += f.at(a.cx, y).ch == U':' ? 1 : 0;
+  for (int x = a.cx - a.halfW; x <= a.cx + a.halfW; ++x) crossing += f.at(x, world.seabedY() - 1).ch == U'=' ? 1 : 0;
+  CHECK(dashes >= 1);              // the dashed middle line up the side street
+  CHECK(crossing >= a.halfW);      // and a wide zebra crossing where it meets the main street
+  CHECK(a.halfW >= 6 && a.depth <= 7);  // a broad crossing, and a street that ends quickly
+  bool turnedIn = false, up = false, down = false, out = false, back = false;
+  for (int i = 0; i < 20 * 150; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->driveState == 1) turnedIn = true;
+      if (e->driveState == 2) {
+        up = true;
+        const int mid = static_cast<int>(e->x + e->width() / 2.0);
+        bool inAvenue = false;
+        for (const auto& av : world.avenues()) inAvenue |= std::abs(mid - av.cx) <= 1;
+        CHECK(inAvenue);                               // up the side street, not across the buildings
+        CHECK(e->y + e->height() - 1 <= world.seabedY());  // out of the main road, heading up
+      }
+      if (e->driveState == 3) down = true;
+      if (e->driveState == 4) out = true;
+      if (e->driveState == 0 && e->driveSpeed > 0 && e->driveAvenue == -1 && e->vx * e->driveDir > 0) back = true;
+    }
+  }
+  CHECK(turnedIn && up && down && out && back);  // in, up, down, out, and on along the main road
+}
+
+TEST(sometimes_the_fire_gets_out_of_hand_spreads_and_burns_buildings_down_which_are_rebuilt_slowly) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 200, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  world.forceFireOutcome(true);
+  CHECK(world.triggerRare(RarePick::Common));
+  size_t mostTroubled = 0, mostRuined = 0;
+  double engineLeft = -1, lastBurn = -1, allRebuilt = -1;
+  bool cordonedWhileRuined = false, sprayedNoEffect = false;
+  for (int i = 0; i < 20 * 240; ++i) {
+    world.step(0.05);
+    const double t = i * 0.05;
+    mostTroubled = std::max(mostTroubled, world.troubledBuildings());
+    mostRuined = std::max(mostRuined, world.ruinedBuildings());
+    if (world.fireBurning()) lastBurn = t;
+    cordonedWhileRuined |= world.ruinedBuildings() > 0 && world.cordoned();
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "firetruck") continue;
+      sprayedNoEffect |= e->driveState == 1 && world.ruinedBuildings() == 0 && world.fireBurning();
+      if (e->driveState == 2 && engineLeft < 0) {
+        engineLeft = t;
+        CHECK(!world.fireBurning());  // it goes as soon as the last fire is out
+      }
+    }
+    if (allRebuilt < 0 && world.troubledBuildings() == 0 && t > 30) allRebuilt = t;
+  }
+  CHECK(mostTroubled >= 4 && mostTroubled <= 6);  // the first building and 3 to 5 more
+  CHECK(mostRuined >= 3);                         // burnt down, not just burning
+  CHECK(sprayedNoEffect && cordonedWhileRuined);
+  CHECK(engineLeft > 0 && engineLeft >= lastBurn - 0.5 && engineLeft < lastBurn + 3);  // as soon as it is out
+  CHECK(allRebuilt > lastBurn + 40);   // and it takes a long while to rebuild everything
+  CHECK(world.troubledBuildings() == 0 && !world.cordoned() && world.fireLevel() == 0);
+  // The rubble is low: a burnt-down building shows only a few rows.
+  World ruin(pack, pack.scene("city"), 200, 40, 3);
+  ruin.setTimeMode(World::TimeMode::Day);
+  ruin.forceFireOutcome(true);
+  ruin.triggerRare(RarePick::Common);
+  for (int i = 0; i < 20 * 70 && ruin.ruinedBuildings() == 0; ++i) ruin.step(0.05);
+  CHECK(ruin.ruinedBuildings() > 0);
+  for (int i = 0; i < 20 * 6; ++i) ruin.step(0.05);  // it has fallen in
+  Frame f;
+  ruin.render(f);
+  int rubble = 0;
+  for (int y = 0; y < ruin.height(); ++y) for (int x = 0; x < 200; ++x) rubble += (f.at(x, y).ch == U'#' || f.at(x, y).ch == U'%') && f.at(x, y).bg.r < 80 ? 1 : 0;
+  CHECK(rubble > 6);
+}
+
+TEST(cars_in_the_side_streets_pass_under_the_viaduct) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  bool under = false;
+  for (int i = 0; i < 20 * 150 && !under; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->driveState < 1 || e->driveState > 3) continue;
+      CHECK(e->z == 24);  // drawn after the side street and before the viaduct
+      const int rail = world.railRow();
+      if (e->y <= rail && e->y + e->height() - 1 >= rail) {  // the car is level with the deck
+        Frame f;
+        world.render(f);
+        const int x = static_cast<int>(e->x + e->width() / 2.0);
+        if (x >= 0 && x < 150) {
+          CHECK(f.at(x, rail).ch == U'=');  // the deck is in front of it
+          under = true;
+        }
+      }
+    }
+  }
+  CHECK(under);
+}
+
+TEST(a_fire_engine_parks_at_the_fire_sprays_it_and_the_site_is_cordoned_off_until_it_is_renovated) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  world.forceFireOutcome(false);
+  CHECK(world.triggerRare(RarePick::Common));
+  CHECK(!world.cordoned());
+  bool parked = false, sprayed = false, left = false, cordonWhileLeft = false, everCordoned = false, barriers = false;
+  size_t waiting = 0;
+  for (int i = 0; i < 20 * 100; ++i) {
+    std::vector<std::pair<Entity*, double>> before;  // left edges before the step
+    for (auto& e : world.entities()) before.push_back({e.get(), e->x});
+    world.step(0.05);
+    if (world.cordoned()) everCordoned = true;
+    const double lo = world.cordonCenter() - world.cordonHalfWidth(), hi = world.cordonCenter() + world.cordonHalfWidth();
+    if (world.cordoned()) barriers |= world.countSprite("barrier") >= 8;  // across road and sidewalks at both ends
+    else CHECK(world.countSprite("barrier") == 0 || !everCordoned);       // and gone when it is open again
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "firetruck") {
+        if (e->driveState == 1) {
+          parked = true;
+          CHECK(e->vx == 0 && world.cordoned());
+          CHECK(std::fabs(e->x + e->width() / 2.0 - world.cordonCenter()) < 3);  // right in front of the building
+          sprayed |= world.countSprite("water") > 0 && world.fireLevel() > 0;
+        }
+        if (e->driveState == 2) {
+          left = true;
+          cordonWhileLeft |= world.cordoned();  // the engine goes as soon as the fire is out; the site stays closed
+          CHECK(!world.fireBurning());
+        }
+        continue;
+      }
+      if (!world.cordoned() || !e->grounded || e->vx == 0 || e->driveState != 0 || e->sprite->name() == "barrier") continue;
+      for (const auto& b : before) {
+        if (b.first != e.get()) continue;
+        const bool was = b.second < hi && b.second + e->width() > lo, now = e->x < hi && e->x + e->width() > lo;
+        if (!was && now) CHECK(false);  // reached into the site
+      }
+    }
+    if (world.cordoned()) {
+      for (auto& e : world.entities()) waiting += (!e->dead && e->grounded && e->pauseLeft > 0 && e->sprite->name() != "firetruck") ? 1 : 0;
+    }
+  }
+  CHECK(parked && sprayed && left && cordonWhileLeft && everCordoned && barriers);
+  CHECK(waiting > 0);  // somebody had to wait at the edge
+  CHECK(!world.cordoned() && world.troubledBuildings() == 0 && world.countSprite("barrier") == 0);
+}
+
+TEST(cars_show_the_side_the_back_or_the_front_depending_on_how_they_face_the_camera) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  std::set<size_t> seen;
+  for (int i = 0; i < 20 * 150; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->frameCount() < 5) continue;
+      seen.insert(e->frame);
+      if (e->driveState == 0 && e->driveAvenue != -2 && e->driveAvenue < 0 && e->vx != 0) CHECK(e->frame == 0);  // side view on the road
+      if (e->driveState == 2) CHECK(e->frame == 2);                       // driving away: from behind
+      if (e->driveState == 1) CHECK(e->frame <= 2);                       // turning away: side, three-quarters, behind
+      if (e->driveState == 3) CHECK(e->frame >= 3);                       // coming: from the front
+      if (e->driveState == 4) CHECK(e->frame == 0 || e->frame == 3);      // turning out: three-quarters, then side
+    }
+  }
+  CHECK(seen.size() == 5);  // every view is used
+}
+
+TEST(traffic_peaks_in_the_morning_and_evening_rush_hours) {
+  AssetPack pack = AssetPack::embedded();
+  auto vehicles = [&](double hour) {
+    World world(pack, pack.scene("city"), 200, 40, 3);
+    world.setTimeMode(World::TimeMode::Realtime);
+    world.setHour(hour);
+    for (int i = 0; i < 20 * 150; ++i) world.step(0.05);  // long enough for the street to fill or empty
+    size_t n = 0;
+    for (auto& e : world.entities()) {
+      const std::string& name = e->sprite->name();
+      n += (!e->dead && (name == "car_sedan" || name == "car_hatch" || name == "taxi" || name == "bus" || name == "truck")) ? 1 : 0;
+    }
+    return n;
+  };
+  const size_t morning = vehicles(8), midday = vehicles(13), evening = vehicles(17.5), night = vehicles(3);
+  CHECK(morning > midday + 2 && evening > midday + 2);  // the rush hours are busier than midday
+  CHECK(midday > night);                                // and midday busier than the night
+  AssetPack p2 = AssetPack::embedded();
+  World world(p2, p2.scene("city"), 200, 40, 3);
+  world.setTimeMode(World::TimeMode::Realtime);
+  world.setHour(8);
+  CHECK(world.trafficLevel() > 0.95);
+  world.setHour(13);
+  CHECK(world.trafficLevel() < 0.5);
+  world.setHour(3);
+  CHECK(world.trafficLevel() < 0.1);
+}
+
+TEST(lettering_on_a_sprite_stays_readable_when_the_sprite_is_mirrored) {
+  std::string err;
+  auto s = Sprite::parse("name: t\n--- art\n<[TAXI]>\n--- mask\nabcdefgh\n", err);
+  CHECK(s != nullptr);
+  CHECK(s->frame(true, 0).art[0] == U"<[TAXI]>");   // not "<[IXAT]>"
+  CHECK(s->frame(true, 0).mask[0] == U"hgfedcba" || s->frame(true, 0).mask[0].size() == 8);
+}
+
+TEST(there_are_not_too_many_vehicles_and_the_front_row_leaves_gaps_with_streets_behind) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 40, 3);
+  size_t vehicles = 0;
+  for (auto& e : world.entities()) {
+    const std::string& n = e->sprite->name();
+    vehicles += (n == "car_sedan" || n == "car_hatch" || n == "taxi" || n == "bus" || n == "truck") ? 1 : 0;
+  }
+  CHECK(vehicles <= 16);
+  World wide(pack, pack.scene("city"), 220, 40, 3);
+  CHECK(!wide.glimpses().empty());  // a street seen behind a gap in the front row
+  Frame f;
+  {
+    World bare(pack, pack.scene("city"), 220, 40, 3);
+    bare.entities().clear();
+    bare.setHour(12);
+    bare.setTimeMode(World::TimeMode::Day);
+    bare.render(f);
+    for (const auto& g : bare.glimpses()) {
+      int dashes = 0;
+      for (int y = bare.seabedY() - g.depth; y < bare.seabedY(); ++y) dashes += f.at(g.cx, y).ch == U':' ? 1 : 0;
+      CHECK(dashes >= 1);  // it shows between the buildings, and is not hidden by them
+    }
+  }
+}
+
+TEST(emergency_vehicles_have_large_light_bars_that_blink_between_red_and_blue) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"ambulance", "firetruck"}) {
+    auto sprite = pack.find(name);
+    CHECK(sprite != nullptr && sprite->frameCount() == 2);
+    if (!sprite || sprite->frameCount() != 2) continue;
+    auto count = [&](size_t frame, char32_t letter) {
+      size_t n = 0;
+      for (size_t row = 0; row < 2; ++row) {  // the bar is the top two rows
+        for (char32_t m : sprite->frame(false, frame).mask[row]) n += m == letter ? 1 : 0;
+      }
+      return n;
+    };
+    CHECK(count(0, U'r') >= 6 && count(0, U'b') >= 6);  // twelve cells of light, half red and half blue
+    CHECK(count(0, U'r') == count(1, U'b') && count(0, U'b') == count(1, U'r'));  // and they swap
+  }
+  CHECK(pack.find("firetruck")->props().str("tag") == "wail" && pack.find("ambulance")->props().str("tag") == "siren");
+}
+
+TEST(the_skyline_is_varied_in_height_look_and_roof) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 200, 44, 3);
+  Frame f;
+  world.setHour(12);
+  world.render(f);
+  // The silhouette: the highest non-sky row of every column; it should differ a lot between columns.
+  const Rgb sky = pack.scene("city")->skyLow;
+  std::set<int> tops;
+  for (int x = 0; x < 200; ++x) {
+    int top = world.seabedY();
+    for (int y = 0; y < world.seabedY(); ++y) {
+      const Cell& c = f.at(x, y);
+      if (c.bg != sky && c.bg.r < 215 && c.bg.b < 200 && std::abs(c.bg.r - c.bg.b) < 90 && c.ch != U'*') { top = y; break; }
+    }
+    tops.insert(top);
+  }
+  CHECK(tops.size() >= 8);  // many different heights
+}
+
+TEST(the_cities_windows_and_street_lamps_light_up_at_night) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  world.entities().clear();  // nobody in the way of the lamps
+  auto render = [&](double hour) {
+    world.setTimeMode(World::TimeMode::Cycle);
+    world.setHour(hour);
+    Frame f;
+    world.render(f);
+    return f;
+  };
+  auto litWindows = [&](const Frame& f) {
+    int n = 0;
+    for (int y = 0; y < world.seabedY(); ++y) {
+      for (int x = 0; x < 130; ++x) n += f.at(x, y).bg == Rgb{255, 214, 120} ? 1 : 0;
+    }
+    return n;
+  };
+  auto brightness = [](Rgb c) { return c.r + c.g + c.b; };
+  const Frame day = render(12), night = render(0);
+  CHECK(litWindows(day) == 0);    // by day the windows are just glass
+  CHECK(litWindows(night) > 40);  // by night many are lit
+  // The cell under the first street lamp (column 6) against one halfway between two lamps.
+  const int y = world.seabedY() + 2;
+  CHECK(brightness(night.at(6, y).bg) > brightness(night.at(14, y).bg) + 30);  // a pool of light at night
+  CHECK(std::abs(brightness(day.at(6, y).bg) - brightness(day.at(14, y).bg)) < 20);
+}
+
+TEST(trains_run_on_the_railway_and_planes_come_in_to_land_behind_the_skyline) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  CHECK(world.countSprite("station") == 1);
+  bool train = false, plane = false;
+  for (int i = 0; i < 20000 && !(train && plane); ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "train") {
+        train = true;
+        CHECK(e->y + e->height() == world.railRow());  // on the rails
+      }
+      if (e->sprite->name() == "plane") {
+        plane = true;
+        CHECK(e->vy > 0 && e->z >= 25);  // sinking, and drawn behind the skyline
+      }
+    }
+  }
+  CHECK(train && plane);
+}
+
+TEST(a_skyscraper_burns_with_smoke_and_a_fire_engine_then_is_renovated_quickly) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  const size_t buildings = world.buildingCount();
+  CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);
+  world.forceFireOutcome(false);  // the fire engine wins
+  CHECK(world.triggerRare(RarePick::Common));
+  CHECK(!world.triggerRare(RarePick::Common));  // one at a time
+  double fiercest = 0;
+  bool smoke = false, engine = false, scaffold = false, flames = false;
+  size_t burning = 0;
+  for (int i = 0; i < 20 * 45; ++i) {  // 45 s
+    world.step(0.05);
+    fiercest = std::max(fiercest, world.fireLevel());
+    smoke |= world.countSprite("smoke") > 0;
+    engine |= world.countSprite("firetruck") > 0;
+    burning = std::max(burning, world.troubledBuildings());
+    if (i % 10 == 0 && world.fireLevel() > 0.9) {
+      Frame f;
+      world.render(f);
+      int fire = 0;  // flame glyphs in yellow-orange
+      for (int y = 0; y < world.seabedY(); ++y) {
+        for (int x = 0; x < 130; ++x) fire += (f.at(x, y).ch != U' ' && f.at(x, y).fg.r == 255 && f.at(x, y).fg.g >= 150 && f.at(x, y).fg.b <= 110) ? 1 : 0;
+      }
+      flames |= fire > 2;
+    }
+    scaffold |= world.fireLevel() == 0 && world.troubledBuildings() == 1 && i > 20 * 8;
+  }
+  CHECK(fiercest == 1.0 && smoke && engine && flames);  // it rages, smokes, the engine comes
+  CHECK(burning == 1);                                  // one building at a time
+  CHECK(scaffold);                                      // then scaffolding goes up
+  CHECK(world.troubledBuildings() == 0 && world.fireLevel() == 0);  // renovated within the minute
+  CHECK(world.buildingCount() == buildings);
+  CHECK(world.triggerRare(RarePick::Common));  // and it can happen again
+}
+
+TEST(the_session_menu_shows_the_version_and_the_copyright) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  s.handle(Action::Menu);
+  Frame f;
+  s.render(f);
+  const std::string text = f.toText();
+  CHECK(text.find(std::string("diorascii ") + DIORASCII_VERSION) != std::string::npos);
+  CHECK(text.find("Copyright (c) 2026 Christian Ahrens") != std::string::npos);
 }
 
 TEST(session_menu_consumes_navigation_while_open_and_quit_comes_from_keys_or_menu) {
@@ -2704,6 +3633,446 @@ TEST(session_restart_uses_a_new_seed_and_the_action_keys_reach_the_world) {
   CHECK(s.world().entityCount() >= before);  // the scene's action ran without a crash
   s.handle(Action::Rare);
   s.step(0.05);
+}
+
+TEST(every_scene_has_a_second_catastrophe_that_comes_one_time_in_five) {
+  AssetPack pack = AssetPack::embedded();
+  struct Case { const char* scene; const char* first; const char* second; };
+  for (const Case& c : {Case{"aquarium", "kraken", "submarine"}, Case{"forest", "thundercloud", "flood"}, Case{"desert", "sandworm", "helicopter"}, Case{"mountains", "avalanche", "yeti"}, Case{"city", "blaze", "lizard_titan"}, Case{"moon", "alien", "asteroid"}}) {
+    auto scene = pack.scene(c.scene);
+    CHECK(scene && scene->rare.size() == 2 && scene->rare[0].sprite == c.first && scene->rare[1].sprite == c.second);
+    if (!scene || scene->rare.size() != 2) continue;
+    CHECK(std::fabs(scene->rare[1].weight / (scene->rare[0].weight + scene->rare[1].weight) - 0.2) < 1e-9);
+    // The pick can be told: the common one, or the second one.
+    World common(pack, scene, 160, 36, 3), other(pack, scene, 160, 36, 3);
+    CHECK(common.triggerRare(RarePick::Common) && countSprite(common, c.first) == 1 && countSprite(common, c.second) == 0);
+    CHECK(other.triggerRare(RarePick::Other) && countSprite(other, c.second) == 1 && countSprite(other, c.first) == 0);
+    // A weighted pick sends the second one about one time in five.
+    int seconds = 0;
+    const int runs = 150;
+    for (int seed = 1; seed <= runs; ++seed) {
+      World w(pack, scene, 60, 30, static_cast<uint64_t>(seed));
+      w.triggerRare();
+      seconds += countSprite(w, c.second) > 0 ? 1 : 0;
+    }
+    CHECK(seconds >= runs * 10 / 100 && seconds <= runs * 32 / 100);
+  }
+}
+
+TEST(the_second_catastrophe_can_be_summoned_from_the_session_with_its_own_key_and_menu_entry) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  config.seed = 5;
+  config.scene = 0;  // the aquarium comes first
+  Session s = makeSession(pack, config);
+  s.handle(Action::RareOther);
+  s.step(0.05);
+  CHECK(s.world().countSprite("submarine") == 1 && s.world().countSprite("kraken") == 0);
+  Session menu = makeSession(pack, config);
+  menu.handle(Action::Menu);
+  Frame f;
+  menu.render(f);
+  CHECK(f.toText().find("Other rare event") != std::string::npos);
+}
+
+TEST(a_leaking_submarine_poisons_the_whole_sea_and_everything_alive_in_it_dies) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("aquarium"), 160, 36, 3);
+  size_t life = 0;
+  for (auto& e : world.entities()) life += e->life;
+  CHECK(life > 15);
+  world.triggerRare(RarePick::Other);
+  double peak = 0;
+  size_t alive = life, fewest = life;
+  bool tinted = false, gone = false, trailBehind = false;
+  for (int i = 0; i < 2400; ++i) {
+    world.step(0.05);
+    if (!trailBehind && countSprite(world, "submarine") == 1) {  // it drives on, the poison spreads behind it
+      for (auto& e : world.entities()) {
+        if (e->sprite->name() != "submarine") continue;
+        const double front = e->movingRight() ? e->x + e->width() : e->x;
+        const double back = e->movingRight() ? e->x - 18 : e->x + e->width() + 18;
+        const double ahead = e->movingRight() ? front + 18 : front - 18;
+        if (back > 2 && back < world.width() - 2 && ahead > 2 && ahead < world.width() - 2) {
+          Frame f;
+          world.render(f);
+          const int y = world.surfaceY() + 4;
+          const Cell& b = f.at(static_cast<int>(back), y);
+          const Cell& a = f.at(static_cast<int>(ahead), y);
+          trailBehind = b.bg.g > b.bg.b + 20 && !(a.bg.g > a.bg.b + 20);
+        }
+      }
+    }
+    peak = std::max(peak, world.toxinLevel());
+    alive = 0;
+    for (auto& e : world.entities()) alive += (e->life && !e->dead);
+    fewest = std::min(fewest, alive);
+    if (world.toxinLevel() > 0.99 && !tinted) {  // the sea has turned green where the cloud lies
+      Frame f;
+      world.render(f);
+      const Cell& c = f.at(80, world.surfaceY() + 4);
+      tinted = c.bg.g > c.bg.b;
+    }
+    gone |= i > 100 && countSprite(world, "submarine") == 0 && world.toxinLevel() == 0;
+  }
+  CHECK(peak > 0.99);
+  CHECK(fewest == 0 && world.killedCount() >= life);  // all of it, and it was the cloud that did it
+  CHECK(tinted && trailBehind);
+  CHECK(gone && alive >= life / 2);  // the cloud and the wreck are gone, and the sea fills up again
+}
+
+TEST(a_flood_tears_everything_off_the_bank_and_leaves_mud_and_the_land_bare_for_a_while) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("forest"), 160, 36, 3);
+  auto plants = [&] {
+    size_t n = 0;
+    for (auto& e : world.entities()) n += (e->grounded && !e->life && !e->dead && e->sprite->name() != "flood");
+    return n;
+  };
+  const size_t before = plants();
+  CHECK(before > 30);
+  world.triggerRare(RarePick::Other);
+  double peak = 0, muddy = 0;
+  size_t fewest = before;
+  bool rained = false, water = false;
+  for (int i = 0; i < 700; ++i) {  // 35 seconds: the water has come and gone
+    world.step(0.05);
+    peak = std::max(peak, world.floodLevel());
+    fewest = std::min(fewest, plants());
+    rained |= world.raining();
+    if (i == 200) {  // the water stands over the land
+      Frame f;
+      world.render(f);
+      const Cell& c = f.at(80, world.height() - 2);
+      water = c.bg.r > c.bg.b;  // brown, not the blue of the stream
+    }
+  }
+  for (int x = 0; x < world.width(); ++x) muddy = std::max(muddy, world.mudAt(x));
+  CHECK(peak > 0.9 && rained && water);
+  CHECK(fewest <= before / 10);          // the trees, bushes and flowers are torn off
+  CHECK(muddy > 0.5);                    // the mud is still there
+  CHECK(plants() < before / 2);          // and not much has grown back yet
+  for (int i = 0; i < 2400; ++i) world.step(0.05);  // two more minutes
+  CHECK(plants() >= before * 9 / 10);    // it is replanted in the end
+  double mud = 0;
+  for (int x = 0; x < world.width(); ++x) mud = std::max(mud, world.mudAt(x));
+  CHECK(mud == 0);
+}
+
+TEST(poachers_in_a_helicopter_shoot_down_the_life_of_the_desert_one_by_one_and_leave) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  size_t life = 0;
+  for (auto& e : world.entities()) life += e->life;
+  CHECK(life > 8);
+  world.triggerRare(RarePick::Other);
+  size_t alive = life, fewest = life, between = 0;
+  double rotor = 0;
+  bool left = false;
+  for (int i = 0; i < 2000; ++i) {
+    world.step(0.05);
+    alive = 0;
+    for (auto& e : world.entities()) alive += (e->life && !e->dead);
+    fewest = std::min(fewest, alive);
+    between += (alive > 0 && alive < life) ? 1 : 0;
+    rotor = std::max(rotor, world.rotorLevel());
+    left |= i > 100 && countSprite(world, "helicopter") == 0;
+  }
+  CHECK(fewest <= life / 8);                      // it hunts down (nearly) all of it
+  CHECK(between > 100);                           // one after the other, not all at once
+  CHECK(world.shotCount() >= life * 8 / 10);      // each one with a shot
+  CHECK(world.crushCount() == 0);                 // which are shots, not bites
+  CHECK(rotor > 0.9 && left);                     // the rotor is heard, and the poachers go
+  CHECK(alive >= life / 2);                       // and the animals come back later
+}
+
+TEST(a_giant_yeti_comes_over_the_highest_ridge_and_mauls_the_animals_on_the_ground) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("mountains"), 140, 36, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  size_t ground = 0;
+  for (auto& e : world.entities()) ground += (e->life && e->grounded);
+  CHECK(ground > 5);
+  world.triggerRare(RarePick::Other);
+  world.step(0.05);
+  int peak = 0;
+  for (int x = 0; x < world.width(); ++x) {
+    if (world.ridgeRow(x) < world.ridgeRow(peak)) peak = x;
+  }
+  bool atPeak = false;
+  size_t left = ground, tall = 0;
+  double roar = 0;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() == "yeti") {
+      atPeak = std::fabs(e->x + e->width() / 2.0 - peak) < 3;  // it starts on the ridge
+      tall = static_cast<size_t>(e->height());
+    }
+  }
+  CHECK(atPeak && tall >= 12);                  // and it is much bigger than the bear
+  bool hiddenAtFirst = false, shownLater = false;
+  double highestFoot = 1e9, lowestFoot = 0;
+  for (auto& e : world.entities()) hiddenAtFirst |= e->sprite->name() == "yeti" && e->behindRidge;
+  for (int i = 0; i < 2000; ++i) {
+    world.step(0.05);
+    for (auto& e : world.entities()) {
+      if (e->sprite->name() != "yeti") continue;
+      if (!e->behindRidge) {
+        shownLater = true;
+        highestFoot = std::min(highestFoot, e->y + e->height());
+        lowestFoot = std::max(lowestFoot, e->y + e->height());
+      }
+    }
+    size_t now = 0;
+    for (auto& e : world.entities()) now += (e->life && e->grounded && !e->dead);
+    left = std::min(left, now);
+    roar = std::max(roar, world.yetiLevel());
+  }
+  const double descended = lowestFoot - highestFoot;
+  CHECK(left == 0 && world.killedCount() >= ground);
+  CHECK(hiddenAtFirst && shownLater && descended >= 8);  // up over the ridge from behind, then down into the valley
+  CHECK(roar > 0.8 && countSprite(world, "yeti") == 0);  // it has gone again
+}
+
+TEST(a_giant_lizard_and_a_winged_monster_fight_in_the_city_and_leave_it_in_ruins_that_are_rebuilt) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 150, 38, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.triggerRare(RarePick::Other));
+  size_t most = 0, ruins = 0;
+  bool both = false, beam = false, blue = false, violet = false, outwardRebuild = true, fledEverything = false,
+       backAfterwards = false, quietAfterFall = true;
+  double loudestFlames = 0;
+  bool inFront = true;
+  std::vector<double> spans;
+  double firstSpan = 0, widestSpan = 0, middle = 0;
+  double level = 0;
+  int bothUntil = 0, over = -1;
+  for (int i = 0; i < 4000; ++i) {
+    world.step(0.05);
+    most = std::max(most, world.troubledBuildings());
+    ruins = std::max(ruins, world.ruinedBuildings());
+    level = std::max(level, world.titanLevel());
+    {
+      const std::vector<int> cols = world.troubledColumns();
+      if (!cols.empty()) {
+        const double span = *std::max_element(cols.begin(), cols.end()) - *std::min_element(cols.begin(), cols.end());
+        if (spans.empty()) firstSpan = span;
+        spans.push_back(span);
+        widestSpan = std::max(widestSpan, span);
+        if (cols.size() >= most) {  // the middle of the ruins
+          double sum = 0;
+          for (int c : cols) sum += c;
+          middle = sum / static_cast<double>(cols.size());
+        }
+        // While it is rebuilt, the middle must be done before the outskirts.
+        if (countSprite(world, "winged_titan") == 0 && cols.size() + 8 < most && cols.size() > most / 4) {
+          for (int c : cols) {
+            if (std::fabs(c - middle) < 6) outwardRebuild = false;
+          }
+        }
+      }
+    }
+    {
+      size_t street = 0;  // people and vehicles on the main street
+      for (const char* n : {"walker_front", "walker_back", "kid", "jogger", "cyclist", "car_sedan", "car_hatch", "taxi", "bus", "truck"}) {
+        street += countSprite(world, n);
+      }
+      if (i > 700 && countSprite(world, "winged_titan") > 0 && street == 0) fledEverything = true;  // mid-fight: none left
+      if (i > 3500 && street > 3) backAfterwards = true;
+    }
+    for (auto& e : world.entities()) {  // the monsters stand in front of the trees, shops and benches of the street
+      const std::string n = e->sprite->name();
+      if (i < 10 || (n != "lizard_titan" && n != "winged_titan")) continue;
+      for (auto& o : world.entities()) {
+        const std::string m = o->sprite->name();
+        if (m == "oak" || m == "bush" || m == "pine_big" || m == "bench" || m == "kiosk") inFront &= e->z < o->z;
+      }
+    }
+    loudestFlames = std::max(loudestFlames, world.flameLevel());
+    if (countSprite(world, "winged_titan") == 0 && i > 300 && ambientFor(world).winged != 0.0f) quietAfterFall = false;
+    const bool pair = countSprite(world, "lizard_titan") > 0 && countSprite(world, "winged_titan") > 0;
+    both |= pair;
+    bothUntil = pair ? i : bothUntil;
+    if (over < 0 && countSprite(world, "lizard_titan") == 0) over = i;
+    beam |= world.tongueCount() > 0;
+    if (world.tongueCount() > 0 && i % 3 == 0) {  // flames of two colors: the lizard's blue and the other's violet
+      Frame f;
+      world.render(f);
+      for (int y = 0; y < f.height(); ++y) {
+        for (int x = 0; x < f.width(); ++x) {
+          const Cell& c = f.at(x, y);
+          if (c.ch != U'*' && c.ch != U'#' && c.ch != U'%' && c.ch != U'&' && c.ch != U'@') continue;
+          blue |= c.fg.b > 200 && c.fg.r < 140 && c.fg.g < 190 && c.fg.b > c.fg.g + 40;
+          violet |= c.fg.r > 140 && c.fg.b > 200 && c.fg.g < 130;
+        }
+      }
+    }
+  }
+  CHECK(both && beam && blue && violet);
+  CHECK(fledEverything && backAfterwards && inFront);
+  CHECK(loudestFlames > 0.9 && ambientFor(world).flames == 0.0f && ambientFor(world).winged == 0.0f);
+  CHECK(quietAfterFall);  // once the winged monster has fallen, its sound is gone  // the traffic and the people ran off, and came back later
+  // The devastation spreads out from where they fight, as soon as they fight, and the rebuilding follows from there.
+  CHECK(spans.size() > 10 && firstSpan < widestSpan / 2 && widestSpan > 60);
+  CHECK(outwardRebuild);
+  CHECK(bothUntil > 400);                     // they fight for a good while (over 20 seconds)
+  CHECK(ruins >= 12 && most >= 12);           // the city is in ruins
+  CHECK(level > 0.8);
+  CHECK(over > bothUntil);                    // the winner walks on afterwards
+  CHECK(world.troubledBuildings() == 0);      // and everything has been rebuilt by the end
+  CHECK(world.triggerRare(RarePick::Common)); // the slot is free again
+}
+
+TEST(a_big_meteor_approaches_from_afar_growing_and_strikes_across_the_whole_width_of_the_moon) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("moon"), 140, 30, 3);
+  world.setHour(12);
+  world.setTimeMode(World::TimeMode::Day);
+  size_t grounded = 0;
+  for (auto& e : world.entities()) grounded += (e->grounded && !e->dead);
+  CHECK(grounded > 3);
+  const unsigned impacts = world.impactCount();
+  world.triggerRare(RarePick::Other);
+  world.step(0.05);
+  size_t firstFrame = 99, lastFrame = 0;
+  double highest = 0, rumble = 0;
+  bool struck = false;
+  for (int i = 0; i < 400 && !struck; ++i) {
+    for (auto& e : world.entities()) {
+      if (e->sprite->name() != "asteroid") continue;
+      if (i == 0) firstFrame = e->frame;
+      lastFrame = e->frame;
+      highest = std::max(highest, e->y + e->height() / 2.0);
+    }
+    rumble = std::max(rumble, world.asteroidLevel());
+    world.step(0.05);
+    struck = world.impactCount() > impacts;
+  }
+  CHECK(struck && firstFrame == 0 && lastFrame >= 6);  // a speck first, a giant boulder at the end
+  CHECK(rumble > 0.9 && world.asteroidLevel() == 0);
+  CHECK(world.flashing());                              // the whole screen flashes
+  for (auto& e : world.entities()) {  // everything that stood on the ground is wrecked (the flying debris is not)
+    const std::string n = e->sprite->name();
+    CHECK(!(n == "rover" || n == "flag" || n == "rock" || n == "lander") || e->dead);
+  }
+  CHECK(world.deepestCrater() >= 1.0 && world.craterRows(0) >= 1 && world.craterRows(world.width() - 1) >= 1);  // a crater over the entire width
+  size_t dust = 0;
+  double leftmost = 1e9, rightmost = -1e9;
+  for (auto& e : world.entities()) {
+    if (e->sprite->name() != "dust" || e->dead) continue;
+    ++dust;
+    leftmost = std::min(leftmost, e->x);
+    rightmost = std::max(rightmost, e->x);
+  }
+  CHECK(dust > 30 && leftmost < 10 && rightmost > world.width() - 10);  // the impact is felt over the entire width
+  for (int i = 0; i < 80; ++i) world.step(0.05);
+  CHECK(world.triggerRare(RarePick::Common));
+}
+
+TEST(the_second_catastrophes_have_their_own_sound_the_hiss_the_rush_the_rotor_and_the_roars) {
+  constexpr int kRate = 48000;  // the hiss lives above what a low sample rate can carry
+  auto rms = [&](const AmbientParams& p) {
+    Ambience a(kRate, 1);
+    std::vector<float> buf(static_cast<size_t>(kRate) * 6 * 2);
+    a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+    double sum = 0;
+    for (size_t i = buf.size() / 2; i < buf.size(); ++i) sum += double(buf[i]) * buf[i];
+    return std::sqrt(sum / double(buf.size() / 2));
+  };
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Mountains, AmbientKind::City, AmbientKind::Moon}) {
+    AmbientParams calm;
+    calm.kind = kind;
+    AmbientParams menace = calm;
+    menace.menace = 1;
+    CHECK(rms(menace) > rms(calm) * 1.5);
+    CHECK(rms(menace) < 0.3);  // loud, but well below a storm
+  }
+  // The monsters' streams of fire roar, and the winged one's screech is only heard while it lives.
+  {
+    AmbientParams fight;
+    fight.kind = AmbientKind::City;
+    fight.menace = 1;
+    fight.winged = 1;
+    AmbientParams fire = fight;
+    fire.flames = 1;
+    CHECK(rms(fire) > rms(fight) * 1.4);
+    // The screech is high: with the winged one gone the sound has much less of what lies above a few hundred Hz.
+    auto brightness = [&](const AmbientParams& p) {
+      Ambience a(kRate, 1);
+      std::vector<float> buf(static_cast<size_t>(kRate) * 30 * 2);
+      a.render(p, buf.data(), static_cast<int>(buf.size() / 2));
+      double s = 0, d = 0;
+      for (size_t i = 2; i < buf.size(); i += 2) {
+        s += double(buf[i]) * buf[i];
+        d += (double(buf[i]) - buf[i - 2]) * (double(buf[i]) - buf[i - 2]);
+      }
+      return std::sqrt(d / s);
+    };
+    AmbientParams alone = fight;
+    alone.winged = 0;
+    CHECK(brightness(fight) > brightness(alone) * 1.1);
+  }
+  // A rifle shot cracks, in the desert only.
+  auto peakAfter = [&](AmbientKind kind, bool shoot) {
+    Ambience a(kRate, 4);
+    AmbientParams p;
+    p.kind = kind;
+    std::vector<float> buf(static_cast<size_t>(kRate) * 2);
+    for (int s = 0; s < 3; ++s) a.render(p, buf.data(), kRate);
+    if (shoot) p.shots += 2;
+    a.render(p, buf.data(), kRate);
+    float pk = 0;
+    for (size_t i = 0; i < static_cast<size_t>(kRate * 0.3) * 2; ++i) pk = std::max(pk, std::fabs(buf[i]));
+    return pk;
+  };
+  CHECK(peakAfter(AmbientKind::Desert, true) > peakAfter(AmbientKind::Desert, false) * 1.5f);
+  CHECK(peakAfter(AmbientKind::Forest, true) < peakAfter(AmbientKind::Forest, false) * 1.2f);
+  // The world feeds it: the strongest of the catastrophes' levels, and the shot count.
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("desert"), 160, 36, 3);
+  CHECK(ambientFor(world).menace == 0.0f);
+  world.triggerRare(RarePick::Other);
+  for (int i = 0; i < 100; ++i) world.step(0.05);
+  CHECK(ambientFor(world).menace > 0.3f && ambientFor(world).shots == world.shotCount());
+}
+
+TEST(the_second_catastrophes_survive_tiny_and_odd_screens_at_every_hour) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"aquarium", "forest", "desert", "mountains", "city", "moon"}) {
+    for (auto [w, h] : {std::pair{1, 1}, std::pair{7, 5}, std::pair{40, 12}, std::pair{83, 25}, std::pair{121, 31}, std::pair{250, 60}}) {
+      for (double hour : {3.0, 12.0, 19.0}) {
+        World world(pack, pack.scene(name), w, h, 7);
+        world.setHour(hour);
+        world.triggerRare(RarePick::Other);
+        Frame f;
+        for (int i = 0; i < 700; ++i) {
+          world.step(0.1);
+          if (i % 70 == 0) world.render(f);
+        }
+        CHECK(f.width() == w && f.height() == h);
+      }
+    }
+  }
+}
+
+TEST(the_second_catastrophes_are_deterministic_per_seed) {
+  AssetPack pack = AssetPack::embedded();
+  for (const char* name : {"aquarium", "forest", "desert", "mountains", "city", "moon"}) {
+    std::string a, b;
+    for (std::string* out : {&a, &b}) {
+      World world(pack, pack.scene(name), 120, 32, 11);
+      world.triggerRare(RarePick::Other);
+      for (int i = 0; i < 500; ++i) world.step(0.1);
+      Frame f;
+      world.render(f);
+      *out = f.toText();
+    }
+    CHECK(a == b);
+  }
 }
 
 int main() {

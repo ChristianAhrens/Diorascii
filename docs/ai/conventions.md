@@ -70,6 +70,17 @@ levels were only measured. Accumulated preferences from the forest iterations:
 - Thunder/flash counters must not trigger on world rebuild or when sound is switched on mid-storm
   (the first counter value is the baseline).
 - Tuned values are single constants; report which knob you changed and in which direction.
+- Sandworm and kraken (2026-11-09, by the owner's ears): bellow (deep, trumpeting) and avalanche squeal
+  accepted; the first crunch "sounded like a shot" (one sharp, decaying burst plus a deep thump), so
+  an event sound is now a series of soft bites with no sharp start; both worm sounds were too loud at
+  first and were halved; keep event sounds well below the storm sounds. Fundamentals below about
+  100 Hz are inaudible on small speakers: put the energy in harmonics above 150 Hz.
+- Train (2026-11-09, owner): the first version ticked (high band-passed clicks); a metro is two low, woody knocks (noise below ~1.3 kHz plus a ~100 Hz thump) every 0.64 s, 0.21 s apart, over a quiet rumble. A test finds the onsets in the output and checks the short-long rhythm.
+- Second catastrophes (2026-11-10, measured only): `menace` sets the level of the hiss, rush, rotor and roars; keep it
+  below about 0.3 RMS (the storms), and the calm-to-menace ratio at least 1.5 at 48 kHz (the hiss does not exist at
+  8 kHz). Event cracks (shots) are noise bursts of 12 ms over a 150 Hz thump, no sharper than the thunder snap.
+- A new `AmbientParams` field must also be copied in the audio backends (`audio.cpp`,
+  `audio_apple.mm`). Forgetting it passes every test and is silent in the real program.
 
 ## Changelog and commit messages
 

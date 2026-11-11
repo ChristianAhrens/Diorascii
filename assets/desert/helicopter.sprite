@@ -1,0 +1,50 @@
+name: helicopter
+facing: right
+habitat: sky
+altitude: 14
+speed: 12..14
+depth: 2
+fps: 12
+tag: chopper
+backing: 0.45
+strike-reach: 28
+strike-aim: around
+strike-lashes: 2
+strike-effect: dustburst
+lash-shot: yes
+lash-color: #ffd66a
+mouth-row: 6
+wipes: life
+behaviors: poach
+--- art
+      -----------o-----------     
+                _|_               
+  __       _____/_|_\____         
+ |__>======|  ____  ____ \_       
+ <__/-------| |____||____||_ \>   
+            \_______________/     
+          ===|===========|===     
+--- mask
+      KKKKKKKKKKKKKKKKKKKKKKK     
+                LLL               
+  LL       LLLLLLLLLLLLLL         
+ LLLCLLLLLLL  LLLL  LLLL LL       
+ LLLLKKKKKKKL LLLLLLLLLLLLLL LC   
+            LLLLLLLLLLLLLLLLL     
+          LLLLLLLLLLLLLLLLLLL     
+--- art
+      ===========o===========     
+                _|_               
+  __       _____/_|_\____         
+ |__>======|  ____  ____ \_       
+ <__/-------| |____||____||_ \>   
+            \_______________/     
+          ===|===========|===     
+--- mask
+      LLLLLLLLLLLKLLLLLLLLLLL     
+                LLL               
+  LL       LLLLLLLLLLLLLL         
+ LLLCLLLLLLL  LLLL  LLLL LL       
+ LLLLKKKKKKKL LLLLLLLLLLLLLL LC   
+            LLLLLLLLLLLLLLLLL     
+          LLLLLLLLLLLLLLLLLLL     

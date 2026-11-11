@@ -1,0 +1,83 @@
+name: yeti
+facing: right
+habitat: ground
+speed: 7..9
+depth: 2
+fps: 3
+tag: beast
+backing: 0.35
+solid: yes
+wipes: life
+behaviors: maul
+--- art
+        .-'''''-.          
+       /  _   _  \         
+      |  (o)_(o)  |        
+      |  \VVVVV/  |        
+       \  `---'  /         
+   _.-''`-.___.-`''-._     
+  /  ;'  '  ;  ;  '  ;\    
+ / ,'  ;  '  ;;  '  ;  \   
+/ /  '  ;  :::::  ;  '  \\ 
+| |  ;  '  :::::  '  ;  || 
+| |   '  ;  :::  ;  '   || 
+| \    ;  '     '  ;    /| 
+/_/ \   '  ;  ;  '  ;  / \\
+   | |   |||   |||   | |   
+   `-'   |||   |||   `-'   
+         /||\   /||\       
+        /____\ /____\      
+--- mask
+        WWLLLLLWW          
+       W  W   W  W         
+      W  WRWWWRW  W        
+      W  WWWWWWW  W        
+       W  LWWWL  W         
+   WWWLLLWWWWWWWLLLWWW     
+  W  LL  L  L  L  L  LW    
+ W LL  L  L  LL  L  L  W   
+W W  L  L  PPPPP  L  L  WW 
+W W  L  L  PPPPP  L  L  WW 
+W W   L  L  PPP  L  L   WW 
+W W    L  L     L  L    WW 
+WWW W   L  L  L  L  L  W WW
+   W W   WWW   WWW   W W   
+   LWL   WWW   WWW   LWL   
+         WWWW   WWWW       
+        WWWWWW WWWWWW      
+--- art
+        .-'''''-.          
+       /  _   _  \         
+      |  (o)_(o)  |        
+      |  \VVVVV/  |        
+       \  `---'  /         
+   _.-''`-.___.-`''-._     
+  /  ;'  '  ;  ;  '  ;\    
+ / ,'  ;  '  ;;  '  ;  \   
+/ /  '  ;  :::::  ;  '  \\ 
+| |  ;  '  :::::  '  ;  || 
+| |   '  ;  :::  ;  '   || 
+| \    ;  '     '  ;    /| 
+/_/ \   '  ;  ;  '  ;  / \\
+   | |   |||   |||   | |   
+   `-'   |||   |||   `-'   
+         /||\   /||\       
+       /____\   /____\     
+--- mask
+        WWLLLLLWW          
+       W  W   W  W         
+      W  WRWWWRW  W        
+      W  WWWWWWW  W        
+       W  LWWWL  W         
+   WWWLLLWWWWWWWLLLWWW     
+  W  LL  L  L  L  L  LW    
+ W LL  L  L  LL  L  L  W   
+W W  L  L  PPPPP  L  L  WW 
+W W  L  L  PPPPP  L  L  WW 
+W W   L  L  PPP  L  L   WW 
+W W    L  L     L  L    WW 
+WWW W   L  L  L  L  L  W WW
+   W W   WWW   WWW   W W   
+   LWL   WWW   WWW   LWL   
+         WWWW   WWWW       
+       WWWWWW   WWWWWW     

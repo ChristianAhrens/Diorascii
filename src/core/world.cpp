@@ -8,11 +8,13 @@
 #include <cstdio>
 #include <map>
 
+#include "core/shading.h"
 #include "core/textutil.h"
 
 namespace dio {
 
 namespace {
+
 
 // ---------------------------------------------------------------- colors ---
 
@@ -60,26 +62,6 @@ Rgb maskColor(char32_t m, const Entity& e) {
   return (m >= U'a' && m <= U'z') ? scale(base, 0.6) : base;
 }
 
-/// Backdrop color at the given light: fades towards a dark blue at night and towards the haze
-/// color in a sandstorm.
-Rgb backdrop(Rgb c, const Light& l) {
-  Rgb out = c;
-  if (l.day < 1.0) out = lerp(lerp(c, {6, 9, 30}, 0.82), c, l.day);
-  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze) : out;
-}
-
-/// Color of a thing in the world at the given light: darker and bluer at night, dusty in a
-/// sandstorm (less so than the backdrop, so animals stay visible).
-Rgb shade(Rgb c, const Light& l) {
-  Rgb out = c;
-  if (l.day < 1.0) {
-    const Rgb night{static_cast<uint8_t>(c.r * 0.72), static_cast<uint8_t>(c.g * 0.78),
-                    static_cast<uint8_t>(c.b * 0.95)};
-    out = lerp(night, c, l.day);
-  }
-  return l.haze > 0 ? lerp(out, l.hazeColor, l.haze * 0.6) : out;
-}
-
 /// True if the entity is shown at the given light.
 bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
   if (!hasCycle) return true;
@@ -88,8 +70,10 @@ bool visibleNow(const Entity& e, const Light& l, bool hasCycle) {
   return e.active == Entity::Active::Day ? l.sun > 0.35 : l.sun < 0.35;
 }
 
-/// Draws one entity into out, shaded for the light, skipping rows from maxRow down.
-void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) {
+/// Draws one entity into out, shaded for the light, skipping rows from maxRow down and, for
+/// something behind a mountain, the cells inside the mountain's outline (hideBelow: first row of the
+/// mountain per column).
+void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow, const std::vector<int>* hideBelow = nullptr) {
   const SpriteFrame& f = e.sprite->frame(e.mirrored, e.frame);
   const int ox = static_cast<int>(std::floor(e.x));
   const int oy = static_cast<int>(std::floor(e.y));
@@ -101,6 +85,7 @@ void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) 
     for (int c = 0; c < e.width(); ++c) {
       const int px = ox + c, py = oy + r;
       if (!out.inBounds(px, py) || py >= maxRow) continue;
+      if (hideBelow && py >= (*hideBelow)[static_cast<size_t>(px)]) continue;  // behind the mountain
       const char32_t ch = f.art[r][c], m = f.mask[r][c];
       Cell& cell = out.at(px, py);
       if (ch == U' ') {
@@ -122,13 +107,6 @@ void blit(Frame& out, const Entity& e, Style style, const Light& l, int maxRow) 
       }
     }
   }
-}
-
-/// Cheap deterministic hash of a cell position, for static noise such as stars.
-uint32_t hash2(int x, int y) {
-  uint32_t h = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
-  h = (h ^ (h >> 13)) * 1274126177u;
-  return h ^ (h >> 16);
 }
 
 /// True for the zones that are flying bands.
@@ -315,8 +293,30 @@ void emitDust(Entity& e, World& w, double dt) {
 /// A catastrophe: crosses the scene and, when it is the given way across, strikes once: it wipes
 /// out what its header names (`wipes:`), may light up the screen, bring rain and drop a bolt.
 void catastrophe(Entity& e, World& w, double dt) {
+  // Where it strikes: the middle (sweep), or the front, the side it moves towards (devour).
+  auto point = [&] { return e.strikeMode == Entity::StrikeMode::Devour ? (e.vx > 0 ? e.x + e.width() : e.x) : e.x + e.width() / 2.0; };
+  if (e.strikeMode != Entity::StrikeMode::Centre && !e.hasLastPoint) {
+    e.lastPoint = point();
+    e.hasLastPoint = true;
+  }
   e.x += e.vx * dt;
   if ((e.vx > 0 && e.x > w.width()) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+  if (e.strikeMode != Entity::StrikeMode::Centre) {  // takes each victim as it passes it
+    const double now = point();
+    const bool devour = e.strikeMode == Entity::StrikeMode::Devour;  // it only takes what is in its way
+    if (devour && e.strikeReach > 0) w.lash(e);
+    if (e.strikeAround) return;  // it takes only what its tentacles reach
+    // A cell of leeway each way, so that a victim walking towards it is not stepped over.
+    const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
+                                   devour);
+    if (devour) w.noteCrushed(taken);
+    e.lastPoint = now;
+    if (taken > 0) {
+      if (e.flashTime > 0) w.flash(e.flashTime);
+      e.struck = true;
+    }
+    return;
+  }
   if (e.struck) return;
   const double middle = e.x + e.width() / 2.0;
   const double progress = e.vx > 0 ? middle / w.width() : 1.0 - middle / w.width();
@@ -424,6 +424,33 @@ void soar(Entity& e, World& w, double dt) {
   e.frame = diving ? 3 : std::sin(e.age * 2.2) > 0.4 ? 2 : std::fmod(e.age * 2.0, 1.0) < 0.5 ? 0 : 1;
 }
 
+/// A fire engine: drives to the burning building, parks and sprays (see World::engineStep).
+void engine(Entity& e, World& w, double dt) { w.engineStep(e, dt); }
+
+/// A vehicle of the city: drives along the main road, may turn into a side street (see World::driveStep).
+void drive(Entity& e, World& w, double dt) { w.driveStep(e, dt); }
+
+/// A fire in the city: the skyscraper burns, then is renovated (see World::blazeStep).
+void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
+
+/// The leaking submarine (see World::leakStep).
+void leak(Entity& e, World& w, double dt) { w.leakStep(e, dt); }
+
+/// The big meteor (see World::asteroidStep).
+void asteroid(Entity& e, World& w, double dt) { w.asteroidStep(e, dt); }
+
+/// The monster fight (see World::clashStep).
+void clash(Entity& e, World& w, double dt) { w.clashStep(e, dt); }
+
+/// The yeti (see World::maulStep).
+void maul(Entity& e, World& w, double dt) { w.maulStep(e, dt); }
+
+/// The poachers' helicopter (see World::poachStep).
+void poach(Entity& e, World& w, double dt) { w.poachStep(e, dt); }
+
+/// The flood (see World::floodStep).
+void flood(Entity& e, World& w, double dt) { w.floodStep(e, dt); }
+
 /// The avalanche: the powder cloud at the head of the slide (see World::slideStep).
 void avalanche(Entity& e, World& w, double dt) { w.slideStep(e, dt); }
 
@@ -436,7 +463,8 @@ BehaviorFn findBehavior(const std::string& name) {
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
-      {"avalanche", avalanche}};
+      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
+      {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}, {"asteroid", asteroid}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
 }
@@ -479,7 +507,15 @@ void applyProps(Entity& e, const Props& p, Rng& rng) {
   e.contrast = p.str("contrast", "no") == "yes";
   e.life = p.str("life", "no") == "yes";
   e.strikeAt = std::clamp(p.num("strike-at", 0.5), 0.0, 1.0);
+  e.strikeReach = std::max(p.num("strike-reach", 0), 0.0);
+  e.turnChance = std::clamp(p.num("turns", 0), 0.0, 1.0);
+  e.strikeAround = p.str("strike-aim", "ahead") == "around";
+  e.strikeLashes = std::clamp(static_cast<int>(p.num("strike-lashes", 1)), 1, 8);
+  e.lashColor = p.color("lash-color", e.lashColor);
+  e.lashShot = p.str("lash-shot", "no") == "yes";
   e.wipes = p.str("wipes", "life");
+  const std::string mode = p.str("strike-mode", "centre");
+  e.strikeMode = mode == "sweep" ? Entity::StrikeMode::Sweep : mode == "devour" ? Entity::StrikeMode::Devour : Entity::StrikeMode::Centre;
   e.strikeEffect = p.str("strike-effect", "flash");
   e.strikeSprite = p.str("strike-sprite");
   e.flashTime = p.num("screen-flash", 0);
@@ -524,6 +560,7 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   // The river takes at most half of the ground, so there is always some bank left.
   riverRows_ = std::clamp(sc.riverRows, 0, groundRows / 2);
   riverTopY_ = h_ - riverRows_;
+  mud_.assign(static_cast<size_t>(std::max(w_, 0)), 0.0f);
   if (!sc.hasMedium || sc.skyFraction >= 1.0) {
     surfaceY_ = seabedY_;
   } else {
@@ -532,6 +569,10 @@ World::World(const AssetPack& pack, std::shared_ptr<const SceneDef> scene, int w
   }
   hasMedium_ = sc.hasMedium && surfaceY_ < seabedY_;
   if (sc.mountains) buildTerrain();
+  if (sc.city) {
+    placeAvenues();  // first: the front row of buildings and the shops and trees keep clear of them
+    buildCity();
+  }
   eventTimer_ = rng_.range(sc.eventFirst.first, sc.eventFirst.second);
   rareTimer_ = sc.rare.empty() ? -1.0 : rng_.range(sc.rareFirst.first, sc.rareFirst.second);
   crater_.assign(static_cast<size_t>(w_), 0.0);
@@ -543,6 +584,7 @@ double World::areaFor(const std::string& habitat) const {
   if (habitat == "sky") return static_cast<double>(w_) * surfaceY_;
   if (habitat == "ground") return static_cast<double>(w_) * std::max(riverTopY_ - seabedY_, 1);
   if (habitat == "river") return static_cast<double>(w_) * riverRows_;
+  if (habitat == "rail") return railY_ >= 0 ? static_cast<double>(w_) : 0.0;
   if (habitat == "surface") return w_;
   return static_cast<double>(w_) * std::max(seabedY_ - surfaceY_ - 1, 0);  // medium
 }
@@ -563,7 +605,10 @@ void World::populate() {
     auto sprite = pack_->find(pop.sprite);
     if (!sprite) continue;
     const std::string habitat = sprite->props().str("habitat", "medium");
-    if ((habitat == "medium" && !hasMedium_) || (habitat == "river" && riverRows_ == 0)) continue;
+    if ((habitat == "medium" && !hasMedium_) || (habitat == "river" && riverRows_ == 0) ||
+        (habitat == "rail" && railY_ < 0)) {
+      continue;
+    }
     want = perCells ? areaFor(habitat) / pop.n : perCols ? w_ / pop.n : pop.n;
     int n = static_cast<int>(want);
     if (pop.kind != SceneDef::Population::Kind::Count && rng_.chance(want - n)) ++n;
@@ -585,6 +630,7 @@ double World::habitatY(const Props& p, int spriteHeight) {
   }
   const std::string habitat = p.str("habitat", "medium");
   if (habitat == "ground") return seabedY_ - spriteHeight;
+  if (habitat == "rail") return railY_ - spriteHeight;  // on the elevated railway
   if (habitat == "river") return rng_.rangeInt(riverTopY_, std::max(h_ - spriteHeight, riverTopY_));
   if (habitat == "surface") return surfaceY_ - p.num("anchor-row", spriteHeight - 1);
   if (habitat == "sky") {
@@ -616,6 +662,13 @@ void World::spawnHerd(const std::shared_ptr<const Sprite>& sprite) {
 void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool initial, bool event,
                           const Placement* where) {
   const Props& p = sprite->props();
+  if (p.str("habitat", "medium") == "rail" && railY_ < 0) return;  // no railway on this screen
+  // Rush-hour traffic: a vehicle only joins the street with the chance the traffic level gives, and
+  // otherwise tries again a few seconds later, so the street fills and empties with the day.
+  if (!event && p.str("rush", "no") == "yes" && scene_->dayNight && !rng_.chance(trafficLevel())) {
+    restock_.push_back({rng_.range(2.0, 7.0), [sprite](World& w) { w.spawnCreature(sprite, false); }});
+    return;
+  }
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
@@ -643,6 +696,25 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
     e->y += lane;
     e->anchorY = e->y;
     if (usable > 1) e->z = static_cast<int>(zmax) - lane * static_cast<int>(zmax - zmin) / (usable - 1);
+  }
+
+  // `feet-rows: a..b` puts a ground sprite's feet on those ground rows (0 = the first; negative counts
+  // from the bottom, -1 is the last), and with `traffic: yes` the vehicles keep to their side of the
+  // road: the lower rows of the range for what moves right, the upper rows for what moves left.
+  if (p.has("feet-rows") && p.str("habitat", "medium") == "ground") {
+    const int rows = std::max(h_ - seabedY_, 1);
+    const auto [flo, fhi] = p.range("feet-rows", {0, 0});
+    auto resolve = [&](double v) { return std::clamp(static_cast<int>(v) < 0 ? rows + static_cast<int>(v) : static_cast<int>(v), 0, rows - 1); };
+    int lo = resolve(flo), hi = resolve(fhi);
+    if (lo > hi) std::swap(lo, hi);
+    if (p.str("traffic", "no") == "yes" && hi > lo) {
+      const int mid = (lo + hi + 1) / 2;
+      if (right) lo = mid;
+      else hi = mid - 1;
+    }
+    const int feet = rng_.rangeInt(lo, hi);
+    e->y = e->anchorY = seabedY_ - e->height() + feet + 1;
+    e->z = static_cast<int>(zmax) - feet * static_cast<int>(zmax - zmin) / std::max(rows - 1, 1);
   }
 
   // Members of a herd that left come back from the same side, a little apart, still facing the same way.
@@ -678,6 +750,7 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   auto sprite = pack_->find(d.sprite);
   if (!sprite) return;
   const Props& p = sprite->props();
+  if (p.str("habitat", "ground") == "rail" && railY_ < 0) return;  // no railway on this screen
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
@@ -687,6 +760,22 @@ void World::spawnDecor(const SceneDef::Decor& d) {
   else if (d.align == "right") e->x = w_ - e->width() - d.margin;
   else if (d.align == "center") e->x = (w_ - e->width()) / 2 + d.margin;
   else e->x = rng_.rangeInt(0, std::max(w_ - e->width(), 0));
+  // Things that stand on the sidewalk make room for the side streets: they move aside, or are left out.
+  if (!avenues_.empty() && e->grounded && p.str("habitat", "ground") == "ground") {
+    for (int pass = 0; pass < 4; ++pass) {
+      for (const Avenue& a : avenues_) {
+        const double lo = a.cx - a.halfW - 3, hi = a.cx + a.halfW + 3;
+        if (e->x + e->width() <= lo || e->x >= hi) continue;
+        const double left = lo - e->width(), right = hi;
+        const bool leftOk = left >= 0, rightOk = right + e->width() <= w_;
+        if (!leftOk && !rightOk) return;
+        e->x = (!rightOk || (leftOk && e->x - left < right - e->x)) ? left : right;
+      }
+    }
+    for (const Avenue& a : avenues_) {
+      if (e->x + e->width() > a.cx - a.halfW - 3 && e->x < a.cx + a.halfW + 3) return;  // still in the way
+    }
+  }
 
   if (d.hasY) e->y = d.y >= 0 ? d.y : h_ + d.y;
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
@@ -766,14 +855,22 @@ void World::spawnEvent() {
   }
 }
 
-void World::spawnRare() {
+void World::spawnRare(RarePick pick) {
   double total = 0;
   for (const auto& ev : scene_->rare) total += ev.weight;
   if (total <= 0) return;
-  double pick = rng_.range(0, total);
+  double roll = rng_.range(0, total);
+  if (pick != RarePick::Weighted) {  // the most or the least likely one
+    const auto by = [](const auto& a, const auto& b) { return a.weight < b.weight; };
+    const auto chosen = pick == RarePick::Other ? std::min_element(scene_->rare.begin(), scene_->rare.end(), by)
+                                                : std::max_element(scene_->rare.begin(), scene_->rare.end(), by);
+    roll = 0;
+    for (auto it = scene_->rare.begin(); it != chosen; ++it) roll += it->weight;
+    roll += chosen->weight / 2.0;  // lands inside its share
+  }
   for (const auto& ev : scene_->rare) {
-    pick -= ev.weight;
-    if (pick > 0) continue;
+    roll -= ev.weight;
+    if (roll > 0) continue;
     if (auto sprite = pack_->find(ev.sprite)) {
       spawnCreature(sprite, false, true);
       if (!incoming_.empty()) incoming_.back()->isRare = true;
@@ -782,12 +879,12 @@ void World::spawnRare() {
   }
 }
 
-bool World::triggerRare() {
+bool World::triggerRare(RarePick pick) {
   if (scene_->rare.empty()) return false;
   for (const auto& e : entities_) {
     if (e->isRare && !e->dead) return false;
   }
-  spawnRare();
+  spawnRare(pick);
   flushIncoming();
   return true;
 }
@@ -809,11 +906,16 @@ void World::claim(Entity& o, const std::string& effect) {
   ++killed_;
 }
 
-void World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except) {
+size_t World::wipeOut(const std::string& wipes, const std::string& effect, const Entity* except, double from,
+                      double to, bool groundedOnly) {
+  const size_t before = killed_;
   const bool all = wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(wipes);
   auto take = [&](Entity& o) {
     if (&o == except || o.isRare) return;
+    const double middle = o.x + o.width() / 2.0;
+    if (middle < from || middle > to) return;
+    if (groundedOnly && !o.grounded) return;
     const bool victim = all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end();
     if (victim) claim(o, effect);
   };
@@ -821,6 +923,176 @@ void World::wipeOut(const std::string& wipes, const std::string& effect, const E
   // Entities spawned during this very step have not joined the world yet, but are just as dead.
   // (spawnEffect above adds to the same list, and effects are never victims.)
   for (size_t i = 0; i < incoming_.size(); ++i) take(*incoming_[i]);
+  return killed_ - before;
+}
+
+Entity* World::findEntity(uint64_t id) {
+  for (auto& e : entities_) {
+    if (e->id == id) return e.get();
+  }
+  return nullptr;
+}
+
+bool World::lash(const Entity& a) {
+  if (time_ < nextLash_ || a.strikeReach <= 0) return false;
+  int out = 0;
+  for (const Tongue& t : tongues_) out += t.attacker == a.id ? 1 : 0;
+  if (out >= a.strikeLashes) return false;
+  const bool all = a.wipes == "life";
+  const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(a.wipes);
+  const int dir = a.vx > 0 ? 1 : -1;
+  const double front = dir > 0 ? a.x + a.width() : a.x;
+  const double baseY = a.y + a.mouthRow;
+  const Entity* best = nullptr;
+  double bestD = 0, bestX = 0;
+  for (auto& other : entities_) {
+    const Entity& o = *other;
+    if (&o == &a || o.dead || o.isRare || isAsleep(o)) continue;
+    if (!(all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end())) continue;
+    bool taken = false;  // another tongue is already after it
+    for (const Tongue& t : tongues_) taken |= t.victim == o.id;
+    if (taken) continue;
+    const double cx = o.x + o.width() / 2.0, cy = o.y + o.height() / 2.0;
+    double d, baseX;
+    if (a.strikeAround) {  // from the underside of the body, straight above the victim if it can
+      baseX = std::clamp(cx, a.x + 3.0, std::max(a.x + a.width() - 4.0, a.x + 3.0));
+      d = std::sqrt((cx - baseX) * (cx - baseX) + 4.0 * (cy - baseY) * (cy - baseY));
+    } else {  // from the mouth, at walking things ahead of it
+      if (!o.grounded) continue;
+      baseX = dir > 0 ? a.x + a.width() - 1.0 : a.x;
+      d = (cx - front) * dir;
+      if (d < 1.5) continue;  // what is at its very mouth is simply swallowed
+    }
+    if (d > a.strikeReach) continue;
+    if (!best || d < bestD) { best = &o; bestD = d; bestX = baseX; }
+  }
+  if (!best) return false;
+  Tongue t;
+  t.attacker = a.id;
+  t.victim = best->id;
+  t.effect = a.strikeEffect;
+  t.wipes = a.wipes;
+  t.color = a.lashColor;
+  if (a.lashShot) {  // a shot is there and gone
+    t.shot = true;
+    t.reach = 0.1;
+    t.dur = 0.3;
+    ++shots_;
+  }
+  t.ox = bestX - a.x;
+  t.x0 = bestX;
+  t.y0 = baseY;
+  t.x1 = best->x + best->width() / 2.0;
+  t.y1 = best->y + best->height() / 2.0;
+  tongues_.push_back(t);
+  nextLash_ = time_ + (a.lashShot ? 0.45 : a.strikeLashes > 1 ? 0.2 : 0.0);  // tentacles lash one after another
+  return true;
+}
+
+double World::flameLevel() const {
+  double level = 0;
+  for (const Tongue& t : tongues_) {
+    if (!t.fire) continue;
+    const double reach = std::max(t.reach, 0.01);
+    level = std::max(level, t.age < reach ? t.age / reach : t.age > t.dur - 0.3 ? std::max(0.0, (t.dur - t.age) / 0.3) : 1.0);
+  }
+  return level;
+}
+
+void World::stepTongues(double dt) {
+  for (size_t i = tongues_.size(); i-- > 0;) {
+    Tongue& t = tongues_[i];
+    Entity* a = findEntity(t.attacker);
+    if (!a || a->dead) {  // the attacker has gone: the tongue goes with it
+      tongues_.erase(tongues_.begin() + static_cast<std::ptrdiff_t>(i));
+      continue;
+    }
+    t.age += dt;
+    t.x0 = a->x + t.ox;
+    t.y0 = a->y + a->mouthRow;
+    Entity* v = findEntity(t.victim);
+    const bool alive = v && !v->dead;
+    if (alive && !t.hit) {  // the tip follows the victim
+      t.x1 = v->x + v->width() / 2.0;
+      t.y1 = v->y + v->height() / 2.0;
+    }
+    if (!t.hit && t.age >= t.reach) {
+      t.hit = true;
+      if (alive && !t.harmless) {
+        claim(*v, t.effect);
+        if (!t.shot) noteCrushed(1);
+      }
+    }
+    if (t.age >= t.dur) {
+      if (a->strikeLashes == 1) nextLash_ = time_ + 0.25;  // a single tongue rests a moment
+      tongues_.erase(tongues_.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+  }
+}
+
+void World::renderTongues(Frame& out, Style style, const Light& light) const {
+  for (const Tongue& t : tongues_) {
+    if (t.fire) {  // a stream of flames: it shoots out, holds, and dies away
+      const double reach = std::max(t.reach, 0.01);
+      const double p = t.age < reach ? t.age / reach : t.age > t.dur - 0.3 ? std::max(0.0, (t.dur - t.age) / 0.3) : 1.0;
+      const double dx = t.x1 - t.x0, dy = t.y1 - t.y0;
+      const double len = std::sqrt(dx * dx + dy * dy * 4.0);
+      const int samples = std::max(3, static_cast<int>(len * 2));
+      static const char32_t kFlames[] = {U'*', U'#', U'%', U'&', U'@', U'*'};
+      for (int s = 0; s <= samples; ++s) {
+        const double u = static_cast<double>(s) / samples;
+        if (u > p) break;
+        const double wobble = 0.9 * std::sin(u * len * 0.7 - t.age * 30.0) * u;
+        const int cx = static_cast<int>(std::floor(t.x0 + dx * u));
+        const int cy = static_cast<int>(std::floor(t.y0 + dy * u + wobble));
+        const int spread = 1 + static_cast<int>(u * 2.2);  // the stream widens as it goes
+        for (int off = -spread; off <= spread; ++off) {
+          const uint32_t h = hash2(cx * 7 + off, static_cast<int>(t.age * 24.0) + s);
+          if (off != 0 && h % 5 == 0) continue;  // ragged edges
+          if (!out.inBounds(cx, cy + off)) continue;
+          Cell& cell = out.at(cx, cy + off);
+          const double edge = static_cast<double>(std::abs(off)) / (spread + 1);
+          cell.ch = kFlames[h % 6];
+          cell.fg = shade(lerp(lerp(t.color, Rgb{255, 255, 255}, 0.65), t.color, edge), light);
+          cell.bg = style == Style::Full ? lerp(cell.bg, scale(t.color, 0.55), 0.6 * (1.0 - edge)) : cell.bg;
+          cell.bold = true;
+          cell.defaultFg = style == Style::Mono;
+        }
+      }
+      continue;
+    }
+    // Out to the victim in the first part, back in again once it is crushed.
+    const double p = t.hit ? std::max(0.0, 1.0 - (t.age - t.reach) / (t.dur - t.reach)) : std::min(1.0, t.age / t.reach);
+    const double dx = t.x1 - t.x0, dy = t.y1 - t.y0;
+    const double len = std::sqrt(dx * dx + dy * dy * 4.0);  // cells are about twice as tall as wide
+    const int samples = std::max(2, static_cast<int>(len * 2));
+    // The glyph follows the direction of the tongue.
+    const double ady = std::fabs(dy) * 2.0, adx = std::fabs(dx);
+    const char32_t glyph = ady < 0.45 * adx ? U'=' : ady > 2.2 * adx ? U'|' : (dx * dy > 0 ? U'\\' : U'/');
+    for (int s = 0; s <= samples; ++s) {
+      const double u = static_cast<double>(s) / samples;
+      if (u > p) break;
+      const double wobble = t.shot ? 0.0 : 0.8 * std::sin(u * len * 0.8 - t.age * 28.0) * u * (1.0 - p * 0.5);  // it lashes about
+      const int cx = static_cast<int>(std::floor(t.x0 + dx * u));
+      const int cy = static_cast<int>(std::floor(t.y0 + dy * u + wobble));
+      if (!out.inBounds(cx, cy)) continue;
+      Cell& cell = out.at(cx, cy);
+      const bool tip = u + 1.0 / samples > p;
+      cell.ch = t.shot ? (tip ? U'*' : U'.') : tip ? U'@' : glyph;
+      cell.fg = shade(tip ? scale(t.color, 0.8) : t.color, light);
+      cell.defaultFg = style == Style::Mono;
+    }
+  }
+}
+
+double World::trafficLevel() const {
+  if (!scene_->dayNight) return 1.0;
+  const double h = phase_ * 24.0;
+  auto smooth = [](double a, double b, double x) { const double t = std::clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3 - 2 * t); };
+  const double day = 0.06 + 0.20 * smooth(5, 8, h) * (1.0 - smooth(20, 23, h));
+  const double morning = std::exp(-((h - 8.0) / 1.1) * ((h - 8.0) / 1.1));
+  const double evening = 0.95 * std::exp(-((h - 17.5) / 1.4) * ((h - 17.5) / 1.4));
+  return std::clamp(std::max({day, morning, evening}), 0.0, 1.0);
 }
 
 void World::flash(double seconds) {
@@ -880,7 +1152,20 @@ int World::interact() {
     rainLeft_ = scene_->weatherDuration;  // pressing again while it lasts keeps it going
     return 1;
   }
+  if (a.kind == SceneDef::Action::Kind::Summon) {
+    auto sprite = pack_->find(a.sprite);
+    if (!sprite || countSprite(a.sprite) > 0) return 0;  // one at a time
+    spawnCreature(sprite, false, true);  // a visitor: it leaves again and is not replaced
+    flushIncoming();
+    return 1;
+  }
   return 0;
+}
+
+size_t World::countSprite(const std::string& name) const {
+  size_t n = 0;
+  for (const auto& e : entities_) n += (!e->dead && e->sprite->name() == name) ? 1 : 0;
+  return n;
 }
 
 void World::setPhase(double phase) {
@@ -895,7 +1180,8 @@ void World::setTimeMode(TimeMode mode) {
     case TimeMode::Day: phase_ = 0.5; break;
     case TimeMode::Dusk: phase_ = 0.73; break;
     case TimeMode::Night: phase_ = 0.0; break;
-    case TimeMode::Cycle: break;  // carry on from the current time
+    case TimeMode::Cycle: break;     // carry on from the current time
+    case TimeMode::Realtime: break;  // the frontend sets the time from the host's clock
   }
 }
 
@@ -914,7 +1200,13 @@ Light World::light() const {
   l.sun = t * t * (3 - 2 * t);
   l.day = l.sun * (1 - 0.5 * overcast_);
   l.glow = std::exp(-(height / 0.22) * (height / 0.22)) * (1 - 0.6 * overcast_);
-  l.stars = 1 - l.sun;
+  l.stars = (1 - l.sun) * (1 - 0.9 * overcast_);  // clouds and dust hide the stars
+  l.hazeColor = scale(scene_->overcastTint, 0.15 + 0.85 * l.sun);  // a night storm stays dark
+  if (scene_->airless) {  // no atmosphere: black sky and stars all day, only the ground changes a little
+    l.day = 0.72 + 0.28 * l.sun;
+    l.glow = 0;
+    l.stars = 1;
+  }
   return l;
 }
 
@@ -1033,7 +1325,10 @@ Entity* World::nearest(const std::string& tag, double x, double y, double maxDis
 }
 
 void World::flushIncoming() {
-  for (auto& e : incoming_) entities_.push_back(std::move(e));
+  for (auto& e : incoming_) {
+    e->id = ++nextId_;
+    entities_.push_back(std::move(e));
+  }
   incoming_.clear();
 }
 
@@ -1072,14 +1367,41 @@ void World::step(double dt) {
       continue;
     }
     e->age += dt;
+    if (e->fleeing) {  // in a panic: straight off the screen, and back (as a replacement) a while later
+      e->pauseLeft = 0;
+      e->x += e->vx * dt;
+      animate(*e, dt);
+      if ((e->vx > 0 && e->x > w_) || (e->vx < 0 && e->x + e->width() < 0)) {
+        e->dead = true;
+        if (e->onDeath) restock_.push_back({rng_.range(10.0, 40.0), std::move(e->onDeath)});
+        e->onDeath = nullptr;
+      }
+      continue;
+    }
     if (e->pauseLeft > 0) {  // busy (eating): stays frozen where it is
       e->pauseLeft = std::max(0.0, e->pauseLeft - dt);
       continue;
+    }
+    // A cordoned-off fire: traffic and people stop short of the site (those already in it clear off).
+    if (cordon_ && e->grounded && e->vx != 0 && e->driveState == 0 && e->sprite->name() != "firetruck") {
+      // Stops short of the barrier with its whole body: it may not reach into the site.
+      const double lo = cordonX_ - cordonHalf_, hi = cordonX_ + cordonHalf_;
+      const double next = e->x + e->vx * dt;
+      const bool inNow = e->x < hi && e->x + e->width() > lo, inNext = next < hi && next + e->width() > lo;
+      if (!inNow && inNext) {
+        e->pauseLeft = std::max(e->pauseLeft, 2 * dt);  // waits at the edge until it is lifted
+        continue;
+      }
     }
     animate(*e, dt);
     for (BehaviorFn b : e->behaviors) b(*e, *this, dt);
     if (e->ttl > 0 && e->age > e->ttl) e->dead = true;
   }
+
+  stepTongues(dt);
+  stepToxin(dt);
+  stepFlood(dt);
+  if (!avenues_.empty()) stepCity(dt);
 
   if (!scene_->events.empty() && !eventAlive) {
     if (eventTimer_ < 0) eventTimer_ = rng_.range(scene_->eventInterval.first, scene_->eventInterval.second);
@@ -1325,6 +1647,7 @@ void World::slideStep(Entity& e, double dt) {
       if (o.dead || o.isRare || !o.destructible || isAirZone(o.zone)) continue;
       if (!o.life && o.zone == Zone::None && !o.grounded) continue;  // effects
       if (o.x + o.width() <= x0 || o.x >= x1 || o.y + o.height() <= top || o.y >= bot) continue;
+      if (o.life && !isAsleep(o)) ++squeals_;  // an animal under the snow cries out
       claim(o, "snowpuff");
     }
     // Powder billows up around the head, and rock and uprooted trees tumble out of the forest.
@@ -1364,8 +1687,9 @@ void World::slideStep(Entity& e, double dt) {
 void World::renderBackground(Frame& out, Style style, const Light& light) const {
   const SceneDef& sc = *scene_;
   // The scene's colors are its daytime look; the light turns them into the current look.
-  const Rgb skyTop = lerp(backdrop(sc.skyTop, light), Rgb{110, 70, 130}, light.glow * 0.3);
-  const Rgb skyLow = lerp(backdrop(sc.skyLow, light), Rgb{255, 150, 80}, light.glow * 0.55);
+  const Light skyLight = sc.airless ? Light{} : light;  // an airless sky does not change with the day
+  const Rgb skyTop = lerp(backdrop(sc.skyTop, skyLight), Rgb{110, 70, 130}, light.glow * 0.3);
+  const Rgb skyLow = lerp(backdrop(sc.skyLow, skyLight), Rgb{255, 150, 80}, light.glow * 0.55);
   const Rgb mediumTop = backdrop(sc.mediumTop, light), mediumDeep = backdrop(sc.mediumDeep, light);
   const Rgb groundA = backdrop(sc.groundA, light), groundB = backdrop(sc.groundB, light);
   const Rgb surfaceFg = backdrop(sc.surfaceFg, light);
@@ -1412,6 +1736,12 @@ void World::renderBackground(Frame& out, Style style, const Light& light) const 
           c.fg = scale(surfaceFg, 0.7);
         }
       }
+      if (const double m = mudAt(x); m > 0.01 && y >= seabedY_) {  // the flood has been here
+        const Rgb mud = backdrop({112, 84, 52}, light);
+        c.bg = lerp(c.bg, mud, (riverRows_ > 0 && y >= riverTopY_ ? 0.55 : 0.85) * m);
+        c.fg = scale(c.bg, 1.25);
+        if (y < riverTopY_ || riverRows_ == 0) c.ch = h % 4 == 0 ? U'.' : h % 7 == 0 ? U',' : U' ';
+      }
       if (hasMedium_ && y == surfaceY_ && sc.surfaceGlyphs.size() == 3) {  // animated waterline
         const double v = std::sin(x * 0.45 + time_ * 1.6) + 0.5 * std::sin(x * 0.17 - time_ * 0.7);
         c.ch = v > 0.5 ? sc.surfaceGlyphs[0] : v > -0.5 ? sc.surfaceGlyphs[1] : sc.surfaceGlyphs[2];
@@ -1440,7 +1770,9 @@ void World::renderCelestial(Frame& out, Style style, const Light& light) const {
   body.fg = sprite->props().color("color", {255, 240, 180});
   body.x = u * (w_ - 1) - sprite->width() / 2.0;
   // At the horizon the whole body is just below it; it climbs to the top of the sky at mid-arc.
-  body.y = skyEnd * (1 - std::sin(kPi * u));
+  // In a sky lower than the body it stops with its feet on the sky's last row and its top cut off.
+  const double peak = std::min(0.0, static_cast<double>(skyEnd - sprite->height()));
+  body.y = skyEnd - (skyEnd - peak) * std::sin(kPi * u);
   blit(out, body, style, light, skyEnd);  // rows below the horizon stay hidden
 }
 
@@ -1518,7 +1850,28 @@ void World::render(Frame& out, Style style) const {
   }
   std::stable_sort(order.begin(), order.end(),
                    [](const Entity* a, const Entity* b) { return a->z > b->z; });
-  for (const Entity* e : order) blit(out, *e, style, l, h_);
+  // In a city the skyline, the railway and the street come between the far things (sky, clouds,
+  // planes) and the near ones (people, cars, shops).
+  // Vehicles on the side streets (z 24) are drawn between the side streets and the viaduct, so that
+  // they pass under it.
+  constexpr int kCityZ = 25, kStreetZ = 23;
+  bool backDrawn = !scene_->city, streetDrawn = !scene_->city;
+  for (const Entity* e : order) {
+    if (!backDrawn && e->z < kCityZ) {
+      renderCityBack(out, style, l);
+      backDrawn = true;
+    }
+    if (!streetDrawn && e->z < kStreetZ) {
+      renderStreet(out, style, l);
+      streetDrawn = true;
+    }
+    blit(out, *e, style, l, h_, e->behindRidge && !ridge_.empty() ? &ridge_ : nullptr);
+  }
+  if (!backDrawn) renderCityBack(out, style, l);
+  if (!streetDrawn) renderStreet(out, style, l);
+  renderToxin(out, style, l);
+  renderFlood(out, style, l);
+  renderTongues(out, style, l);
   if (flashing()) {  // lightning: everything lights up, or flips its colors in the terminal styles
     for (int y = 0; y < h_; ++y) {
       for (int x = 0; x < w_; ++x) {

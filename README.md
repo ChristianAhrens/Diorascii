@@ -5,7 +5,7 @@
 [![Windows](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml/badge.svg)](https://github.com/ChristianAhrens/Diorascii/actions/workflows/windows.yml)
 
 Animated ASCII scenes for your terminal: an underwater aquarium, a forest with a
-river, a desert with an oasis, a mountain range from the meadow up to the snow, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
+river, a desert with an oasis, a mountain range from the meadow up to the snow, a city with skyscrapers, traffic and trains, the surface of the moon, and more to come. Written in C++20 as one small, self-contained binary with
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
@@ -15,7 +15,7 @@ terminal-themed look that follows your own colors.
 
 ## Screenshots
 
-Every scene by day and by night (the moon has no day and night cycle).
+Every scene by day and by night (on the moon: by lunar day and by earthrise).
 
 <table>
   <tr><th></th><th>Day</th><th>Night</th></tr>
@@ -40,29 +40,48 @@ Every scene by day and by night (the moon has no day and night cycle).
     <td align="center"><img src="Resources/Diorascii_Mountains_Night.png" alt="Mountains by night" width="400"></td>
   </tr>
   <tr>
+    <th>City</th>
+    <td align="center"><img src="Resources/Diorascii_City_Day.png" alt="City by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_City_Night.png" alt="City by night" width="400"></td>
+  </tr>
+  <tr>
     <th>Moon</th>
-    <td colspan="2" align="center"><img src="Resources/Diorascii_Moon.png" alt="The moon" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Moon_Day.png" alt="The moon by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Moon_Night.png" alt="The moon by night" width="400"></td>
   </tr>
 </table>
 
 ## Download
 
 Every release on the [releases page](https://github.com/ChristianAhrens/Diorascii/releases/latest)
-contains one archive per platform. Unpack it and run `bin/diorascii` (`bin\diorascii.exe`
-on Windows) from a terminal. Nothing else needs to be installed.
+contains an installer per platform, which puts `diorascii` into your PATH so that you can run it
+from any terminal. Nothing else needs to be installed.
 
-| Platform | Archive | Notes |
+| Platform | Asset | Notes |
 |---|---|---|
-| macOS | `Diorascii-x.y.z-macOS.dmg` | universal (Apple silicon and Intel), disk image |
-| Linux | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries |
-| Windows | `Diorascii-x.y.z-Windows.zip` | Windows Terminal or Windows 10+ console |
+| macOS | `Diorascii-x.y.z-macOS.pkg` | universal (Apple silicon and Intel), installer to `/usr/local/bin` |
+| Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
+| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
+| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
+| Linux, other | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries; unpack and run `bin/diorascii` |
+| Windows, portable | `Diorascii-x.y.z-Windows.zip` | unpack and run `bin\diorascii.exe` |
 
-The macOS binary is signed ad hoc but not notarized. If macOS refuses to open a
-downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine bin/diorascii`.
+Installing a newer version over an older one upgrades it in place. To uninstall: on Windows use
+*Apps > Installed apps* (or the uninstaller in the install folder), on Debian/Fedora the package
+manager (`sudo apt remove diorascii`, `sudo dnf remove diorascii`), and on macOS, which has no
+uninstaller for packages:
+
+    sudo rm /usr/local/bin/diorascii && sudo rm -r /usr/local/share/doc/diorascii
+    sudo pkgutil --forget com.ChristianAhrens.Diorascii
+
+The Windows installer is not code-signed, so SmartScreen may ask for confirmation ("More info",
+"Run anyway"). The macOS installer attached to a release is signed and notarized by the owner;
+the one the CI builds (only on the workflow's draft, before it is replaced) is ad hoc signed, and
+macOS asks for confirmation (right-click, Open).
 
 ## Usage
 
-    diorascii                       # m menu, left/right scene, f action, x rare event, c style, t time of day, i info, p pause, r restart, q quit
+    diorascii                       # m menu, left/right scene, f action, x rare event (X: the second one), c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
@@ -70,12 +89,14 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
     diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20
+    diorascii --dump 400 --rare-other 20  # ...or its second, less likely catastrophe
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
+    diorascii --realtime            # let the time of day follow this computer's clock
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
-The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, resume
-and quit. It is drawn into the same cell grid as the scene and driven only by abstract
+The menu (`m`, Enter or Esc) lists scene, style, time of day, info line, the scene's action, the rare event, the other rare event, resume
+and quit, and shows the version and the copyright at the bottom. It is drawn into the same cell grid as the scene and driven only by abstract
 actions (up, down, left, right, select, back), so any input device can use it.
 
 ### Scenes and the action key
@@ -88,9 +109,23 @@ actions (up, down, left, right, select, back), so any input device can use it.
 | Forest | Make it rain | it rains for about 18 seconds (pressing again keeps it going): drops streak down at a slant and splash on the bank and in the river, clouds roll in and the light dims, then it clears up again |
 | Desert | Sandstorm or tornado | a coin toss each time. A sandstorm blows grains across the whole screen for about 16 seconds while the sky turns ochre and the sun disappears. A tornado crosses the scene instead, weaving, whirling up sand and **throwing every animal in its path into the air**; they land dazed, and then walk on. Pressing again during a tornado brings the sandstorm on top of it. |
 | Mountains | Snowstorm | an icy wind sweeps snow across the whole screen for about 22 seconds: flakes race sideways while they settle, the peaks and the sun vanish in a pale whiteout, the birds fall silent and the wind howls (see below) |
+| City | Call an ambulance | an ambulance drives through the streets with its lights flashing |
 | Moon | Meteor strike | a meteorite streaks down and hits the ground: it wrecks everything standing there, digs a crater and throws up debris and dust that drift back down slowly under the moon's low gravity. Dust then fills the crater gradually, shallow rim first, until the ground is smooth again. Rovers drive down into the crater and climb out as it fills. |
 
 New scenes define their own action in their `*.scene` file (see below).
+
+### The city
+
+Buildings in three rows (a pale far row, a middle row and a front row) stand behind a narrow main street: a
+sidewalk, a road of two lanes and a sidewalk. They run from low offices to towers of up to 80% of the sky, with
+four kinds of facade (grid of windows, glass curtain wall, ribbons, small windows) and roofs with antennas, crowns,
+water towers, helipads or steps, and their windows light up as it gets dark. Street lamps switch on at dusk and
+pool light on the street. Cars, taxis, buses, trucks and cyclists keep to their side of the road, and the traffic follows the **rush hours**: it is thin at night and at midday and peaks at about 8:00 and 17:30 (a vehicle sprite with `rush: yes` only joins the street with the chance that the time of day gives), people walk on
+both sidewalks (fewer at night), and there are shops, a kiosk and a park with a fountain, benches and trees. An
+elevated railway runs through the buildings on a viaduct (a dark deck with bright rails on a concrete beam with
+pillars, masts and a wire above it) with a station, and trains run on it now and then (on screens too small for it
+there is no railway). On wide enough screens one to three **side streets** break off from the main street at a broad crossing with a zebra stripe, run a short way back between the buildings and disappear behind them: some cars turn off the main road into them, showing three-quarter and rear views as they turn and drive away, and others come down them, seen from the front, and turn onto the main road. Between the buildings of the front row (which are spaced out) you can sometimes see other side streets running back behind them. Planes come in on their landing approach in the background, sinking slowly behind the
+skyline towards an airport that is off screen. Vehicles, trains and planes are drawn as fine line art on a darkened backing so that they stand out. The buildings are generated to the height of your terminal, always lower than the mountains' peaks.
 
 ### The mountains
 
@@ -126,7 +161,7 @@ The aquarium, the forest, the desert and the mountains have a day and night cycl
 The sun crosses the sky by day and the moon by night, the sky and the water darken and
 turn blue at night with a red glow at sunrise and sunset, and stars come out. Creatures
 can belong to the day or the night: butterflies and birds by day, fireflies by night.
-Clouds from the forest's rain dim the day, too. The moon has no atmosphere and no cycle.
+Clouds from the forest's rain dim the day, too. The moon has a cycle of its own: it has no atmosphere, so the sky stays black with its stars all the time. By day a large sun stands high in the sky over a slightly lighter grey ground; by night the earth rises over a darker, cooler one.
 
 At night **most animals sleep**: a share of every species (about 70% for most) disappears
 and stays frozen where it is, each at its own bedtime, so herds and schools thin out
@@ -134,8 +169,10 @@ one after another over dusk and wake up one after another at dawn. Sleepers do n
 hunt or get hunted. A few animals stay up, and some are nocturnal, like the desert's
 bats and the lion.
 
-`t` (or the menu) steps through *cycle, dawn, day, dusk, night*: the first runs the
-clock, the others freeze the time of day. `--hour` sets the start time. The time of day
+`t` (or the menu) steps through *cycle, dawn, day, dusk, night, real time*: the first runs the
+clock, the next four freeze the time of day, and *real time* follows the clock of the computer
+Diorascii runs on (also `--realtime`), so the scene's day, dusk and night match the one outside.
+`--hour` sets the start time. The time of day
 carries over when you switch scenes. The info line (`i`) shows the clock.
 
 In the terminal styles the cycle shows in the stars, the sun and moon and the creatures
@@ -149,11 +186,12 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 
 | Scene | What you hear |
 |---|---|
-| Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in |
-| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale and the growl of the kraken as it nears |
-| Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears |
-| Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way |
-| Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble |
+| Forest | soft wind in the trees that swells with slow gusts, deeper in a storm; crickets at night; rain. A thundercloud on its way brings distant rumbling and far-off claps; a lightning strike cracks at the moment of the screen flash, then the thunder rolls in. In a flood there is the deep, rushing roar of the water |
+| Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale the growl of the kraken as it nears, and a muffled double gulp for every animal its tentacles swallow. In the poisoned sea there is the hiss of gas and the glugging of bubbles |
+| Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears, bellows with a very deep, trumpeting roar while it crosses, and each animal it swallows is chewed with a series of low, grumbling crunches. The poachers' helicopter beats the air with its rotor, and every rifle shot cracks |
+| Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way, and every animal it buries lets out a short, muffled squeal. The yeti's steps thud through the ground and it roars now and then |
+| City | a steady murmur of traffic that thins out at night, cars passing by with a sinking engine note, a horn (sometimes two honks, sometimes one long blast) from time to time, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it once the fire is out), trains that rumble and beat out the regular "klack-klack, klack-klack" of the wheels over the rail joints and sound their horn as they arrive, a faint jet when a plane is on its approach, and the roar and crackle of a burning skyscraper. When the monsters fight, their heavy steps shake the ground and the lizard's deep bellow alternates with the winged one's shrill screech (which is gone for good once the winged one has fallen); every stream of fire has its own roaring, crackling whoosh |
+| Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble. The big meteor is a rumble in the ground that swells as it comes down, ending in the thud of the impact |
 
 ### Rare events
 
@@ -162,13 +200,25 @@ two to five minutes) and wipes out life. It is announced by its arrival: it cros
 scene, strikes halfway across, and moves on. Press `x`, or choose *Rare event* in the menu,
 to summon it right away instead of waiting.
 
+Every scene has a **second catastrophe** (see below), which replaces the first one
+one time in five (the weights in the scene's `--- rare` list are 1 and 0.25). Press `X` (shift),
+or choose *Other rare event* in the menu (`--rare-other` for `--dump`), to see it right away;
+a plain `x` picks by the odds like the timer does.
+
 | Scene | Catastrophe | What happens |
 |---|---|---|
-| Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and at the middle it **kills every animal**: fish, jellyfish, eels, crabs, shark and whale burst into ink |
+| Aquarium | Kraken | a giant sea monster lumbers across the sea bed, the water darkens to violet, and it **lashes out with tentacles at the animals around it** as it goes: whatever a tentacle reaches (fish, jellyfish, eels, crabs, shark, whale) bursts into ink, and animals out of reach survive |
+| Aquarium | Leaking submarine | **second catastrophe**: a grey submarine (a solid hull with a dashed and slashed outline) **drives through the sea at mid depth and leaves a trail of poison behind it**; every puff of the trail spreads while the submarine passes on, until the cloud fills the sea from top to bottom, and **every animal it reaches dies**. The water turns sickly green along the trail; after the submarine has left, the cloud lingers and thins out, and the sea slowly fills with life again |
 | Forest | Thunderstorm | a dark cloud rolls across the sky and it starts to pour; a lightning bolt hits the ground under the cloud, the screen flashes twice, and **every animal dies** |
-| Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **swallows every animal** |
+| Forest | Flood | **second catastrophe**: the river bursts its banks in a downpour and a **wall of water runs across the land from one side**. Its front is a sparse, tumbling wave of foam that fills in to the solid, muddy flood within a few steps behind it, and everything it reaches (**every tree, bush, flower and animal on the bank**, logs ride on its front) is ripped off. The water stands over the land for a while and recedes, and leaves **mud and bare, devastated ground** that is only replanted slowly over the next minute or so |
+| Desert | Sandworm | a huge banded worm with a toothed maw crawls through the dunes in a cloud of dust and **lashes out a tongue at the animals on the ground ahead of it and swallows each one it reaches** (what flies is spared) |
+| Desert | Poachers | **second catastrophe**: a helicopter with poachers on board flies after the closest animal, hovers over it and **shoots down everything alive** (what flies as well) one animal after the other, with tracer lines and rifle cracks; it leaves when nothing is left, and the animals come back later |
 | Mountains | Avalanche | the snow on a high flank cracks, then a powder cloud rips down the mountain, through the forest and into the stream, **burying trees, bushes and animals** in its swath |
-| Moon | Alien | an alien walks across the surface and **destroys the rover and the flagpole**, and nothing else |
+| Mountains | Yeti | **second catastrophe**: an abnormally large, white-furred yeti climbs over the highest ridge from the back (it first rises out of the mountain's outline, hidden by it), then comes down the slope into the valley and **hunts down the animals on the ground**: it does not strike from a distance but has to walk right up to each animal, so it crosses the scene again and again; it roars and its steps thud; then it goes back up and over (what flies is out of its reach) |
+| City | Fire | a skyscraper catches fire: flames lick up its facade and over the roof, smoke billows, a fire engine races through the street with its siren, **parks in front of the building and sprays it with jets of blue water**, which puts the fire out sooner, and drives off without its siren as soon as the last fire is out. Most of the time the fire is beaten and the building is wrapped in scaffolding with a crane and **renovated** with new looks. **Sometimes the fire wins**: it spreads to 3 to 5 neighbouring buildings one after another, they all **burn down** (they collapse into smouldering rubble), the engine leaves when the flames are out, and it takes a long while, about a minute and a half, before everything is **rebuilt** from the rubble. From the arrival of the engine until the last building is back, the site (wider if the fire has spread) is **cordoned off** with barriers across the road and both sidewalks: all other vehicles and people stop in front of them and wait |
+| City | Monster fight | **second catastrophe**: a giant lizard with glowing blue spines walks in from one side and a winged, spiny monster flies in from the other and lands; both are drawn as dark, solid bodies with a clear outline of dashes and slashes. They fight by spitting **streams of fire at each other, blue from the lizard and violet from the winged one** (now one, now the other, now both at once), each about 33 rows tall. Everyone on the streets, **people and vehicles alike, panics and runs off the screen** as soon as the monsters appear, and nothing new comes until it is over. As soon as they start to fight, **fire spreads from where they stand outwards**: building after building catches fire, burns for a few seconds and comes down, until the winged one falls and the lizard walks on across the city. **Dozens of buildings are left as ruins**; once the fight is over, **the rebuilding starts in the middle and spreads outwards** in the same way |
+| Moon | Alien | an alien walks across the surface and **destroys the flagpole and the rover each at the moment it passes them** (a rover that drives out of its way is spared), and nothing else |
+| Moon | Big meteor | **second catastrophe**: a speck appears in the black sky, far away, and **grows bigger and bigger** as it falls (a rumble builds up in the ground); it hits the surface and the **impact spans the entire width of the screen**: the whole screen flashes, a crater is dug across the full width (deepest where it hit), everything standing on the ground is wrecked, and a wave of dust and thrown rock runs out to both edges and drifts back down slowly under the low gravity. Rovers, flags, rocks and the lander are replaced later |
 
 The avalanche is the exception to "crosses the scene": it comes down a mountainside (see above) and
 buries what is in its path instead of everything alive.
@@ -218,7 +268,7 @@ directory and pass `--assets DIR` (or put it in `assets/` to ship it).
 
     name: darter
     facing: right            # direction the art points
-    habitat: medium          # medium (water) | surface | sky | ground | river
+    habitat: medium          # medium (water) | surface | sky | ground | river | rail (the city's elevated railway)
     speed: 9..18             # cells per second
     depth: 3..16             # draw order, larger = further away
     tag: prey                # lets behaviors find it (prey, food, ...)
@@ -243,6 +293,8 @@ Header keys:
 | `anchor-row` | which sprite row sits on the surface line |
 | `mouth-row` | row where it eats or bites |
 | `bubble-rate`, `bob-amplitude`, `bob-frequency` | tuning for those behaviors |
+| `behaviors: drive`, `turns: 0.3` | a city vehicle that drives along the main road and, with this chance, turns off into the next side street |
+| `feet-rows: 1..-2`, `traffic: yes` | a ground sprite's feet stand on these ground rows (0 is the first, a negative number counts from the bottom); with `traffic` vehicles keep to their side of the road: the lower rows of the range moving right, the upper rows moving left |
 | `lanes: 4` | ground sprites stand up to this many rows deep on the bank; the ones further forward are drawn in front |
 | `altitude: 8` | sky sprites hover within this many rows above the ground |
 | `active: day` or `night` | only shown by day or by night (needs a day and night cycle in the scene) |
@@ -255,7 +307,8 @@ Header keys:
 | `wind: yes` | a particle that is blown across the whole scene (sand), for a weather action |
 | `life: yes` | a living thing: catastrophes that wipe out life take it |
 | `row: 2` | pinned to this row (a negative number counts from the bottom) |
-| `wipes`, `strike-at`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out, how far across the scene (0 to 1) it strikes, and the sprite shown on every victim |
+| `wipes`, `strike-mode`, `strike-at`, `strike-reach`, `strike-aim`, `strike-lashes`, `lash-color`, `strike-effect` | for catastrophes (behavior `catastrophe`): `life` or a list of sprite names to wipe out; how it strikes (`centre`, the default: everything at once when it is `strike-at` (0 to 1) of the way across the scene, like a storm; `sweep`: each victim as the middle of the attacker passes it; `devour`: each victim in its way as its front reaches it, and with `strike-reach: N` it lashes a tongue or tentacle out at victims up to N cells away, drawn from the row `mouth-row` in `lash-color`; `strike-aim: ahead` (default) reaches walking things ahead of its front, `around` anything alive around it, from along its underside, and `strike-lashes: N` lets N be out at once); and the sprite shown on every victim |
+| `lash-shot: yes` | the lashes of a catastrophe are rifle shots (a straight, quick tracer line, counted by the sound) rather than tongues or tentacles; with `strike-aim: around` and `strike-reach` (the poachers' helicopter) |
 | `strike-sprite`, `screen-flash`, `storm-rain` | a bolt that hits the ground under the attacker, seconds of screen flashing (two quick flashes), and seconds of rain it brings (needs a weather action in the scene) |
 | `tag: gloom` | the scene darkens (like heavy weather) while this sprite is around |
 | `backing: 0.5` | darkens the background behind the sprite's glyphs by this share (full style only), so light sprites stay readable on bright and dark backdrops |
@@ -298,7 +351,16 @@ Behaviors:
 | `rain` | a raindrop: falls to its landing row, makes a splash and is gone |
 | `ledge` | on a mountain: walks (or hops, with a `hop-period`) along a ledge of its `zone`, turns round where the zone or the mountain ends and now and then climbs to another ledge |
 | `soar` | on a mountain: flies across the scene and swoops up and down within its `zone` band, now and then diving (frames: wings up, wings down, gliding, diving) |
+| `leak` | the aquarium's leaking submarine: drives through the sea and leaves a trail of poison puffs that spread while it passes (until they fill the sea from top to bottom) and kill what they cover; the trail lingers and thins out after the submarine has gone |
+| `flood` | the forest's flood (an invisible sprite): a wall of water (a sparse wave at the front that fills in behind it) runs across the land from one side, tears off what it reaches, recedes and leaves mud; what was torn off is replanted late |
+| `poach` | the desert's helicopter: flies after the closest living thing, hovers over it and shoots at what is in reach (`strike-reach`, `lash-shot`), leaves when nothing is left or after a while |
+| `maul` | the mountains' yeti: climbs over the highest ridge, follows the ground down to the closest animal on the ground, kills each one it walks up to with its body (no lashing from a distance) and leaves when none is left |
+| `asteroid` | the moon's big meteor: falls from far away to the middle of the screen, growing through the frames of its sprite, and strikes across the whole width |
+| `clash` | the city's monster fight (on the lizard; the winged monster is called by it): both come in, fight, trample and flatten buildings, and the lizard walks on; the ruins are rebuilt later |
 | `avalanche` | the powder cloud of an avalanche: creaks on a snowy flank, then rips down it, scarring the land and burying what stands in its way |
+| `drive` | a city vehicle: drives along the main road in its lane, can turn off into side streets (`turns`) and shows its five views as it turns; stops in front of a cordon |
+| `engine` | the fire engine: drives to the burning building with its siren, parks, sprays water, leaves without the siren once no building burns, and cordons the site with barriers while it stays |
+| `blaze` | the city's rare event (an invisible sprite): sets a skyscraper on fire; the fire is either beaten or spreads and burns 3 to 5 more buildings down, which are rebuilt later |
 
 ## Extending: scenes
 
@@ -313,7 +375,7 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     sky-fraction: 0.2               # share of the height above the surface (1 = all sky)
     ground-rows: 2
     stars: 23                       # one star per N sky cells
-    action: drop food               # what the f key does: drop | impact <sprite>, weather <sprite> [<funnel>], or none
+    action: drop food               # what the f key does: drop | impact <sprite>, weather <sprite> [<funnel>], summon <sprite>, or none
     action-label: Feed the fish     # text of the menu button
     gravity: 2.5                    # cells/s^2 for falling debris
     dust-settle: 40                 # seconds for dust to fill one row of a crater
@@ -331,6 +393,10 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     weather-duration: 18            # seconds a rain shower lasts
     overcast-tint: #c98e4c 0.75     # color (and strength) the scene turns towards in heavy weather
     day-night: yes                  # sun, moon, stars and dimming light
+    city: yes                       # a skyline of skyscrapers behind a street (the ground rows are sidewalk, road, sidewalk)
+    avenues: 3                      # side streets running off into the city (at most; fewer on narrow screens)
+    skyline: 0.18..0.80             # height of the buildings as shares of the sky above the street (low offices to towers)
+    airless: yes                    # no atmosphere (moon): black sky and stars all day, only the ground shifts a little
     day-length: 240                 # seconds for one full day
     start-hour: 10                  # time of day at the start
     sun-sprite: sun_big             # sprites that cross the sky by day and by night
@@ -350,7 +416,8 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     shark   3
 
     --- rare                        # <sprite> <weight>; one catastrophe at a time, on a slow timer
-    kraken  1
+    kraken  1                       # the weights are the odds: this second one comes one time in five
+    submarine  0.25                 # (the highest weight is the common one, the lowest is what `X` summons)
 
 The scene's colors are its daytime look; the night look is derived from them. The
 river takes at most half of the ground rows at the bottom, and a ground of more than a
@@ -385,8 +452,8 @@ exactly that release's tagged commit reports `1.2.3-dev+<commit>`. To release:
        git push origin main 1.2.3
 
 Pushing a tag in the form `x.y.z` (major.minor.fix, no `v` prefix) builds Diorascii on
-macOS, Linux and Windows, runs the tests and publishes a GitHub release with one
-archive per platform. The tag must match the latest released section of the changelog, or
+macOS, Linux and Windows, runs the tests and publishes a GitHub release with the installers
+and archives of every platform (see Download). The tag must match the latest released section of the changelog, or
 the workflow stops before building anything; that section, without its empty subsections, is
 the text of the release.
 
@@ -411,20 +478,31 @@ argument, `DIORASCII_APPLE_TEAM` or your signing certificate, and numbers the bu
 (`DIORASCII_BUILD_NUMBER`), which App Store Connect needs to grow with every upload. The app record
 `com.ChristianAhrens.Diorascii` for tvOS must exist in App Store Connect first.
 
-The macOS asset is a disk image with the binary, a `usr-local-bin` link to drop it onto
-(`/usr/bin` itself is protected by macOS) and an installer script for `~/.local/bin`. The
-copy CI builds is only ad-hoc signed. To build the same image with your own Developer ID
-signature and Apple's notarization, run on a Mac:
+The macOS asset is an installer package that places `diorascii` in `/usr/local/bin` (which
+every shell has in its PATH) and the license and readme in `/usr/local/share/doc/diorascii`. The
+copy CI builds is only ad-hoc signed and unsigned as a package. To build the same package with
+your own Developer ID signature and Apple's notarization, run on a Mac:
 
-    scripts/package-macos.sh 1.2.3          # -> dist/Diorascii-1.2.3-macOS.dmg
+    scripts/package-macos.sh 1.2.3          # -> dist/Diorascii-1.2.3-macOS.pkg
+
+Without a version it packages the project version of the changelog. The version is also what the package
+registers with macOS (`pkgutil --pkg-info com.ChristianAhrens.Diorascii`), which is how an upgrade is recognized.
 
 It picks the first "Developer ID Application" identity in your keychain (or
-`DIORASCII_SIGN_IDENTITY`), signs the binary with the hardened runtime and the image with
-the same identity, submits the image with `notarytool` using the keychain profile
+`DIORASCII_SIGN_IDENTITY`) to sign the binary with the hardened runtime, and the first
+"Developer ID Installer" identity (or `DIORASCII_INSTALLER_IDENTITY`; Apple issues it as a separate
+certificate) to sign the package. It submits the package with `notarytool` using the keychain profile
 `APP_NOTARIZATION_CREDENTIALS_PROFILE` (`DIORASCII_NOTARY_PROFILE` to use another, created
-once with `xcrun notarytool store-credentials`) and staples the ticket. Without an identity, or with
+once with `xcrun notarytool store-credentials`) and staples the ticket. Without identities, or with
 `DIORASCII_ADHOC=1`, it falls back to the ad-hoc signature and skips notarization, which is
-what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
+what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only. Then replace the
+workflow's asset on the release page with the notarized one.
+
+The Windows installer is built by the workflow with [Inno Setup](https://jrsoftware.org/isinfo.php)
+from `packaging/windows/diorascii.iss` (installs to Program Files, adds the PATH entry,
+registers an uninstaller; the `AppId` in the script must never change, it is what lets a newer
+version replace an older one). The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
+`cpack -G RPM` in the build directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
 ## Layout
 
@@ -434,7 +512,9 @@ what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
     src/app    interactive session logic (shared by frontends), command line + terminal main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
-    scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
+    packaging/ installer definitions (Windows Inno Setup script)
+    scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text),
+               process-screengrabs.sh (screen recordings -> README stills and page clips)
     CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)
     docs/ai/   notes for AI collaborators: history, architecture, conventions, rules, open findings (see CLAUDE.md)
@@ -444,7 +524,7 @@ other frontends (such as a tvOS app) can be added without touching it.
 
 ## Status
 
-Five scenes (aquarium, forest, desert, mountains, moon) with original sprites; feeding, predation,
+Six scenes (aquarium, forest, desert, mountains, city, moon) with original sprites; feeding, predation,
 rain, sandstorms and tornadoes, snowstorms, meteor strikes with craters, avalanches, herds, hunting
 lions and bears, a day and night cycle with sleeping animals, scheduled events, rare catastrophes
 (kraken, thunderstorm, sandworm, avalanche, alien), synthesized ambient sound, three render styles

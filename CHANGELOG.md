@@ -15,6 +15,30 @@ the GitHub release (see "Releasing" in the README).
 
 ### Fixed
 
+## [1.3.0] 2026-11-11
+### Added
+- Added the City scene: skyscrapers in three rows up to 70% of the sky, with lit windows at night, a street with lamps, zebra crossings and traffic (cars, taxis, buses, trucks, cyclists) with rush hours at about 8:00 and 17:30, people, shops, a park, an elevated railway with a station and trains, planes coming in to land, and side streets where cars turn off the main road and others come in. `f` calls an ambulance through the streets, and `x` sets a skyscraper alight: a fire engine comes, and the burnt-out building is wrapped in scaffolding and renovated, or, when the fire gets out of hand, it spreads to a few more buildings that burn down and are rebuilt from the rubble
+- Added the soundscape of the City: traffic, horns, the sirens of the ambulance and the fire engine, the metro's "klack-klack" of the trains, a faint jet for the planes and the crackle of the fire
+- Added a second, less likely catastrophe to every scene: a poison-leaking submarine in the aquarium (it replaces the kraken one time in five), a flood in the forest, poachers in a helicopter in the desert, an abnormally large yeti in the mountains, a fight between a giant lizard and a winged monster in the city and a big meteor on the moon, each with its own sounds. `x` still picks by the scene's odds, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) summons the second one
+- Added a day cycle to the moon: a large sun stands high in the sky by lunar day, over a slightly lighter grey ground, and the earth rises by night over a darker one
+- Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
+- Added sounds for the kraken's catch, the sandworm (a deep bellow and chewing) and avalanches (a muffled squeal), and a tongue to the sandworm that lashes out at the animals ahead of it
+- Added the version and the copyright to the bottom of the menu
+- Added installers to the release: a Windows setup `.exe` (Inno Setup) that installs to Program Files, adds `diorascii` to the PATH for cmd and PowerShell, can be uninstalled from *Installed apps* and upgrades an older install in place, and `.deb` and `.rpm` packages for Linux that install `/usr/bin/diorascii`, so that it is in the PATH, and are upgraded and removed by the package manager. The CI workflows build them on every push, the Windows one also installs, upgrades and uninstalls the setup as a test
+- Added `scripts/process-screengrabs.sh`, which turns raw screen recordings of the terminal into the cropped clips of the project page and the stills of the README
+- Added the City and the moon's day and night to the README screenshots and the project page (a new scene button; the day and night toggle works for the moon as well)
+- Added to the data format for custom scenes: the scene action `summon <sprite>`, the scene keys `city`, `skyline` and `avenues`, the habitat `rail`, the sprite headers `feet-rows`, `traffic`, `turns`, `rush`, `strike-mode` (`centre`, `sweep`, `devour`), `strike-reach` and `lash-shot`, and the behaviors `drive`, `engine`, `blaze`, `leak`, `flood`, `poach`, `maul`, `clash` and `asteroid`
+
+### Changed
+- Changed the macOS release asset from a disk image to an installer package, `Diorascii-x.y.z-macOS.pkg`, which installs `diorascii` into `/usr/local/bin`; `scripts/package-macos.sh` signs the binary with the Developer ID Application identity and the package with the Developer ID Installer one, notarizes and staples it (ad hoc and unsigned on CI as before), and takes the version from the changelog
+- Changed the catastrophes of the kraken, the sandworm and the alien on the moon to hit one animal or object after the other where they reach it (up to three tentacles, the tongue, the sweep over the flagpole and the rover) instead of everything at once when they are in the middle of the screen
+- Changed the sun and the moon of the aquarium, forest, desert and mountains from 5x3 to 8x5 cells, so that they read as discs, and the clouds of the forest, desert and mountains to come in two sizes
+- Changed all screenshots and clips of the README and the project page to new recordings made with the current scenes
+
+### Fixed
+- Fixed the stars staying bright in a night-time sandstorm (or rain): clouds and dust now hide them
+- Fixed the desert sandstorm lighting the scene up at night: the dust now takes on the time of day
+
 ## [1.2.0] 2026-11-08
 ### Added
 - Added a first tvOS app: the five scenes on the Apple TV, steered with the Siri Remote (swipe left and right to switch scene, up for the time of day, down for the sound, click for the scene's action, hold the click for the menu, Play/Pause to pause), with the sound synthesized through AVAudioEngine, a hint about the menu on the first launches and a menu without a Quit entry. A keyboard works as well. It is generated entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`, see the README) and is not part of the release archives

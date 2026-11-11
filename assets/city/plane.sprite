@@ -1,0 +1,24 @@
+name: plane
+facing: right
+habitat: sky
+behaviors: fly
+speed: 7..10
+slope: 0.06
+depth: 28
+backing: 0.5
+--- art
+          _______
+   |\      \::::::\
+   | \____________________.--.
+  <|=( o o o o o o o o )=====>
+    \_____________________,-'
+             /::::::/
+            /______/
+--- mask
+          lllllll
+   bb      llllllll
+   b bwwwwwwwwwwwwwwwwwwwwwwww
+  bbbw c c c c c c c c wwwwwww
+    wbbbbbbbbbbbbbbbbbbbbbwww
+             llllllll
+            llllllll

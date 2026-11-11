@@ -18,8 +18,21 @@ jobs:
       - name: Check binary dependencies
         run: ldd build/release/src/diorascii
       - name: Package
-        run: cd build/release && cpack
+        run: |
+          sudo apt-get install -y rpm
+          cd build/release
+          cpack
+          cpack -G DEB
+          cpack -G RPM
+      - name: Check the packages
+        run: |
+          dpkg-deb --info build/release/diorascii*.deb
+          dpkg-deb --contents build/release/diorascii*.deb
+          rpm -qpl build/release/diorascii*.rpm
       - uses: actions/upload-artifact@v4
         with:
           name: diorascii-linux
-          path: build/release/diorascii-*.tar.gz
+          path: |
+            build/release/diorascii-*.tar.gz
+            build/release/diorascii*.deb
+            build/release/diorascii*.rpm

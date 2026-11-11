@@ -1,0 +1,27 @@
+name: fountain
+facing: right
+habitat: ground
+speed: 0..0
+depth: 12
+fps: 3
+solid: yes
+--- art
+  . ' .
+ ' \|/ '
+(_._o_._)
+  \___/
+--- mask
+  c c c
+ c cwc c
+bbbbbbbbb
+  bbbbb
+--- art
+  ' . '
+ . \|/ .
+(_._o_._)
+  \___/
+--- mask
+  c c c
+ c cwc c
+bbbbbbbbb
+  bbbbb

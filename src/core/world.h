@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -38,8 +39,17 @@ enum class Zone {
   LowAir    ///< the air over the forest and the valley, where small birds fly
 };
 
+/// Which of a scene's rare catastrophes to send.
+enum class RarePick {
+  Weighted,  ///< any, by the weights in the scene file (the common one four times in five)
+  Common,    ///< the one with the highest weight
+  Other      ///< the one with the lowest weight: the scene's second catastrophe
+};
+
 /// A live thing in the world: a sprite with a position, motion and behaviors.
 struct Entity {
+  /// Unique within the world (0 until it has joined it); lets a tongue find its victim again.
+  uint64_t id = 0;
   /// What it looks like.
   std::shared_ptr<const Sprite> sprite;
   std::string tag;  ///< "prey", "food", ... - looked up by behaviors
@@ -58,8 +68,40 @@ struct Entity {
   double strikeAt = 0.5;
   /// For catastrophes: true once it has struck.
   bool struck = false;
+  /// How a catastrophe strikes. Centre: once, all victims at the same moment, when its middle is
+  /// the `strikeAt` way across (a storm). Sweep: each victim is taken as the middle of the
+  /// attacker passes it (an alien beaming up things). Devour: each victim is taken as the front
+  /// of the attacker reaches it (a sandworm).
+  enum class StrikeMode { Centre, Sweep, Devour };
+  /// How it strikes, see StrikeMode.
+  StrikeMode strikeMode = StrikeMode::Centre;
+  /// Sweep and devour: where its striking point was at the last step, and whether there was one.
+  double lastPoint = 0;
+  bool hasLastPoint = false;
   /// What a catastrophe wipes out when it strikes: "life", or a list of sprite names.
   std::string wipes = "life";
+  /// Devour: how many cells it reaches with a tongue or tentacle at a victim (0 = none).
+  double strikeReach = 0;
+  /// False: it lashes out only at walking things ahead of its front (the sandworm's tongue). True:
+  /// at any living thing around it, from anywhere along its underside (the kraken's tentacles).
+  bool strikeAround = false;
+  /// How many tongues or tentacles may be out at once.
+  int strikeLashes = 1;
+  /// Color of its tongue or tentacles.
+  Rgb lashColor{232, 96, 128};
+  /// True: its lashes are rifle shots (straight, quick, counted by World::shotCount()) instead of
+  /// tongues or tentacles.
+  bool lashShot = false;
+  /// Top speed of a hunting catastrophe (the helicopter, the yeti) in cells per second.
+  double cruise = 0;
+  /// Seconds a hunting catastrophe has had nothing left to hunt; it leaves after a few.
+  double idle = 0;
+  /// Drawn as if behind the mountain: the cells inside the mountain's outline are hidden (the yeti
+  /// climbing over the ridge).
+  bool behindRidge = false;
+  /// Running for its life (from the city monsters): it dashes away from them and off the screen
+  /// and comes back later, as if replaced.
+  bool fleeing = false;
   /// Sprite shown on every victim of a strike.
   std::string strikeEffect = "flash";
   /// Sprite that hits the ground at a strike (a lightning bolt), or empty.
@@ -134,6 +176,20 @@ struct Entity {
   double hopPeriod = 1.2, hopHeight = 1.5;
   /// Marked for removal at the end of the step.
   bool dead = false;
+  /// Vehicles of the city: 0 on the main road, 1 turning into a side street, 2 driving up it, 3 coming
+  /// down it, 4 turning out onto the main road (see World::driveStep()).
+  int driveState = 0;
+  /// Which side street it turns into: -2 not decided yet, -1 none, else its index.
+  int driveAvenue = -2;
+  /// Chance (0 to 1) that the vehicle turns off into the next side street it comes to.
+  double turnChance = 0;
+  /// Direction (1 right, -1 left) and speed it takes up on the main road after coming down a side street.
+  int driveDir = 1;
+  double driveSpeed = 0;
+  /// Bookkeeping of a turn: time spent, where it started, and the row it is heading for.
+  double driveT = 0, driveX0 = 0, driveY0 = 0;
+  /// Draw order it takes up again on the main road.
+  int driveZ = 10;
   /// Behaviors, run in order every step.
   std::vector<BehaviorFn> behaviors;
   /// Called after removal, for example to spawn a replacement.
@@ -154,7 +210,7 @@ struct Light {
   double glow = 0;   ///< strength of the red horizon glow at sunrise and sunset
   double stars = 1;  ///< how visible the stars are
   double haze = 0;   ///< how far things are tinted towards hazeColor (a sandstorm), 0 to 1
-  Rgb hazeColor{0, 0, 0};  ///< color of the haze
+  Rgb hazeColor{0, 0, 0};  ///< color of the haze, already dimmed to the time of day
 };
 
 /// The simulation: owns entities, advances them in fixed-size steps and renders
@@ -198,6 +254,8 @@ class World {
   size_t entityCount() const { return entities_.size(); }
   /// All entities, for behaviors and tests.
   std::vector<std::unique_ptr<Entity>>& entities() { return entities_; }
+  /// Number of live entities made from the sprite with this name.
+  size_t countSprite(const std::string& name) const;
   /// Number of live entities carrying the tag.
   size_t countTag(const std::string& tag) const;
   /// Prey caught by predators so far.
@@ -214,6 +272,66 @@ class World {
   int riverRows() const { return riverRows_; }
   /// True while a rain shower (or a snowstorm) is going on.
   bool raining() const { return rainLeft_ > 0; }
+  /// A side street that runs off into the city from the main street.
+  struct Avenue {
+    int cx = 0;       ///< center column
+    int halfW = 6;    ///< half the width of the road at the main street
+    int depth = 6;    ///< rows it runs up before it disappears behind the buildings
+  };
+  /// The side streets of the city.
+  const std::vector<Avenue>& avenues() const { return avenues_; }
+  /// Side streets seen between the buildings of the front row (cars do not drive there).
+  const std::vector<Avenue>& glimpses() const { return glimpses_; }
+  /// Moves a vehicle that may turn off the main road into a side street, or comes down one.
+  /// Called by the `drive` behavior.
+  void driveStep(Entity& e, double dt);
+  /// True for a city scene.
+  bool city() const { return scene_->city; }
+  /// Number of skyscrapers in the skyline (0 in other scenes and where the screen is too small).
+  size_t buildingCount() const { return city_.size(); }
+  /// How fiercely a skyscraper burns right now, from 0 (no fire) to 1; sound follows it.
+  double fireLevel() const { return fireLevel_; }
+  /// Number of skyscrapers that are on fire or being renovated.
+  size_t troubledBuildings() const;
+  /// How busy the traffic is at this time of day, from about 0.06 at night to 1 in the morning (8:00)
+  /// and evening (17:30) rush hours; 1 in scenes without a day and night cycle.
+  double trafficLevel() const;
+  /// Half the width in columns of the site that is cordoned off around a fire (at least 18, more
+  /// when the fire has spread).
+  double cordonHalfWidth() const { return cordonHalf_; }
+  /// For tests: decides whether the next fire is beaten by the fire engine (false) or gets out of
+  /// hand, spreads to 3-5 more buildings and burns them to the ground (true).
+  void forceFireOutcome(bool fails) { forcedOutcome_ = fails ? 1 : 0; }
+  /// Number of skyscrapers that have burnt down and are still ruins.
+  size_t ruinedBuildings() const;
+  /// The middle column of every building that is burning, in ruins or being rebuilt.
+  std::vector<int> troubledColumns() const;
+  /// True while some skyscraper is on fire.
+  bool fireBurning() const;
+  /// True while a fire is being fought: other vehicles and people keep away from the site.
+  bool cordoned() const { return cordon_; }
+  /// Column in the middle of the cordoned site.
+  double cordonCenter() const { return cordonX_; }
+  /// Drives a fire engine to the burning skyscraper, parks it in front, sprays water until the fire is
+  /// out and drives on. Called by the `engine` behavior.
+  void engineStep(Entity& e, double dt);
+  /// Runs the fire that the `blaze` behavior stands for: sets a skyscraper alight, calls the fire
+  /// engine, lets it burn out and renovates the building.
+  void blazeStep(Entity& e, double dt);
+  /// How strong the monsters' streams of fire are right now, from 0 (none) to 1: the loudest of the
+  /// streams alight, following the swell of each (they shoot out, hold and die away).
+  double flameLevel() const;
+  /// How close the two fighting monsters are to the middle of the scene, 0 to 1; their roars and
+  /// stamping follow it.
+  double titanLevel() const { return nearness("titan"); }
+  /// Drives the monster fight (the `clash` behavior, on the lizard): both monsters come in, fight
+  /// with fire breath and claws, flatten the buildings they stand in, and the lizard walks on; then
+  /// the ruins are rebuilt.
+  void clashStep(Entity& e, double dt);
+  /// Row of the elevated railway, or -1 where there is none.
+  int railRow() const { return railY_; }
+  /// Top row (smallest) of the tallest skyscraper including its antenna, or the height if none.
+  int skylineTop() const;
   /// True for a mountain scene.
   bool mountains() const { return scene_->mountains; }
   /// First row of the mountain at column x, where the sky ends (seabedY() without mountains).
@@ -235,11 +353,33 @@ class World {
   double scarAt(int x, int y) const;
   /// How loud the avalanche is, from 0 (none) to 1 (it is thundering down); sound follows it.
   double avalancheLevel() const { return slideLevel_; }
+  /// How strong the poison cloud of the leaking submarine is, from 0 (none) to 1; sound follows it.
+  double toxinLevel() const { return toxinLevel_; }
+  /// How near the big meteor is to striking, from 0 (none) to 1 (it hits now); the rumble through
+  /// the ground follows it.
+  double asteroidLevel() const { return asteroidLevel_; }
+  /// Drives the big meteor (the `asteroid` behavior): it comes down from far away, grows as it
+  /// nears, and strikes the ground with an impact that is felt across the whole width.
+  void asteroidStep(Entity& e, double dt);
+  /// Drives the leaking submarine (the `leak` behavior): it drives through the sea and leaves a
+  /// trail of poison behind it that spreads while it passes and lingers after it has gone.
+  void leakStep(Entity& e, double dt);
+  /// How loud the rush of the flood is, from 0 (none) to 1; sound follows it.
+  double floodLevel() const { return floodLevel_; }
+  /// How muddy column x is after a flood, 0 to 1.
+  double mudAt(int x) const { return x >= 0 && static_cast<size_t>(x) < mud_.size() ? mud_[static_cast<size_t>(x)] : 0.0; }
+  /// Drives the flood (the `flood` behavior): the river bursts its banks and a wall of water runs
+  /// across the land, tearing off everything it reaches, then recedes and leaves mud behind.
+  void floodStep(Entity& e, double dt);
   /// Moves an avalanche entity one step down the mountain, scarring what it passes and wiping out
   /// what it buries. Called by the `avalanche` behavior.
   void slideStep(Entity& e, double dt);
-  /// How the time of day advances. The other modes freeze it at a fixed moment.
-  enum class TimeMode { Cycle, Dawn, Day, Dusk, Night };
+  /// How the time of day advances. Dawn, Day, Dusk and Night freeze it at a fixed moment; Realtime
+  /// leaves it to the frontend, which sets it from the host's clock (see setPhase()), because the
+  /// core has no clock of its own.
+  enum class TimeMode { Cycle, Dawn, Day, Dusk, Night, Realtime };
+  /// Number of TimeMode values.
+  static constexpr int kTimeModes = 6;
   /// Runs the day and night cycle, or freezes the time of day. Without a cycle in
   /// the scene this changes nothing.
   void setTimeMode(TimeMode mode);
@@ -247,10 +387,43 @@ class World {
   TimeMode timeMode() const { return timeMode_; }
   /// Summons one of the scene's rare catastrophes now. Returns false if the scene has none or
   /// one is already under way.
-  bool triggerRare();
+  /// @param pick which one: a weighted pick (like the scheduled ones), the scene's most likely
+  ///        catastrophe, or its least likely one (the second), so that either can be seen without
+  ///        waiting for the chance
+  bool triggerRare(RarePick pick = RarePick::Weighted);
   /// Wipes out entities: all life (kills == "life") or the sprites named in kills. Each victim
   /// shows `effect`, and is brought back some seconds later. The attacker itself is spared.
-  void wipeOut(const std::string& kills, const std::string& effect, const Entity* except);
+  /// @param from,to only victims whose middle column lies in this range are taken (default: all)
+  /// @param groundedOnly spare what flies: only things that walk on the ground are taken
+  /// @return how many were taken
+  size_t wipeOut(const std::string& kills, const std::string& effect, const Entity* except,
+                 double from = -1e9, double to = 1e9, bool groundedOnly = false);
+  /// A devouring attacker (see Entity::strikeReach) lashes a tongue or tentacle out at the nearest
+  /// victim in reach: it reaches the victim, which is crushed, and draws back. Up to
+  /// Entity::strikeLashes at once, each at another victim.
+  /// @return true if one was started
+  bool lash(const Entity& attacker);
+  /// Number of tongues and tentacles currently lashing out.
+  size_t tongueCount() const { return tongues_.size(); }
+  /// How many things devouring catastrophes (the sandworm, the kraken) have crushed so far; sound follows each.
+  unsigned crushCount() const { return crushes_; }
+  /// Counts things crushed by a devouring catastrophe. Called by the `catastrophe` behavior.
+  void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
+  /// How many animals an avalanche has buried so far; each lets out a muffled squeal.
+  unsigned squealCount() const { return squeals_; }
+  /// How many rifle shots the poachers have fired so far; sound follows each.
+  unsigned shotCount() const { return shots_; }
+  /// How close the poachers' helicopter is to the middle of the scene, 0 to 1; the rotor sound follows it.
+  double rotorLevel() const { return nearness("chopper"); }
+  /// Drives the poachers' helicopter (the `poach` behavior): it flies after the closest living
+  /// thing, shoots at what is in reach and leaves when nothing is left or after a while.
+  void poachStep(Entity& e, double dt);
+  /// How close the yeti is to the middle of the scene, 0 to 1; its roar and stamping follow it.
+  double yetiLevel() const { return nearness("beast"); }
+  /// Drives the yeti (the `maul` behavior): it climbs over the highest ridge, follows the terrain
+  /// down to the closest animal on the ground, grabs what is in reach and leaves when nothing is
+  /// left or after a while.
+  void maulStep(Entity& e, double dt);
   /// How many entities catastrophes have wiped out so far.
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.
@@ -331,6 +504,47 @@ class World {
   void noteFoodEaten() { ++foodEaten_; }
 
  private:
+  /// A skyscraper of the city's skyline.
+  struct Building {
+    int x = 0, w = 8, h = 10;  ///< left column, width, and height in rows above the street
+    int layer = 0;             ///< 0 = far (pale), 1 = middle, 2 = front
+    int facade = 0;            ///< 0 grid of windows, 1 glass curtain wall, 2 ribbons, 3 small windows
+    int roof = 0;              ///< 0 flat, 1 antenna, 2 stepped, 3 crown, 4 water tower, 5 helipad
+    int antenna = 0;           ///< rows of antenna above the roof
+    int tint = 0;              ///< index of its wall color
+    uint32_t seed = 0;         ///< decides its window pattern
+    /// Normal, on fire (a catastrophe), burnt down to a ruin, or wrapped in scaffolding while it is
+    /// renovated (or rebuilt, if it burnt down).
+    enum class State { Normal, Burning, Ruin, Scaffold };
+    State state = State::Normal;
+    bool ruined = false;       ///< it burnt down and is being rebuilt from the rubble
+    bool hold = false;         ///< a ruin that is not rebuilt until it is released (the monster fight's)
+    double timer = 0;          ///< seconds in the state
+  };
+  /// Chooses where the side streets go, clear of the shops and trees on the sidewalk.
+  void placeAvenues();
+  /// Lets cars come down the side streets now and then.
+  void stepCity(double dt);
+  /// Builds the skyline and decides where the railway runs.
+  void buildCity();
+  /// Advances the burning, ruined and rebuilt buildings in `blazeBuildings_` by one step. Returns
+  /// true once every one of them is standing again.
+  bool stepBuildings(double dt);
+  /// Brings a building down into a ruin (dust and smoke billow up); the rebuilding follows by itself.
+  void ruinBuilding(int idx);
+  /// Gives a skyscraper new looks and a new height (the first time, and after a renovation).
+  void rollBuilding(Building& b);
+  /// Draws the skyline and the side streets (behind everything that moves in the city, except what
+  /// drives up and down the side streets).
+  void renderCityBack(Frame& out, Style style, const Light& light) const;
+  /// Draws the skyscrapers.
+  void renderSkyline(Frame& out, Style style, const Light& light) const;
+  /// Paints a side street over what is behind it: a road that narrows a little as it runs back
+  /// between two sidewalk edges, hazier the further it goes.
+  void paintAvenue(Frame& out, const Avenue& a, Style style, const Light& light) const;
+  /// Draws the viaduct, the street rows and the street lamps (in front of the side streets and what
+  /// drives on them, behind the shops and the traffic of the main street).
+  void renderStreet(Frame& out, Style style, const Light& light) const;
   /// Spawns the scene population and decorations.
   void populate();
   /// Builds the mountain range: the skyline, the tree line and the snow line of every column.
@@ -343,8 +557,8 @@ class World {
   void spawnSeaweed();
   /// Sends one weighted-random scene event.
   void spawnEvent();
-  /// Sends one weighted-random rare catastrophe.
-  void spawnRare();
+  /// Sends one rare catastrophe, see RarePick.
+  void spawnRare(RarePick pick = RarePick::Weighted);
   /// Number of cells in a habitat, used for per-cells populations.
   double areaFor(const std::string& habitat) const;
   /// Picks a starting row for a sprite of the given height in its habitat.
@@ -355,6 +569,12 @@ class World {
   void spawnHerd(const std::shared_ptr<const Sprite>& sprite);
   /// Lets rain drops fall, or wind carry sand across the scene, for this step.
   void spawnWeather(double dt);
+  /// Moves the tongues, crushes what they reach and removes the ones that are done.
+  void stepTongues(double dt);
+  /// Draws the tongues lashing out of devouring attackers.
+  void renderTongues(Frame& out, Style style, const Light& light) const;
+  /// The entity with this id, or nullptr.
+  Entity* findEntity(uint64_t id);
   /// Moves entities spawned during the step into the world.
   void flushIncoming();
   /// Draws sky, medium, surface line and ground.
@@ -383,6 +603,34 @@ class World {
   int horizonY_ = 0;
   /// Rows (feet) a zone spans: index by Zone.
   int zoneLo_[10] = {}, zoneHi_[10] = {};
+  /// The skyline of a city scene, back layer first, and the row of the railway (-1 = none).
+  std::vector<Building> city_;
+  int railY_ = -1;
+  /// The side streets, and the seconds until the next car comes down each of them.
+  std::vector<Avenue> avenues_;
+  std::vector<double> avenueTimer_;
+  /// Other side streets, seen between the buildings of the front row (cars do not drive there).
+  std::vector<Avenue> glimpses_;
+  /// The fire under way: which building, and how fiercely it burns.
+  /// The buildings of the fire under way (the first is where it started), whether it gets out of hand,
+  /// how many more buildings it will spread to, and when it spreads next.
+  std::vector<int> blazeBuildings_;
+  int blazeOrigin_ = -1;
+  bool blazeFails_ = false;
+  int forcedOutcome_ = -1;  ///< -1 left to chance, 0 beaten, 1 out of hand (tests)
+  int spreadLeft_ = 0;
+  double blazeClock_ = 0, nextSpread_ = 0, cordonHalf_ = 18.0;
+  /// Moves the cordon to cover every building of the fire.
+  void fitCordon();
+  /// The site of the fire is cordoned off from the arrival of the fire engine until the building is
+  /// renovated: its middle column, and seconds of water still being sprayed.
+  bool cordon_ = false;
+  double cordonX_ = 0, sprayTime_ = 0;
+  /// Puts barriers at both ends of the cordoned site, and takes them away again.
+  void raiseBarriers();
+  void liftBarriers();
+  double fireLevel_ = 0;
+  double smokePuffs_ = 0;
   /// Fading trace of the avalanche over every cell, row by row.
   std::vector<float> scar_;
   /// The avalanche under way: where it starts, where it is heading, how far down it has come.
@@ -393,8 +641,106 @@ class World {
     double endedAt = -1;  ///< age of the avalanche entity when its head reached the bottom
     double puffs = 0;
   } slide_;
+  /// A tongue lashing out: it reaches for the victim, crushes it on arrival and draws back.
+  struct Tongue {
+    uint64_t attacker = 0, victim = 0;  ///< entity ids
+    double age = 0;
+    double reach = 0.28, dur = 0.6;     ///< seconds to reach the victim, and to be done altogether
+    bool hit = false;                   ///< the victim has been crushed
+    double ox = 0;                      ///< where it starts, in columns from the attacker's left edge
+    Rgb color{232, 96, 128};
+    bool shot = false;                  ///< a rifle shot rather than a tongue
+    bool harmless = false;              ///< it hurts nobody (the monsters' fire breath at each other)
+    bool fire = false;                  ///< drawn as a broad stream of flames that holds before it dies away
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;  ///< the base and the tip, in cells
+    std::string effect;                 ///< shown on the victim when it is crushed
+    std::string wipes;
+  };
+  /// Tongues lashing out now, and when the next one may start.
+  std::vector<Tongue> tongues_;
+  double nextLash_ = 0;
+  /// The id given to the next entity that joins the world.
+  uint64_t nextId_ = 0;
+  /// Counters behind crushCount() and squealCount().
+  unsigned crushes_ = 0, squeals_ = 0, shots_ = 0;
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
+  /// The poison trail of the submarine: a puff is left behind it every column or so, and every
+  /// puff spreads (round, as cells go) until the trail fills the height of the sea. It lingers
+  /// once the submarine has gone and then thins out; it kills what it covers.
+  struct Toxin {
+    bool active = false;      ///< a trail exists
+    bool sourceGone = false;  ///< the submarine has left the screen
+    double age = 0;           ///< seconds since the first puff
+    double gone = 0;          ///< seconds since the submarine left
+    double reach = 0;         ///< radius at which a puff covers the sea from top to bottom
+    double strength = 0;      ///< 0 to 1: thick while it lingers, thin again as it fades
+    /// One puff: where it was left, and when (in `age`).
+    struct Puff {
+      double x = 0, y = 0, born = 0;
+    };
+    std::vector<Puff> puffs;  ///< in the order they were left
+  } toxin_;
+  /// How far the puff has spread by now.
+  double puffRadius(const Toxin::Puff& p) const;
+  /// Strength of the cloud for the sound.
+  double toxinLevel_ = 0;
+  /// The flood: a wall of water runs in from one side, stands over the land for a while and then
+  /// recedes.
+  struct Flood {
+    bool active = false;   ///< a flood is under way
+    bool started = false;  ///< it has begun (the entity that stands for it may leave after it)
+    int dir = 1;           ///< side it comes from: 1 from the left, -1 from the right
+    double age = 0;        ///< seconds since it began
+    double depthMax = 0;   ///< depth of the water at its highest, in rows
+    double recede = 0;     ///< how far the water has withdrawn, 0 to 1
+  } flood_;
+  /// How loud the flood is right now.
+  double floodLevel_ = 0;
+  /// The big meteor: where it starts and where it is going to hit, as columns.
+  struct Asteroid {
+    bool started = false;
+    double x0 = 0, xt = 0;
+  } asteroid_;
+  /// How close the big meteor is to its strike.
+  double asteroidLevel_ = 0;
+  /// The big strike: a crater across the whole width, everything on the ground wrecked, thrown
+  /// rock and a wave of dust that runs out to both edges, and a flash of the whole screen.
+  void bigImpactAt(double cx);
+  /// The monster fight: where the monsters meet, which part of the show it is in and when the next
+  /// blow falls.
+  struct Clash {
+    bool started = false;   ///< the monsters have been called
+    bool placed = false;    ///< the winged one has been put at its edge
+    int dir = 1;            ///< side the lizard comes from: 1 from the left, -1 from the right
+    int phase = 0;          ///< 0 arriving, 1 fighting, 2 the lizard has won and walks on, 3 only ruins are left
+    double t = 0;           ///< seconds since the start
+    double meetX = 0;       ///< column of the middle between the two monsters
+    double fightT = 0;      ///< seconds of fighting so far
+    double nextBlow = 0, nextRuin = 0;  ///< when the next blow falls and the next building goes down
+    double breath = 0;      ///< seconds of fire breath left
+    double strike = 0;      ///< seconds the winged monster's attack frame is shown
+    double endT = 0;        ///< seconds since the winged monster fell
+    int blows = 0;          ///< blows so far
+    double spread = 0;      ///< seconds the fire has been spreading from the fight
+    double rebuildT0 = -1;  ///< when the rebuilding begins (the fight is over), or -1
+    /// Buildings by their distance from the middle of the fight, the nearest first: the order in
+    /// which the fire reaches them and later the rebuilding.
+    std::vector<std::pair<double, int>> order;
+    size_t nextIgnite = 0;  ///< the first one in `order` that is not alight yet
+  } clash_;
+  /// How muddy each column is (1 right after the water has been over it, fading in time).
+  std::vector<float> mud_;
+  /// Depth of the flood water at column x, in rows from the bottom of the screen.
+  double floodDepth(int x) const;
+  /// Advances the flood, tears off what it reaches and lets the mud dry.
+  void stepFlood(double dt);
+  /// Draws the flood water over the land.
+  void renderFlood(Frame& out, Style style, const Light& light) const;
+  /// Spreads and fades the poison cloud, and kills what it covers.
+  void stepToxin(double dt);
+  /// Tints the sea where the poison cloud lies.
+  void renderToxin(Frame& out, Style style, const Light& light) const;
   /// Seconds until the next rare event; negative means none is scheduled yet.
   double rareTimer_ = 0;
   /// A wiped-out entity waiting to be brought back.

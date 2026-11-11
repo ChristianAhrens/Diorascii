@@ -10,6 +10,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added a Windows setup `.exe` to the release (Inno Setup, `packaging/windows/diorascii.iss`) that installs to Program Files, adds `diorascii` to the PATH for cmd and PowerShell, can be uninstalled from *Installed apps* and upgrades an older install in place; the Windows workflow builds it on every push and installs, upgrades and uninstalls it as a test
 - Added `.deb` and `.rpm` packages for Linux to the release (CPack, `cpack -G DEB` and `cpack -G RPM`), which install `/usr/bin/diorascii` so that it is in the PATH and are upgraded and removed by the package manager; the Linux workflow builds and inspects them on every push
 - Added a second catastrophe to the moon: a big meteor that grows from a speck in the black sky and strikes with an impact across the entire width of the screen (crater, flash, everything on the ground wrecked, a wave of dust), with a rumble that swells as it falls and the behavior `asteroid`
 - Added a second catastrophe to the city: a fight between a giant lizard and a winged monster, each clearly outlined, spitting streams of blue and violet fire at each other, from which all people and vehicles flee; the fire spreads from where they fight and leaves dozens of buildings in ruins, which are rebuilt starting from the same spot; with their steps and roars, a roaring whoosh for every stream of fire and no screech once the winged one has fallen (`AmbientParams::flames` and `winged`) and the behavior `clash`

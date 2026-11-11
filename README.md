@@ -57,7 +57,8 @@ on Windows) from a terminal. Nothing else needs to be installed.
 | Linux | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries |
 | Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
 | Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
-| Windows | `Diorascii-x.y.z-Windows.zip` | Windows Terminal or Windows 10+ console |
+| Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
+| Windows, portable | `Diorascii-x.y.z-Windows.zip` | unpack and run `bin\diorascii.exe` |
 
 The macOS binary is signed ad hoc but not notarized. If macOS refuses to open a
 downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine bin/diorascii`.
@@ -65,6 +66,10 @@ downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine 
 The `.deb` and `.rpm` install `diorascii` into `/usr/bin`, so it is in the PATH. Installing a newer
 one over an older one upgrades it; remove it with `sudo apt remove diorascii` or
 `sudo dnf remove diorascii`.
+
+To uninstall the Windows setup use *Apps > Installed apps* (or the uninstaller in the install folder);
+a newer setup installs over an older version in place. It is not code-signed, so SmartScreen may ask
+for confirmation ("More info", "Run anyway").
 
 ## Usage
 
@@ -480,6 +485,11 @@ once with `xcrun notarytool store-credentials`) and staples the ticket. Without 
 `DIORASCII_ADHOC=1`, it falls back to the ad-hoc signature and skips notarization, which is
 what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
 
+The Windows installer is built by the workflow with [Inno Setup](https://jrsoftware.org/isinfo.php)
+from `packaging/windows/diorascii.iss` (installs to Program Files, adds the PATH entry,
+registers an uninstaller; the `AppId` in the script must never change, it is what lets a newer
+version replace an older one).
+
 The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`, `cpack -G RPM` in the build
 directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
@@ -491,6 +501,7 @@ directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
     src/app    interactive session logic (shared by frontends), command line + terminal main loop
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
+    packaging/ installer definitions (Windows Inno Setup script)
     scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
     CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)

@@ -177,7 +177,7 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
   only if a configure probe links (Fedora needs `libstdc++-static`), else dynamic with a message.
   GCC gets `-Wno-psabi`. macOS builds are universal arm64+x86_64, deployment target 12.0.
 - Presets: `dev` (Debug), `release`, `release-macos`. Scripts: `build.sh`, `build.ps1`,
-  `package-macos.sh`, `release-notes.sh`.
+  `package-macos.sh`, `release-notes.sh`; `packaging/` holds installer definitions.
 - CI: `linux.yml`, `macos.yml`, `windows.yml` on every push/PR; `docs.yml` (Doxygen + landing page
   to `gh-pages`) on push to `main`; `release.yml` on tags `x.y.z` (no `v`): verifies the tag
   against the changelog, builds and tests three platforms, creates a **draft** release with the
@@ -190,6 +190,10 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
   needs rpmbuild), prefix `/usr`, next to the `.tar.gz`; `linux.yml` builds and inspects them. **Flatpak was
   considered and not done:** a Flatpak exports its command as `<app-id>` (not `diorascii`) and sandboxes a
   terminal program and its audio; `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
+- Windows installer (2026-11-11): `Diorascii-x.y.z-Windows-Setup.exe`, Inno Setup script `packaging/windows/diorascii.iss`
+  (the `AppId` GUID must never change; PATH entry in the machine or, for a per-user install, user environment, removed on
+  uninstall; `ChangesEnvironment=yes`). `windows.yml` installs, upgrades and uninstalls it silently as a test. Not
+  code-signed. The portable `.zip` is kept.
 - Landing page `pages/index.html`: scene toggle (fish/tree/palm/mountain/star icons) and
   day/night toggle over `Resources/Diorascii_<Scene>_<Day|Night>.mp4` backgrounds; the choice is
   remembered in the browser. Videos are cropped to terminal content only, 20 fps, 1920 px wide.

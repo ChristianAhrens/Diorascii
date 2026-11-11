@@ -120,6 +120,19 @@ jobs:
           cp build/${{ matrix.preset }}/diorascii*.deb "staging/Diorascii-${{ github.ref_name }}-${{ matrix.name }}.deb"
           cp build/${{ matrix.preset }}/diorascii*.rpm "staging/Diorascii-${{ github.ref_name }}-${{ matrix.name }}.rpm"
 
+      # Setup .exe built with Inno Setup (packaging/windows/diorascii.iss): installs to Program Files,
+      # adds the PATH entry, registers an uninstaller and upgrades an older install in place.
+      - name: Package (installer)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ github.ref_name }}" `
+            "/DSourceDir=$PWD\staging\Diorascii-${{ github.ref_name }}-${{ matrix.name }}" `
+            "/DOutputDir=$PWD\staging" packaging\windows\diorascii.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload release asset
         shell: bash
         env:

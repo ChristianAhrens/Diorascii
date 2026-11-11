@@ -10,6 +10,13 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.3.0] 2026-11-11
+### Added
 - Added the City scene: skyscrapers in three rows up to 70% of the sky, with lit windows at night, a street with lamps, zebra crossings and traffic (cars, taxis, buses, trucks, cyclists) with rush hours at about 8:00 and 17:30, people, shops, a park, an elevated railway with a station and trains, planes coming in to land, and side streets where cars turn off the main road and others come in. `f` calls an ambulance through the streets, and `x` sets a skyscraper alight: a fire engine comes, and the burnt-out building is wrapped in scaffolding and renovated, or, when the fire gets out of hand, it spreads to a few more buildings that burn down and are rebuilt from the rubble
 - Added the soundscape of the City: traffic, horns, the sirens of the ambulance and the fire engine, the metro's "klack-klack" of the trains, a faint jet for the planes and the crackle of the fire
 - Added a second, less likely catastrophe to every scene: a poison-leaking submarine in the aquarium (it replaces the kraken one time in five), a flood in the forest, poachers in a helicopter in the desert, an abnormally large yeti in the mountains, a fight between a giant lizard and a winged monster in the city and a big meteor on the moon, each with its own sounds. `x` still picks by the scene's odds, `X` (or the menu entry *Other rare event*, or `--rare-other N` with `--dump`) summons the second one

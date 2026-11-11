@@ -55,10 +55,16 @@ on Windows) from a terminal. Nothing else needs to be installed.
 |---|---|---|
 | macOS | `Diorascii-x.y.z-macOS.dmg` | universal (Apple silicon and Intel), disk image |
 | Linux | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries |
+| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
+| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
 | Windows | `Diorascii-x.y.z-Windows.zip` | Windows Terminal or Windows 10+ console |
 
 The macOS binary is signed ad hoc but not notarized. If macOS refuses to open a
 downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine bin/diorascii`.
+
+The `.deb` and `.rpm` install `diorascii` into `/usr/bin`, so it is in the PATH. Installing a newer
+one over an older one upgrades it; remove it with `sudo apt remove diorascii` or
+`sudo dnf remove diorascii`.
 
 ## Usage
 
@@ -473,6 +479,9 @@ the same identity, submits the image with `notarytool` using the keychain profil
 once with `xcrun notarytool store-credentials`) and staples the ticket. Without an identity, or with
 `DIORASCII_ADHOC=1`, it falls back to the ad-hoc signature and skips notarization, which is
 what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
+
+The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`, `cpack -G RPM` in the build
+directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
 ## Layout
 

@@ -186,6 +186,10 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
   LICENSE, README). CI signs ad-hoc only. Notarized assets are made locally with
   `scripts/package-macos.sh` (keychain profile `APP_NOTARIZATION_CREDENTIALS_PROFILE`) and uploaded
   to the release by hand, because `gh` is not installed on the owner's machine.
+- Linux packages (2026-11-11): `.deb` and `.rpm` from CPack (`cpack -G DEB/RPM`, not default generators because RPM
+  needs rpmbuild), prefix `/usr`, next to the `.tar.gz`; `linux.yml` builds and inspects them. **Flatpak was
+  considered and not done:** a Flatpak exports its command as `<app-id>` (not `diorascii`) and sandboxes a
+  terminal program and its audio; `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
 - Landing page `pages/index.html`: scene toggle (fish/tree/palm/mountain/star icons) and
   day/night toggle over `Resources/Diorascii_<Scene>_<Day|Night>.mp4` backgrounds; the choice is
   remembered in the browser. Videos are cropped to terminal content only, 20 fps, 1920 px wide.

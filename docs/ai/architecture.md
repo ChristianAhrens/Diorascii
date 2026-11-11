@@ -201,7 +201,10 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
     `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
 - Landing page `pages/index.html`: scene toggle (fish/tree/palm/mountain/star icons) and
   day/night toggle over `Resources/Diorascii_<Scene>_<Day|Night>.mp4` backgrounds; the choice is
-  remembered in the browser. Videos are cropped to terminal content only, 20 fps, 1920 px wide.
+  remembered in the browser; all seven scenes (including City and Moon) have a Day and a Night clip. Videos
+  are cropped to terminal content only, 20 fps, 1920 px wide. They and the README stills (rounded, with shadow)
+  are produced from raw `.mov` screen recordings by `scripts/process-screengrabs.sh` (the crop rectangle is
+  measured for the owner's 2350x1930 recordings; the script refuses other sizes). The `.mov` sources are not committed.
 
 ## tvOS build notes (spike 2026-11-08)
 

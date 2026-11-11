@@ -40,8 +40,14 @@ Every scene by day and by night (on the moon: by lunar day and by earthrise).
     <td align="center"><img src="Resources/Diorascii_Mountains_Night.png" alt="Mountains by night" width="400"></td>
   </tr>
   <tr>
+    <th>City</th>
+    <td align="center"><img src="Resources/Diorascii_City_Day.png" alt="City by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_City_Night.png" alt="City by night" width="400"></td>
+  </tr>
+  <tr>
     <th>Moon</th>
-    <td colspan="2" align="center"><img src="Resources/Diorascii_Moon.png" alt="The moon" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Moon_Day.png" alt="The moon by day" width="400"></td>
+    <td align="center"><img src="Resources/Diorascii_Moon_Night.png" alt="The moon by night" width="400"></td>
   </tr>
 </table>
 
@@ -507,7 +513,8 @@ version replace an older one). The Linux `.deb` and `.rpm` come from CPack (`cpa
     assets/    sprites and scenes, embedded at build time (cmake/embed.cmake)
     pages/     landing page deployed to GitHub Pages
     packaging/ installer definitions (Windows Inno Setup script)
-    scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text)
+    scripts/   build and packaging helpers, release-notes.sh (changelog section -> release text),
+               process-screengrabs.sh (screen recordings -> README stills and page clips)
     CHANGELOG.md  per-release changes; source of the version and of the release text
     tests/     dependency-free tests (ctest)
     docs/ai/   notes for AI collaborators: history, architecture, conventions, rules, open findings (see CLAUDE.md)

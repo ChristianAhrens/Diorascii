@@ -10,6 +10,8 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added `scripts/process-screengrabs.sh`, which turns raw screen recordings of the terminal (`Resources/Diorascii_<Scene>_<Day|Night>.mov`) into the cropped 1920 px clips (`.mp4`) of the project page and the stills (`.png`, rounded corners, drop shadow) of the README
+- Added the City to the README screenshots and to the project page (a new scene button), and the moon's day and night to both: the moon has a clip and a still for each now, so the project page's day and night toggle works for it as well
 - Added `.deb` and `.rpm` packages for Linux to the release (CPack, `cpack -G DEB` and `cpack -G RPM`), which install `/usr/bin/diorascii` so that it is in the PATH and are upgraded and removed by the package manager; the Linux workflow builds and inspects them on every push
 - Added a Windows setup `.exe` to the release (Inno Setup, `packaging/windows/diorascii.iss`) that installs to Program Files, adds `diorascii` to the PATH for cmd and PowerShell, can be uninstalled from *Installed apps* and upgrades an older install in place; the Windows workflow builds it on every push and installs, upgrades and uninstalls it as a test
 - Added a second catastrophe to the moon: a big meteor that grows from a speck in the black sky and strikes with an impact across the entire width of the screen (crater, flash, everything on the ground wrecked, a wave of dust), with a rumble that swells as it falls and the behavior `asteroid`
@@ -54,6 +56,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a *real time* mode for the time of day (last in the `t` and menu list, or `--realtime`): the day, dusk, night and dawn of the scenes follow the clock of the computer Diorascii runs on, in the terminal program and on tvOS
 
 ### Changed
+- Changed all screenshots and clips of the README and the project page to new recordings made with the current scenes
 - Changed the macOS release asset from a disk image to an installer package, `Diorascii-x.y.z-macOS.pkg`, which installs `diorascii` into `/usr/local/bin`; `scripts/package-macos.sh` signs the binary with the Developer ID Application identity and the package with the Developer ID Installer one, notarizes and staples it (ad hoc and unsigned on CI as before)
 - Changed the project page's description and the guide for AI collaborators to name the City among the scenes, and the README's list of behaviors to include `drive`, `engine` and `blaze`
 - Changed the City's plane to a larger drawing in the style of a pictogram: a swept wing behind and above the fuselage, one below it, a tail fin with a blue tip, a row of windows and a blue stripe along the belly

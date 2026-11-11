@@ -12,6 +12,8 @@ rather than from the code, it is marked as such. Verify against the code before 
 | [conventions.md](conventions.md) | Code style, documentation, testing, art and sound-design conventions |
 | [guardrails.md](guardrails.md) | Rules the owner established, with their reasons |
 | [findings.md](findings.md) | Flagged issues and open decisions, to work through with the owner |
+| [spatial-audio-plan.md](spatial-audio-plan.md) | Plan (not implemented) for multichannel output up to 9.1.6 and spatial audio on HDMI and AirPods |
+| [external-renderer-prep.md](external-renderer-prep.md) | How the sound path is built (synthesis, stems, layout rendering) and what must be cut to send stems and ADM-OSC metadata to an external renderer (analysis, not implemented) |
 
 User-facing documentation (sprite and scene file formats, CLI, keys) lives in the root
 [README.md](../../README.md) and is the reference for those formats; these docs do not repeat it.

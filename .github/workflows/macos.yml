@@ -23,7 +23,12 @@ jobs:
         run: codesign --force --sign - build/release-macos/src/diorascii
       - name: Package
         run: cd build/release-macos && cpack
+      # The installer package, as in the release (ad-hoc signed, not notarized).
+      - name: Installer package
+        run: DIORASCII_ADHOC=1 scripts/package-macos.sh "" dist
       - uses: actions/upload-artifact@v4
         with:
           name: diorascii-macos-universal
-          path: build/release-macos/diorascii-*.tar.gz
+          path: |
+            build/release-macos/diorascii-*.tar.gz
+            dist/Diorascii-*-macOS.pkg

@@ -182,18 +182,23 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
   to `gh-pages`) on push to `main`; `release.yml` on tags `x.y.z` (no `v`): verifies the tag
   against the changelog, builds and tests three platforms, creates a **draft** release with the
   changelog section as text and publishes it only when all three passed.
-- macOS asset is a DMG (binary, `usr-local-bin` symlink, `Install to local bin.command`,
-  LICENSE, README). CI signs ad-hoc only. Notarized assets are made locally with
-  `scripts/package-macos.sh` (keychain profile `APP_NOTARIZATION_CREDENTIALS_PROFILE`) and uploaded
-  to the release by hand, because `gh` is not installed on the owner's machine.
-- Linux packages (2026-11-11): `.deb` and `.rpm` from CPack (`cpack -G DEB/RPM`, not default generators because RPM
-  needs rpmbuild), prefix `/usr`, next to the `.tar.gz`; `linux.yml` builds and inspects them. **Flatpak was
-  considered and not done:** a Flatpak exports its command as `<app-id>` (not `diorascii`) and sandboxes a
-  terminal program and its audio; `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
-- Windows installer (2026-11-11): `Diorascii-x.y.z-Windows-Setup.exe`, Inno Setup script `packaging/windows/diorascii.iss`
-  (the `AppId` GUID must never change; PATH entry in the machine or, for a per-user install, user environment, removed on
-  uninstall; `ChangesEnvironment=yes`). `windows.yml` installs, upgrades and uninstalls it silently as a test. Not
-  code-signed. The portable `.zip` is kept.
+- Release assets are installers (2026-11-11), each putting `diorascii` into the PATH and upgrading an
+  older install in place:
+  - macOS: `Diorascii-x.y.z-macOS.pkg` (pkgbuild + productbuild, identifier
+    `com.ChristianAhrens.Diorascii`, payload below `/usr/local`: `bin/diorascii`, `share/doc/diorascii/`).
+    CI builds it ad-hoc/unsigned (`DIORASCII_ADHOC=1`). The owner builds the notarized one locally with
+    `scripts/package-macos.sh`: binary signed with "Developer ID Application", package with the separate
+    "Developer ID Installer" certificate, notarized with keychain profile
+    `APP_NOTARIZATION_CREDENTIALS_PROFILE`, stapled, then uploaded over the CI asset by hand
+    (`gh` is not installed on the owner's machine). macOS has no package uninstaller; the README gives the commands.
+  - Windows: `Diorascii-x.y.z-Windows-Setup.exe`, Inno Setup script `packaging/windows/diorascii.iss`
+    (the `AppId` GUID must never change; PATH entry in the machine or, for a per-user install, user
+    environment, removed on uninstall; `ChangesEnvironment=yes`). `windows.yml` installs, upgrades and
+    uninstalls it silently as a test. Not code-signed. The portable `.zip` is kept.
+  - Linux: `.deb` and `.rpm` from CPack (`cpack -G DEB/RPM`, not default generators because RPM needs
+    rpmbuild), prefix `/usr`, plus the `.tar.gz`. **Flatpak was considered and not done:** a Flatpak
+    exports its command as `<app-id>` (not `diorascii`) and sandboxes a terminal program and its audio;
+    `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
 - Landing page `pages/index.html`: scene toggle (fish/tree/palm/mountain/star icons) and
   day/night toggle over `Resources/Diorascii_<Scene>_<Day|Night>.mp4` backgrounds; the choice is
   remembered in the browser. Videos are cropped to terminal content only, 20 fps, 1920 px wide.

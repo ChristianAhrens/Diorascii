@@ -16,7 +16,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-08 | M | Scene-specific logic baked into the "generic" core | to investigate in a dedicated, plain-language step |
 | F-09 | M | miniaudio runtime linking on Apple | to investigate in a dedicated, plain-language step |
 | F-10 | M | `package-macos.sh` pollutes the shared build dir; `dist/` not ignored | fixed, uncommitted |
-| F-11 | M | Notarized macOS assets are a manual, undocumented step | deferred: 1.1.x stay ad-hoc, 1.2.0 supersedes |
+| F-11 | M | Notarized macOS assets are a manual step | documented in README Releasing; the asset is now a .pkg (2026-11-11) |
 | F-12 | L | Sound design is unheard by the assistant; lightning crack unfinished | todo |
 | F-13 | L | Project memory was not carried over after the directory rename | done (see below) |
 | F-14 | L | Copyright holder / vendor naming is inconsistent | todo |
@@ -110,7 +110,9 @@ baseline, so local release builds there report `0.1.0`). Workaround:
 or unset the variable afterwards. Also `dist/` (script output) is not in `.gitignore`.
 
 ## F-11 Notarized release assets (M)
-CI produces ad-hoc signed DMGs; the notarized one is built locally and swapped into the GitHub
+(Update 2026-11-11: the asset is now a `.pkg`, the manual swap is documented in the README. The installers
+for Windows/Linux and the notarized `.pkg` run are **unverified**: see the unverified list in the 2026-11-11
+history entry.) CI produces ad-hoc signed DMGs; the notarized one is built locally and swapped into the GitHub
 release by hand (`gh` is not installed). Done for 1.0.0 (2026-11-07). The sessions do not show it
 for 1.1.0 or 1.1.1, so those releases may still carry only the ad-hoc DMG - **check the releases
 page**. The release checklist (build locally on the tag, upload with `--clobber` or via the web UI)

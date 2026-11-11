@@ -71,6 +71,16 @@ with an outline, driving through and leaving a spreading trail; the flood starti
 outlined and both spitting fire (blue and violet); and a second catastrophe for the moon, a big meteor that grows from afar
 and strikes across the whole width.
 
+**2026-11-11** (deployment, unreleased on `develop`)
+The owner asked for real installers: a Windows setup `.exe` (PATH, uninstall, upgrade over an older version), a notarized
+macOS installer built by the local script and swapped in by hand, and a Flatpak for Linux. Done: Inno Setup script, macOS
+`.pkg` (replacing the DMG), `.deb` and `.rpm` through CPack, workflows updated. The Flatpak was replaced by `.deb`/`.rpm`
+on the assistant's recommendation (command name `<app-id>`, sandbox; see architecture.md); the owner may overrule.
+Verified on macOS only: the ad-hoc `.pkg` builds, has the right payload and the tests pass. **Not verified:** the signed and
+notarized `.pkg` (needs the owner's keychain), the `._` AppleDouble entries seen in the payload listing (probably the
+`com.apple.provenance` attribute of the build host), the Inno Setup script and the Windows install/upgrade/uninstall test, the
+`.deb`/`.rpm` builds and their dependency detection, and the workflow YAML beyond syntax.
+
 ## What was not done, on purpose
 
 - No classic mode, no curses backend, no scripting layer, no ECS.

@@ -48,28 +48,30 @@ Every scene by day and by night (on the moon: by lunar day and by earthrise).
 ## Download
 
 Every release on the [releases page](https://github.com/ChristianAhrens/Diorascii/releases/latest)
-contains one archive per platform. Unpack it and run `bin/diorascii` (`bin\diorascii.exe`
-on Windows) from a terminal. Nothing else needs to be installed.
+contains an installer per platform, which puts `diorascii` into your PATH so that you can run it
+from any terminal. Nothing else needs to be installed.
 
-| Platform | Archive | Notes |
+| Platform | Asset | Notes |
 |---|---|---|
-| macOS | `Diorascii-x.y.z-macOS.dmg` | universal (Apple silicon and Intel), disk image |
-| Linux | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries |
+| macOS | `Diorascii-x.y.z-macOS.pkg` | universal (Apple silicon and Intel), installer to `/usr/local/bin` |
+| Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
 | Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
 | Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
-| Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
+| Linux, other | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries; unpack and run `bin/diorascii` |
 | Windows, portable | `Diorascii-x.y.z-Windows.zip` | unpack and run `bin\diorascii.exe` |
 
-The macOS binary is signed ad hoc but not notarized. If macOS refuses to open a
-downloaded copy, clear the quarantine flag once: `xattr -d com.apple.quarantine bin/diorascii`.
+Installing a newer version over an older one upgrades it in place. To uninstall: on Windows use
+*Apps > Installed apps* (or the uninstaller in the install folder), on Debian/Fedora the package
+manager (`sudo apt remove diorascii`, `sudo dnf remove diorascii`), and on macOS, which has no
+uninstaller for packages:
 
-The `.deb` and `.rpm` install `diorascii` into `/usr/bin`, so it is in the PATH. Installing a newer
-one over an older one upgrades it; remove it with `sudo apt remove diorascii` or
-`sudo dnf remove diorascii`.
+    sudo rm /usr/local/bin/diorascii && sudo rm -r /usr/local/share/doc/diorascii
+    sudo pkgutil --forget com.ChristianAhrens.Diorascii
 
-To uninstall the Windows setup use *Apps > Installed apps* (or the uninstaller in the install folder);
-a newer setup installs over an older version in place. It is not code-signed, so SmartScreen may ask
-for confirmation ("More info", "Run anyway").
+The Windows installer is not code-signed, so SmartScreen may ask for confirmation ("More info",
+"Run anyway"). The macOS installer attached to a release is signed and notarized by the owner;
+the one the CI builds (only on the workflow's draft, before it is replaced) is ad hoc signed, and
+macOS asks for confirmation (right-click, Open).
 
 ## Usage
 
@@ -444,8 +446,8 @@ exactly that release's tagged commit reports `1.2.3-dev+<commit>`. To release:
        git push origin main 1.2.3
 
 Pushing a tag in the form `x.y.z` (major.minor.fix, no `v` prefix) builds Diorascii on
-macOS, Linux and Windows, runs the tests and publishes a GitHub release with one
-archive per platform. The tag must match the latest released section of the changelog, or
+macOS, Linux and Windows, runs the tests and publishes a GitHub release with the installers
+and archives of every platform (see Download). The tag must match the latest released section of the changelog, or
 the workflow stops before building anything; that section, without its empty subsections, is
 the text of the release.
 
@@ -470,28 +472,31 @@ argument, `DIORASCII_APPLE_TEAM` or your signing certificate, and numbers the bu
 (`DIORASCII_BUILD_NUMBER`), which App Store Connect needs to grow with every upload. The app record
 `com.ChristianAhrens.Diorascii` for tvOS must exist in App Store Connect first.
 
-The macOS asset is a disk image with the binary, a `usr-local-bin` link to drop it onto
-(`/usr/bin` itself is protected by macOS) and an installer script for `~/.local/bin`. The
-copy CI builds is only ad-hoc signed. To build the same image with your own Developer ID
-signature and Apple's notarization, run on a Mac:
+The macOS asset is an installer package that places `diorascii` in `/usr/local/bin` (which
+every shell has in its PATH) and the license and readme in `/usr/local/share/doc/diorascii`. The
+copy CI builds is only ad-hoc signed and unsigned as a package. To build the same package with
+your own Developer ID signature and Apple's notarization, run on a Mac:
 
-    scripts/package-macos.sh 1.2.3          # -> dist/Diorascii-1.2.3-macOS.dmg
+    scripts/package-macos.sh 1.2.3          # -> dist/Diorascii-1.2.3-macOS.pkg
+
+Without a version it packages the project version of the changelog. The version is also what the package
+registers with macOS (`pkgutil --pkg-info com.ChristianAhrens.Diorascii`), which is how an upgrade is recognized.
 
 It picks the first "Developer ID Application" identity in your keychain (or
-`DIORASCII_SIGN_IDENTITY`), signs the binary with the hardened runtime and the image with
-the same identity, submits the image with `notarytool` using the keychain profile
+`DIORASCII_SIGN_IDENTITY`) to sign the binary with the hardened runtime, and the first
+"Developer ID Installer" identity (or `DIORASCII_INSTALLER_IDENTITY`; Apple issues it as a separate
+certificate) to sign the package. It submits the package with `notarytool` using the keychain profile
 `APP_NOTARIZATION_CREDENTIALS_PROFILE` (`DIORASCII_NOTARY_PROFILE` to use another, created
-once with `xcrun notarytool store-credentials`) and staples the ticket. Without an identity, or with
+once with `xcrun notarytool store-credentials`) and staples the ticket. Without identities, or with
 `DIORASCII_ADHOC=1`, it falls back to the ad-hoc signature and skips notarization, which is
-what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only.
+what the release workflow does. `DIORASCII_SKIP_NOTARIZE=1` signs only. Then replace the
+workflow's asset on the release page with the notarized one.
 
 The Windows installer is built by the workflow with [Inno Setup](https://jrsoftware.org/isinfo.php)
 from `packaging/windows/diorascii.iss` (installs to Program Files, adds the PATH entry,
 registers an uninstaller; the `AppId` in the script must never change, it is what lets a newer
-version replace an older one).
-
-The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`, `cpack -G RPM` in the build
-directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
+version replace an older one). The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
+`cpack -G RPM` in the build directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
 ## Layout
 

@@ -96,8 +96,15 @@ for 10 s of audio at 48 kHz stereo per scene, rain 0.6, night 0.5, storm 0.8, bu
 | Mountains | 4.9 % |
 | City | 9.2 % |
 
-Not known: how much of this is the per-channel bed chains (scales with channel count) and how much
-is `sin`/`exp` in the voices (does not scale). The first phase-2 task is to profile that split.
+**Profiled 2026-11-13** (`perf record` with DWARF call graphs on a `-O2 -g` build of the same synth, one run per scene, all sounds active, i3-4010U;
+every sample attributed to the line of `render()` or the scene function that caused it, libm time included, then split by whether that line is inside a
+`for (ch < 2)` loop). Share of the time inside per-channel loops: forest 28 %, aquarium 42 %, desert 23 %, moon 63 %, mountains 55 %, city 48 %; the rest runs once per sample
+(gust and wander, the crickets, thunder envelopes, the voices). `softClip` (`tanh`) and `noise()` are per channel and together about 17 % of the forest and 18 % of the city.
+If **every** such loop became one independent chain per full-range speaker (an upper bound, since some loop content is mono and could be hoisted), the cost on the same machine
+would be, in % of one core (2.0 / 5.1 / 7.1 / 5.1.4 / 7.1.4 / 9.1.6): forest 2.4 / 3.5 / 4.1 / 4.8 / 5.5 / 6.9, aquarium 3.6 / 5.9 / 7.5 / 9.0 / 10.5 / 13.5, desert 5.0 / 6.7 / 7.8 / 9.0 / 10.1 / 12.4,
+moon 4.2 / 8.2 / 10.8 / 13.5 / 16.1 / 21.5, mountains 6.8 / 12.3 / 15.9 / 19.6 / 23.3 / 30.7, city 8.8 / 15.2 / 19.4 / 23.6 / 27.8 / 36.3. At 9.1.6 that is about 3 to 4 times the stereo cost. Not measured: Apple silicon, for which the budget in
+section 8 is stated. Also found: `render()` itself is 24 to 49 % of the time in every
+scene except the forest, because the forest's wind, rain, thunder and crickets are computed in **all** scenes and only multiplied by their (near zero) presence (finding F-25).
 The cost is dominated by what the existing per-sample loops do, so the numbers are only a guide
 for relative scaling, not a prediction for Apple silicon.
 
@@ -494,7 +501,22 @@ from the text below, or decides something the plan left open:
 - Docs: `architecture.md` Sound section (new subsection), `conventions.md` (sound-design
   conventions for multichannel).
 
-### Phase 2 – Core: N-channel synth, stereo unchanged (L)
+### Phase 2 – Core: N-channel synth, stereo unchanged (L) — **done 2026-11-13 (routing stage only; beds and voices come in phases 3 to 6)**
+
+Golden values were recorded first in their own commit (`ambience_golden.inc`, 12 cases). The refactor is deliberately small: `Ambience` takes a `Layout`, still
+synthesizes its stereo pair and routes it to the layout's front pair; the other channels are exactly 0 for now. Verified: bit-identical raw output to the pre-refactor
+synth for all 12 golden cases on Linux/GCC (`--dump-golden`, `cmp`), the golden test, and tests for finite/bounded/deterministic output and no write beyond the buffer in every
+layout, silence at every layout, the single-speaker mean, no state reset and an exact fade curve on a layout change. Mutations (no fade, a reset of the clock on `setLayout`, a
+wrong frame stride) each fail a test. Differences from the text below:
+
+- **Golden values are RMS windows with a 0.2 % tolerance, not hashes**: libm differs between platforms in the last bits and the owner's machine is a Mac, so a bit-exact hash would fail there.
+  Bit-identity of a refactor is shown locally with the raw dump.
+- **`kMaxChannels` arrays in the sample functions were not needed yet**; they come with phase 3, where each chain gets its speaker.
+- **Benchmark** (`scripts/bench-audio.sh`, `tests/bench_audio.cpp`), release preset on the 2013 i3-4010U, % of one core per second of audio, 2.0 / 9.1.6: forest 2.4 / 2.6,
+  aquarium 3.7 / 3.8, desert 5.0 / 5.1, moon 4.2 / 4.4, mountains 6.8 / 6.9, city 8.9 / 8.9. The routing costs nothing measurable. **The split between bed chains and voices, which
+  decides what phase 3 costs, was measured afterwards** (see section 2.4: 23 to 63 % of the time is inside per-channel loops).
+- Not done: backends still open stereo and do not call `setLayout` (phase 7).
+
 
 - `Ambience` takes a layout, renders `channels()` interleaved. Per-ear arrays become `kMaxChannels`
   or group-based. All sounds still produce their current stereo material, which is routed so that

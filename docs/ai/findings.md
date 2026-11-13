@@ -29,6 +29,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
 | F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
 | F-24 | M | Spatial audio phase-0 spike: first miniaudio facts; hardware still unmeasured | open |
+| F-25 | M | The forest's sound chain runs in every scene; per-speaker beds would multiply it | open, needs a decision |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -259,3 +260,13 @@ wraps the cycle) and `sweep` moved from left to right, so the stereo channel ord
 there; the assistant could not hear either. Not tested: any device with more than 2 real speakers, so side, rear,
 height and LFE routing remain unheard. **Next:** run the spike on the Mac and on the Apple TV
 and receiver setups and record the native formats here.
+
+## F-25 The forest chain runs in every scene (M)
+Added 2026-11-13, from the profile in `spatial-audio-plan.md` section 2.4. In `Ambience::render`, the forest's wind (two noise-driven filters per ear), rain, thunder
+(when active), crickets (three `sin`-heavy oscillators), the gust and wander state, and `thunderLevels()` run **for every scene**; the result is multiplied by
+`mix_[Forest]`, which is 0 except in the forest. The other scenes' own functions are skipped below a presence of 0.001, the forest chain is not. Measured with `perf`
+(i3-4010U, all sounds active): `render()` itself takes 49 % of the time in the aquarium, 42 % in the desert, 34 % on the moon, 27 % in the mountains and 24 % in the city (the forest: 96 %);
+part of that is legitimately shared (the mix, `softClip`, event handling), but the forest chain is a large part. With one chain per speaker it would be multiplied by up to 7.5.
+**Decision needed:** gate the forest chain on its presence like the others (likely 10 to 30 % less CPU in the other scenes, but not bit-identical: the output changes below about
+-60 dB at scene changes and the golden values would need a look), or leave it. Nothing was changed. If it is gated, the forest's slow state (gust, wander) must keep advancing, so that the forest does not restart from a
+different state when it comes back; only the per-sample filters and oscillators would be skipped.

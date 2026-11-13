@@ -138,7 +138,8 @@ themselves are still the stereo pair they have always been: `render` computes `s
 one speaker gets the mean) and leaves every other channel at exactly 0, until phases 3 to 6 give beds and voices their places. With the stereo layout the output is
 **bit-identical** to the synth before the refactor (checked on this machine with `--dump-golden` and `cmp`, 12 cases of 2 s). A layout change does not reset anything: the
 routing gains glide with `spatial::kSmoothingSeconds`, so a channel that keeps its role plays on exactly as before and a channel with a new role fades in (one-pole curve
-`1 - (1 - k)^(n + 1)`, tested sample by sample). The random generator `rng_` is untouched by the layout, so each layout is deterministic per seed.
+`1 - (1 - k)^(n + 1)`, tested sample by sample). The random generator `rng_` is untouched by the layout, so each layout is deterministic per seed. `scripts/bench-audio.sh`
+(`tests/bench_audio.cpp`, not in ctest) prints the CPU share per scene and layout.
 
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`

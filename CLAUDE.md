@@ -38,6 +38,7 @@ is in [docs/ai/](docs/ai/README.md).
     build/<preset>/src/diorascii --gallery                            # review all sprites
     scripts/package-macos.sh 1.2.3      # macOS DMG; signs+notarizes locally, ad-hoc on CI
     scripts/release-notes.sh Unreleased # preview the next GitHub release text
+    scripts/bench-audio.sh              # CPU cost of the ambient synth per scene and speaker layout
 
 ## Where things are
 

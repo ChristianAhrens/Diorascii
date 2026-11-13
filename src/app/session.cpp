@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <utility>
 
 #include "core/utf8.h"
@@ -58,7 +59,8 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
       menu_("DIORASCII"),
       info_(config.info) {
   std::vector<std::string> titles;
-  for (const auto& sc : scenes_) titles.push_back(sc->title);
+  titles.reserve(scenes_.size());
+  std::transform(scenes_.begin(), scenes_.end(), std::back_inserter(titles), [](const auto& sc) { return sc->title; });
   menu_.addChoice("scene", "Scene", titles, sceneIdx_);
   menu_.addChoice("style", "Style",
                   {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},

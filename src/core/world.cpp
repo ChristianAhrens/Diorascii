@@ -935,8 +935,7 @@ Entity* World::findEntity(uint64_t id) {
 
 bool World::lash(const Entity& a) {
   if (time_ < nextLash_ || a.strikeReach <= 0) return false;
-  int out = 0;
-  for (const Tongue& t : tongues_) out += t.attacker == a.id ? 1 : 0;
+  const auto out = std::count_if(tongues_.begin(), tongues_.end(), [&](const Tongue& t) { return t.attacker == a.id; });
   if (out >= a.strikeLashes) return false;
   const bool all = a.wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(a.wipes);
@@ -949,9 +948,8 @@ bool World::lash(const Entity& a) {
     const Entity& o = *other;
     if (&o == &a || o.dead || o.isRare || isAsleep(o)) continue;
     if (!(all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end())) continue;
-    bool taken = false;  // another tongue is already after it
-    for (const Tongue& t : tongues_) taken |= t.victim == o.id;
-    if (taken) continue;
+    // another tongue is already after it
+    if (std::any_of(tongues_.begin(), tongues_.end(), [&](const Tongue& t) { return t.victim == o.id; })) continue;
     const double cx = o.x + o.width() / 2.0, cy = o.y + o.height() / 2.0;
     double d, baseX;
     if (a.strikeAround) {  // from the underside of the body, straight above the victim if it can
@@ -1163,9 +1161,7 @@ int World::interact() {
 }
 
 size_t World::countSprite(const std::string& name) const {
-  size_t n = 0;
-  for (const auto& e : entities_) n += (!e->dead && e->sprite->name() == name) ? 1 : 0;
-  return n;
+  return static_cast<size_t>(std::count_if(entities_.begin(), entities_.end(), [&](const auto& e) { return !e->dead && e->sprite->name() == name; }));
 }
 
 void World::setPhase(double phase) {

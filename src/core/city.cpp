@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 #include "core/shading.h"
 #include "core/world.h"
@@ -50,15 +51,11 @@ double fireAt(double t) {
 }  // namespace
 
 size_t World::troubledBuildings() const {
-  size_t n = 0;
-  for (const Building& b : city_) n += b.state != Building::State::Normal ? 1 : 0;
-  return n;
+  return static_cast<size_t>(std::count_if(city_.begin(), city_.end(), [](const Building& b) { return b.state != Building::State::Normal; }));
 }
 
 size_t World::ruinedBuildings() const {
-  size_t n = 0;
-  for (const Building& b : city_) n += b.state == Building::State::Ruin ? 1 : 0;
-  return n;
+  return static_cast<size_t>(std::count_if(city_.begin(), city_.end(), [](const Building& b) { return b.state == Building::State::Ruin; }));
 }
 
 std::vector<int> World::troubledColumns() const {
@@ -70,10 +67,7 @@ std::vector<int> World::troubledColumns() const {
 }
 
 bool World::fireBurning() const {
-  for (const Building& b : city_) {
-    if (b.state == Building::State::Burning) return true;
-  }
-  return false;
+  return std::any_of(city_.begin(), city_.end(), [](const Building& b) { return b.state == Building::State::Burning; });
 }
 
 void World::fitCordon() {
@@ -94,8 +88,9 @@ void World::blazeStep(Entity& e, double dt) {
       for (size_t i = 0; i < city_.size(); ++i) {
         const Building& b = city_[i];
         const int mid = b.x + b.w / 2;
-        bool inStreet = false;
-        for (const Avenue& a : avenues_) inStreet |= b.x < a.cx + a.halfW + 2 && b.x + b.w > a.cx - a.halfW - 2;
+        const bool inStreet = std::any_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) {
+          return b.x < a.cx + a.halfW + 2 && b.x + b.w > a.cx - a.halfW - 2;
+        });
         int hidden = 0;  // rows of it that the front row hides
         if (b.layer < 2) {
           for (const Building& f : city_) {
@@ -132,8 +127,9 @@ void World::blazeStep(Entity& e, double dt) {
     double bestDist = 1e9;
     for (size_t i = 0; i < city_.size(); ++i) {
       const Building& b = city_[i];
-      bool inStreet = false;
-      for (const Avenue& a : avenues_) inStreet |= b.x < a.cx + a.halfW + 2 && b.x + b.w > a.cx - a.halfW - 2;
+      const bool inStreet = std::any_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) {
+        return b.x < a.cx + a.halfW + 2 && b.x + b.w > a.cx - a.halfW - 2;
+      });
       const double dist = std::fabs(b.x + b.w / 2.0 - from);
       if (b.layer >= 1 && b.state == Building::State::Normal && !inStreet && b.x + b.w > 0 && b.x < w_ && dist < bestDist) {
         best = static_cast<int>(i);
@@ -235,8 +231,7 @@ void World::placeAvenues() {
     for (int d = 0; d <= w_ / (2 * (n + 1)) && chosen < 0; ++d) {
       for (int sign : {1, -1}) {
         const int c = target + sign * d;
-        bool apart = true;
-        for (const Avenue& a : avenues_) apart &= std::abs(a.cx - c) >= 2 * halfW + 10;
+        const bool apart = std::all_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) { return std::abs(a.cx - c) >= 2 * halfW + 10; });
         if (apart && clear(c)) { chosen = c; break; }
       }
     }
@@ -451,9 +446,7 @@ void World::engineStep(Entity& e, double dt) {
 }
 
 int World::skylineTop() const {
-  int top = h_;
-  for (const Building& b : city_) top = std::min(top, seabedY_ - 1 - b.h - b.antenna + 1);
-  return top;
+  return std::accumulate(city_.begin(), city_.end(), h_, [&](int top, const Building& b) { return std::min(top, seabedY_ - b.h - b.antenna); });
 }
 
 void World::rollBuilding(Building& b) {
@@ -514,7 +507,8 @@ void World::buildCity() {
   std::vector<bool> covered(static_cast<size_t>(w_), false);
   for (const Building& b : city_) {
     if (b.layer != 2) continue;
-    for (int x = std::max(b.x, 0); x < std::min(b.x + b.w, w_); ++x) covered[static_cast<size_t>(x)] = true;
+    const int from = std::max(b.x, 0), to = std::min(b.x + b.w, w_);
+    if (from < to) std::fill(covered.begin() + from, covered.begin() + to, true);
   }
   const int most = std::max(1, w_ / 55);
   for (int x = 0; x < w_ && static_cast<int>(glimpses_.size()) < most;) {
@@ -522,9 +516,8 @@ void World::buildCity() {
     int end = x;
     while (end < w_ && !covered[static_cast<size_t>(end)]) ++end;
     const int width = end - x, cx = (x + end) / 2;
-    bool near = false;
-    for (const Avenue& a : avenues_) near |= std::abs(a.cx - cx) < a.halfW + 8;
-    for (const Avenue& g : glimpses_) near |= std::abs(g.cx - cx) < 14;
+    const bool near = std::any_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) { return std::abs(a.cx - cx) < a.halfW + 8; }) ||
+                      std::any_of(glimpses_.begin(), glimpses_.end(), [&](const Avenue& g) { return std::abs(g.cx - cx) < 14; });
     if (width >= 6 && !near && x > 0 && end < w_) glimpses_.push_back({cx, std::min(3, width / 2 - 1), std::clamp(seabedY_ / 4, 4, 9)});
     x = end + 1;
   }
@@ -840,9 +833,8 @@ void World::renderStreet(Frame& out, Style style, const Light& light) const {
   // Street lamps along the back sidewalk, lit from dusk on, with a warm pool of light below.
   const double on = std::clamp((0.55 - light.sun) / 0.3, 0.0, 1.0);
   for (int lx = kLampFirst; lx < w_; lx += kLampGap) {
-    bool inStreet = false;  // no lamp stands in the mouth of a side street
-    for (const Avenue& a : avenues_) inStreet |= std::abs(lx - a.cx) <= a.halfW + 2;
-    if (inStreet) continue;
+    // no lamp stands in the mouth of a side street
+    if (std::any_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) { return std::abs(lx - a.cx) <= a.halfW + 2; })) continue;
     const int topY = seabedY_ - kLampHeight + 1;
     for (int y = topY + 1; y <= seabedY_; ++y) {
       if (Cell* c = cellAt(out, lx, y)) {

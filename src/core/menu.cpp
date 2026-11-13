@@ -4,6 +4,8 @@
 #include "core/menu.h"
 
 #include <algorithm>
+#include <iterator>
+#include <numeric>
 #include <utility>
 
 #include "core/utf8.h"
@@ -103,18 +105,17 @@ void Menu::render(Frame& f, Style style) const {
   if (!open_ || f.width() < 1 || f.height() < 1) return;
 
   // Row text for every item, without the selection marker.
-  int labelW = 0;
-  for (const auto& it : items_) labelW = std::max(labelW, cols(it.label));
-  int optW = 0;
-  for (const auto& it : items_) {
-    for (const auto& o : it.options) optW = std::max(optW, cols(o));
-  }
+  const int labelW = std::accumulate(items_.begin(), items_.end(), 0, [](int w, const auto& it) { return std::max(w, cols(it.label)); });
+  const int optW = std::accumulate(items_.begin(), items_.end(), 0, [](int w, const auto& it) {
+    return std::accumulate(it.options.begin(), it.options.end(), w, [](int ow, const auto& o) { return std::max(ow, cols(o)); });
+  });
   std::vector<std::string> rows;
-  for (const auto& it : items_) {
+  rows.reserve(items_.size());
+  std::transform(items_.begin(), items_.end(), std::back_inserter(rows), [&](const auto& it) {
     std::string r = pad(it.label, labelW);
     if (!it.options.empty()) r += "  < " + pad(it.options[it.value], optW) + " >";
-    rows.push_back(std::move(r));
-  }
+    return r;
+  });
 
   const std::string hintLong = "arrows: move / change   enter: select   esc: close";
   const std::string hintShort = "esc: close";

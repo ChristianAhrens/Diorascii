@@ -5,14 +5,15 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
+#include <span>
 #include <sstream>
 
 namespace dio {
 
 AssetPack AssetPack::embedded() {
   AssetPack pack;
-  for (size_t i = 0; i < kEmbeddedAssetCount; ++i) {
-    const auto& a = kEmbeddedAssets[i];
+  for (const auto& a : std::span(kEmbeddedAssets, kEmbeddedAssetCount)) {
     pack.addText(a.name, std::string(reinterpret_cast<const char*>(a.data), a.size));
   }
   pack.validate();
@@ -68,7 +69,8 @@ std::shared_ptr<const SceneDef> AssetPack::scene(const std::string& name) const 
 
 std::vector<std::shared_ptr<const SceneDef>> AssetPack::scenes() const {
   std::vector<std::shared_ptr<const SceneDef>> out;
-  for (const auto& [name, sc] : scenes_) out.push_back(sc);
+  out.reserve(scenes_.size());
+  std::transform(scenes_.begin(), scenes_.end(), std::back_inserter(out), [](const auto& entry) { return entry.second; });
   std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) {
     return a->order != b->order ? a->order < b->order : a->name < b->name;
   });

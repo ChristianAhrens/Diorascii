@@ -254,6 +254,8 @@ the header: miniaudio has **no wide pair and no top-middle pair**, only `TOP_CEN
 Ltm/Rtm (needed for 9.1.4, 9.1.6, 5.1.2, 7.1.2) can only be routed as `AUX`. The plan (section 5.2) was corrected accordingly.
 **Not verified:** anything on CoreAudio, WASAPI or ALSA; the HDMI outputs (they were not listed as separate devices
 by this PulseAudio setup); any real surround or Atmos-capable device; whether `channels = 0` means "native" on every
-backend; how drivers route `AUX` channels; the spike's audible modes (`identify`, `sweep`), which were never run; all of
-the Apple side (tvOS, AirPods), which is still the gate of phase 0. **Next:** run the spike on the Mac and on the Apple TV
+backend; how drivers route `AUX` channels; all of the Apple side (tvOS, AirPods), which is still the gate of phase 0. **Heard by the owner (2026-11-13, same stereo device):** `identify` played left, right, left (the expected order; the 2.2 s run
+wraps the cycle) and `sweep` moved from left to right, so the stereo channel order and the map-based positions work
+there; the assistant could not hear either. Not tested: any device with more than 2 real speakers, so side, rear,
+height and LFE routing remain unheard. **Next:** run the spike on the Mac and on the Apple TV
 and receiver setups and record the native formats here.

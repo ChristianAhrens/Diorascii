@@ -4,6 +4,7 @@
 #include <set>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -4725,7 +4726,106 @@ TEST(without_an_lfe_channel_the_bass_is_folded_into_the_front) {
   CHECK(std::fabs(v.bassGain(0) - 0.70710678f) < 1e-5f);
 }
 
-int main() {
+
+// ------------------------------------------------------ ambience golden values ---
+// The stereo output of the synth is pinned per scene, so that refactors (multichannel, new threads)
+// can prove they moved no sound. Each case renders 2 s at 48 kHz in blocks of 0.1 s with every
+// parameter and counter active (the counters step up once, after 0.4 s) and records the RMS of each
+// channel in ten windows of 0.2 s. The table is compared with a tolerance, not bit for bit: libm
+// differs between platforms in the last bits, and the golden values must hold on all of them.
+// Regenerate with `diorascii_tests --print-golden` only for a change that is meant to alter sound,
+// and say so in the commit message.
+
+namespace {
+/// Number of golden cases: every scene, calm and with its second catastrophe.
+constexpr int kGoldenCases = 12;
+/// Number of windows per channel in a golden case.
+constexpr int kGoldenWindows = 10;
+/// Frames per window of a golden case.
+constexpr int kGoldenWindowFrames = 9600;
+/// Frames per render call of a golden case.
+constexpr int kGoldenBlock = 4800;
+/// Relative tolerance of a golden RMS value. Linux/GCC matches to 0.2 %, but the CI runs on macOS and Windows
+/// differ by up to 4.5 % in single windows (libm and fused multiply-add change the noise filters and the
+/// onset of events in the last bits), so the bound is 8 %: still far below what a lost or misplaced sound does.
+constexpr float kGoldenTolerance = 8e-2f;
+
+/// Renders golden case `n` (scene 1 + n / 2, with the catastrophe if n is odd) as interleaved stereo.
+std::vector<float> goldenRender(int n) {
+  Ambience a(48000, 5);
+  AmbientParams p;
+  p.kind = static_cast<AmbientKind>(1 + n / 2);
+  p.night = 0.5f; p.rain = 0.6f; p.storm = 0.8f; p.whale = 0.6f; p.tornado = 0.6f; p.avalanche = 0.6f;
+  p.worm = 0.6f; p.siren = 0.6f; p.wail = 0.6f; p.train = 0.6f; p.plane = 0.6f; p.fire = 0.6f;
+  p.flames = 0.5f; p.winged = 0.5f;
+  p.menace = (n % 2) ? 0.8f : 0.0f;
+  std::vector<float> out;
+  std::vector<float> buf(2 * kGoldenBlock);
+  for (int block = 0; block < 2 * 48000 / kGoldenBlock; ++block) {
+    if (block == 4) { ++p.flashes; ++p.nibbles; ++p.impacts; ++p.crushes; ++p.squeals; ++p.shots; }
+    a.render(p, buf.data(), kGoldenBlock);
+    out.insert(out.end(), buf.begin(), buf.end());
+  }
+  return out;
+}
+
+/// The RMS of channel `ch` (of `channels`) in window `w` of an interleaved render.
+float goldenRms(const std::vector<float>& s, int channels, int ch, int w) {
+  double sum = 0;
+  for (int i = 0; i < kGoldenWindowFrames; ++i) {
+    const float v = s[static_cast<size_t>((w * kGoldenWindowFrames + i) * channels + ch)];
+    sum += static_cast<double>(v) * v;
+  }
+  return static_cast<float>(std::sqrt(sum / kGoldenWindowFrames));
+}
+
+/// RMS per window and channel of the stereo golden cases (written by --print-golden).
+const float kGolden[kGoldenCases][2][kGoldenWindows] = {
+#include "ambience_golden.inc"
+};
+}  // namespace
+
+TEST(ambience_stereo_output_matches_the_golden_values_of_every_scene) {
+  for (int n = 0; n < kGoldenCases; ++n) {
+    const std::vector<float> s = goldenRender(n);
+    for (float v : s) CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f);
+    for (int ch = 0; ch < 2; ++ch)
+      for (int w = 0; w < kGoldenWindows; ++w) {
+        const float got = goldenRms(s, 2, ch, w), want = kGolden[n][ch][w];
+        if (std::fabs(got - want) > 1e-6f + kGoldenTolerance * want)
+          std::printf("  case %d ch %d window %d: got %.6g, golden %.6g\n", n, ch, w, got, want);
+        CHECK(std::fabs(got - want) <= 1e-6f + kGoldenTolerance * want);
+      }
+  }
+}
+
+int main(int argc, char** argv) {
+  // Developer options: print the golden table, or dump the raw samples of the golden cases to a
+  // file (to compare two builds bit for bit on one machine).
+  if (argc > 1 && std::strcmp(argv[1], "--print-golden") == 0) {
+    for (int n = 0; n < kGoldenCases; ++n) {
+      const std::vector<float> s = goldenRender(n);
+      std::printf("{\n");
+      for (int ch = 0; ch < 2; ++ch) {
+        std::printf("  {");
+        for (int w = 0; w < kGoldenWindows; ++w) std::printf("%s%.6gf", w ? ", " : "", goldenRms(s, 2, ch, w));
+        std::printf("}%s\n", ch ? "" : ",");
+      }
+      std::printf("}%s\n", n + 1 < kGoldenCases ? "," : "");
+    }
+    return 0;
+  }
+  if (argc > 2 && std::strcmp(argv[1], "--dump-golden") == 0) {
+    std::FILE* f = std::fopen(argv[2], "wb");
+    if (!f) return 1;
+    for (int n = 0; n < kGoldenCases; ++n) {
+      const std::vector<float> s = goldenRender(n);
+      std::fwrite(s.data(), sizeof(float), s.size(), f);
+    }
+    std::fclose(f);
+    return 0;
+  }
+
   for (auto& [name, fn] : registry()) {
     const int before = gFailures;
     fn();

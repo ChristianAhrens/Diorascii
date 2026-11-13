@@ -36,6 +36,11 @@
 - Every scene is exercised at odd sizes down to 1x1 and at every hour; determinism per seed is
   asserted. A sprite lint test fails on colored blank cells without `solid: yes`.
 - Sound is tested by measured levels (RMS/peak) and structure, not by listening - see below.
+- **Golden sound values** (2026-11-13): `ambience_stereo_output_matches_the_golden_values_of_every_scene` pins the RMS of each channel in ten
+  0.2 s windows for all six scenes, calm and with their second catastrophe (12 cases, table in `tests/ambience_golden.inc`), compared with a
+  tolerance of 8 % (`kGoldenTolerance`) because libm and fused multiply-add differ between platforms: Linux/GCC matches to 0.2 %, but the macOS and Windows CI runs differ by up to 4.5 % in single windows (a bit-exact hash or a tight bound fails there; the loose bound was set from the CI logs, the platforms themselves were not run locally). Regenerate only for a change
+  that is meant to alter sound: `diorascii_tests --print-golden > tests/ambience_golden.inc`, and say so in the commit message. To prove a refactor
+  moved nothing on one machine, `diorascii_tests --dump-golden FILE` writes the raw samples; compare the files from before and after with `cmp`.
 
 ## Art conventions
 

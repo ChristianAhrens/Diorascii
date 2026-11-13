@@ -114,12 +114,21 @@ audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Un
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 
-**Speaker layouts** (2026-11-13, phase 1 of `spatial-audio-plan.md`; **not yet used by the synth or the backends**).
+**Layouts and the spatializer** (2026-11-13, phase 1 of `spatial-audio-plan.md`; **not yet used by the synth or the backends**).
 `src/core/layout.*` holds `Layout`: an ordered set of `Speaker`s (canonical `Channel`, azimuth in degrees with + to the right, elevation, weight)
 for the nine named layouts 2.0 to 9.1.6 (`LayoutId`), at most `kMaxChannels` = 16, in canonical channel order (L R C LFE Lw Rw Ls Rs Lrs Rrs Ltf Rtf Ltm Rtm Ltr Rtr).
 The 5.1 family stands its sides at 110 degrees, everything else at 90. `Layout::fromDevice` builds a layout from what a backend reports
 (`DeviceChannel`: position, LFE flag, known or not): each channel keeps the device's angle (the panner needs only positions) and takes the identity of the
 nearest canonical channel (`nearestChannel`); unknown channels and a second LFE are `Channel::None`, which stays silent.
+`src/core/spatializer.*` has `Spatializer::gains`, the panning law, and `SpatialVoice`, a placed voice with smoothing. Stereo keeps the synth's own
+law `cos/sin(pan * pi/2)` with `pan = 0.5 + 0.5 * sin(azimuth)`; every other layout uses distance-based amplitude panning (DBAP) on the unit sphere with
+`spatial::kRolloff` and `spatial::kBlur`, then blends with an even distribution by `spread` and renormalizes, so the gains of the directional speakers
+always have sum of squares 1 and LFE and silent channels get 0. A layout without height puts a high source on the nearest speakers; nothing special is
+needed. `SpatialVoice` glides every gain to its target with a one-pole filter of `spatial::kSmoothingSeconds` (20 ms; `setTarget` once per block,
+`process` per sample, `snap` for a voice that starts in place) and adds a bass send: the sample, low-passed by two one-pole stages at
+`spatial::kLfeCutoffHz`, times `Source::lfeSend`, goes to the LFE channel, or, if the layout has none, is folded at constant power into the speakers
+within 45 degrees of the front (all of them if none is). Everything is allocation-free and lock-free. All constants are tuned by measurement only; they
+have not been heard.
 
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`

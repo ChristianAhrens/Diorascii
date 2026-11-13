@@ -464,7 +464,25 @@ code, not committed (or kept under `scripts/` if useful and original).
 - Output: a short findings entry (new F-number) with the verified facts, and corrections to this plan.
 - **Gate:** if AirPods do not spatialize an app stream at all, phase 9 (own binaural) moves up.
 
-### Phase 1 – Core: layouts and spatializer (M)
+### Phase 1 – Core: layouts and spatializer (M) — **done 2026-11-13, nothing uses it yet**
+
+Built as planned in `src/core/layout.*` and `src/core/spatializer.*`; 14 tests, validated by mutation (no final
+normalization fails the constant-power test; no smoothing fails the glide and start-in-place tests). Where it differs
+from the text below, or decides something the plan left open:
+
+- `Layout::fromDevice` keeps the **device's own angles** for the panner and uses the nearest canonical channel only as the
+  speaker's identity (for bed profiles and trims later); DBAP needs only positions, so snapping the angles would lose accuracy.
+- Stereo: `pan = 0.5 + 0.5 * sin(azimuth)`, so +-90 degrees is hard left/right and a source at the screen edge (45) is
+  pan 0.85; elevation is ignored. Any left/right pair on the horizon uses it (`Layout::isStereo`).
+- Distance is **not** in the spatializer (gain fall-off, darkening and bleed stay in the synth, phase 2/6); `Source` carries
+  azimuth, elevation, spread and lfeSend only.
+- Constants chosen by measurement, never heard: `kRolloff` 1.5, `kBlur` 0.15 (a source on a speaker gives that speaker an amplitude
+  of about 0.99, a source between two neighbours splits them about evenly); expect to tune them by ear, as a sweep
+  through a sparse layout may sound like hopping between speakers if the image is too sharp.
+- The bass send folds into the speakers within 45 degrees of the front when there is no LFE; "the same level" is read as constant power.
+- A voice fed a non-snapped target rises from silence over about 100 ms; a new voice should use `snap`.
+- Not done here (phase 2 and later): negotiation and step-down of layouts (phase 7), `kMaxChannels` in `Ambience`.
+
 
 - `src/core/layout.h/.cpp`: canonical channel table, named layouts, nearest-position mapping.
 - `src/core/spatializer.h/.cpp`: DBAP, spread, per-sample smoothing, LFE bass send.

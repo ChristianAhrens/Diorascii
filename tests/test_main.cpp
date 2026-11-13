@@ -13,6 +13,7 @@
 #include "core/assets.h"
 #include "core/layout.h"
 #include "core/menu.h"
+#include "core/spatializer.h"
 #include "version.h"
 #include "core/world.h"
 #include "term/vt.h"
@@ -4161,10 +4162,209 @@ TEST(device_channels_map_to_a_layout) {
   CHECK(l.speaker(4).channel == Channel::None);  // no known position: silent
   CHECK(l.speaker(5).channel == Channel::None);  // a second LFE is silent too
   CHECK(l.speaker(6).channel == Channel::Ls && l.speaker(6).azimuth == -100.0f);  // the device's angle is kept
+  float g[kMaxChannels];
+  Spatializer::gains(l, {-90, 0, 0, 0}, g);
+  CHECK(g[4] == 0 && g[5] == 0 && g[3] == 0);  // silent and LFE channels get no gain
+  CHECK(g[6] > g[7]);
   // More channels than the maximum are cut off; a nonsense count gives an empty layout.
   std::vector<DeviceChannel> many(40);
   CHECK(Layout::fromDevice(many.data(), 40).channels() == kMaxChannels);
   CHECK(Layout::fromDevice(many.data(), -3).channels() == 0);
+}
+
+TEST(panning_gains_are_constant_power_in_every_layout) {
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout l = Layout::named(static_cast<LayoutId>(i));
+    for (float az = -180; az <= 180; az += 15)
+      for (float el = -10; el <= 90; el += 20)
+        for (float spread : {0.0f, 0.3f, 1.0f}) {
+          float g[kMaxChannels];
+          Spatializer::gains(l, {az, el, spread, 0}, g);
+          float power = 0;
+          for (int c = 0; c < kMaxChannels; ++c) {
+            CHECK(std::isfinite(g[c]) && g[c] >= 0.0f);
+            power += g[c] * g[c];
+          }
+          CHECK(std::fabs(power - 1.0f) < 1e-5f);
+          if (l.lfeIndex() >= 0) CHECK(g[l.lfeIndex()] == 0.0f);  // the panner never feeds the LFE
+          for (int c = l.channels(); c < kMaxChannels; ++c) CHECK(g[c] == 0.0f);
+        }
+  }
+}
+
+TEST(a_source_on_a_speaker_is_loudest_there) {
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout l = Layout::named(static_cast<LayoutId>(i));
+    for (int s = 0; s < l.channels(); ++s) {
+      if (!l.speaker(s).isDirectional()) continue;
+      float g[kMaxChannels];
+      Spatializer::gains(l, {l.speaker(s).azimuth, l.speaker(s).elevation, 0, 0}, g);
+      int best = 0;
+      for (int c = 1; c < l.channels(); ++c)
+        if (g[c] > g[best]) best = c;
+      CHECK(best == s);
+    }
+  }
+}
+
+TEST(stereo_panning_keeps_the_synths_constant_power_law) {
+  const Layout st = Layout::named(LayoutId::Stereo);
+  float g[kMaxChannels];
+  Spatializer::gains(st, {0, 0, 0, 0}, g);
+  CHECK(std::fabs(g[0] - 0.70710678f) < 1e-5f && std::fabs(g[1] - 0.70710678f) < 1e-5f);
+  Spatializer::gains(st, {-90, 0, 0, 0}, g);
+  CHECK(g[0] > 0.9999f && g[1] < 1e-5f);
+  Spatializer::gains(st, {90, 0, 0, 0}, g);
+  CHECK(g[1] > 0.9999f && g[0] < 1e-5f);
+  // The law is cos/sin(pan * pi/2): a pan of 0.8, as the old random pans used, is azimuth asin(0.6).
+  const float az = std::asin(0.6f) * 180.0f / 3.14159265f;
+  Spatializer::gains(st, {az, 0, 0, 0}, g);
+  CHECK(std::fabs(g[0] - std::cos(0.8f * 1.5707963f)) < 1e-4f && std::fabs(g[1] - std::sin(0.8f * 1.5707963f)) < 1e-4f);
+  Spatializer::gains(st, {45, 60, 0, 0}, g);  // elevation does not matter in stereo
+  float h[kMaxChannels];
+  Spatializer::gains(st, {45, 0, 0, 0}, h);
+  CHECK(g[0] == h[0] && g[1] == h[1]);
+}
+
+TEST(a_far_left_source_stays_on_the_left_and_a_high_one_goes_up) {
+  const Layout l = Layout::named(LayoutId::S7_1_4);
+  float g[kMaxChannels];
+  Spatializer::gains(l, {-90, 0, 0, 0}, g);
+  float left = 0, right = 0;
+  for (int c = 0; c < l.channels(); ++c) {
+    const Speaker& s = l.speaker(c);
+    if (!s.isDirectional()) continue;
+    (s.azimuth < 0 ? left : right) += g[c] * g[c];
+  }
+  CHECK(left > 0.97f && right < 0.03f);  // centre speakers (azimuth 0) count as right here, so this is strict
+
+  Spatializer::gains(l, {0, 80, 0, 0}, g);
+  float up = 0;
+  for (int c = 0; c < l.channels(); ++c)
+    if (l.speaker(c).elevation > 1) up += g[c] * g[c];
+  CHECK(up > 0.6f);
+  // Without height speakers the same source is folded onto the base layer, still at constant power.
+  const Layout flat = Layout::named(LayoutId::S7_1);
+  Spatializer::gains(flat, {0, 80, 0, 0}, g);
+  float power = 0;
+  for (int c = 0; c < flat.channels(); ++c) power += g[c] * g[c];
+  CHECK(std::fabs(power - 1.0f) < 1e-5f);
+}
+
+TEST(spread_widens_a_source_until_it_fills_the_room) {
+  const Layout l = Layout::named(LayoutId::S7_1_4);
+  float point[kMaxChannels], wide[kMaxChannels], all[kMaxChannels];
+  Spatializer::gains(l, {-90, 0, 0, 0}, point);
+  Spatializer::gains(l, {-90, 0, 0.5f, 0}, wide);
+  Spatializer::gains(l, {-90, 0, 1.0f, 0}, all);
+  auto peak = [&](const float* g) { return *std::max_element(g, g + l.channels()); };
+  CHECK(peak(wide) < peak(point) && peak(all) < peak(wide));
+  for (int c = 0; c < l.channels(); ++c)  // all equal on the 11 directional speakers at spread 1
+    if (c != l.lfeIndex()) CHECK(std::fabs(all[c] - 1.0f / std::sqrt(11.0f)) < 1e-5f);
+}
+
+TEST(the_panner_survives_junk_input) {
+  const float junk[] = {NAN, INFINITY, -INFINITY, 1e30f, -1e30f};
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout l = Layout::named(static_cast<LayoutId>(i));
+    for (float a : junk)
+      for (float b : junk) {
+        float g[kMaxChannels];
+        Spatializer::gains(l, {a, b, a, b}, g);
+        float power = 0;
+        for (int c = 0; c < kMaxChannels; ++c) {
+          CHECK(std::isfinite(g[c]));
+          power += g[c] * g[c];
+        }
+        CHECK(std::fabs(power - 1.0f) < 1e-4f);
+      }
+  }
+  // A layout with nothing to pan on is silent, not NaN.
+  DeviceChannel only[1] = {{0, 0, true, true}};
+  float g[kMaxChannels];
+  Spatializer::gains(Layout::fromDevice(only, 1), {0, 0, 0, 0}, g);
+  CHECK(g[0] == 0.0f);
+  DeviceChannel mono[1] = {{0, 0, false, true}};
+  Spatializer::gains(Layout::fromDevice(mono, 1), {50, 0, 0, 0}, g);
+  CHECK(g[0] == 1.0f);  // one speaker takes everything
+}
+
+TEST(a_moving_voice_glides_and_never_jumps) {
+  const Layout l = Layout::named(LayoutId::S7_1_4);
+  SpatialVoice v(48000);
+  v.setTarget(l, {-90, 0, 0, 0}, true);
+  float before[kMaxChannels];
+  for (int c = 0; c < l.channels(); ++c) before[c] = v.gain(c);
+  v.setTarget(l, {90, 0, 0, 0});  // the source flips to the other side
+  float frame[kMaxChannels] = {};
+  float maxStep = 0;
+  for (int n = 0; n < 4800; ++n) {  // 100 ms
+    v.process(0.0f, frame, l.channels());
+    for (int c = 0; c < l.channels(); ++c) {
+      maxStep = std::max(maxStep, std::fabs(v.gain(c) - before[c]));
+      before[c] = v.gain(c);
+    }
+  }
+  // One step is k times the remaining distance (at most 1), with k = 1 - exp(-1 / (20 ms * 48 kHz)).
+  CHECK(maxStep <= (1.0f - std::exp(-1.0f / (0.02f * 48000.0f))) * 1.0001f);
+  CHECK(maxStep > 0.0005f);  // and it does move, so the bound above is not met by standing still
+  float target[kMaxChannels];
+  Spatializer::gains(l, {90, 0, 0, 0}, target);
+  for (int c = 0; c < l.channels(); ++c) CHECK(std::fabs(v.gain(c) - target[c]) < 0.02f);  // arrived after 100 ms
+}
+
+TEST(a_new_voice_can_start_in_place_and_adds_to_the_frame) {
+  const Layout l = Layout::named(LayoutId::S5_1);
+  SpatialVoice v(48000);
+  v.setTarget(l, {-30, 0, 0, 0}, true);
+  float g[kMaxChannels];
+  Spatializer::gains(l, {-30, 0, 0, 0}, g);
+  float frame[kMaxChannels] = {};
+  frame[0] = 0.25f;  // something is already in the frame: the voice adds, it does not overwrite
+  v.process(1.0f, frame, l.channels());
+  CHECK(std::fabs(frame[0] - (0.25f + g[0])) < 1e-6f);
+  // Starting without snap rises from silence.
+  SpatialVoice w(48000);
+  w.setTarget(l, {-30, 0, 0, 0});
+  float f2[kMaxChannels] = {};
+  w.process(1.0f, f2, l.channels());
+  CHECK(f2[0] > 0 && f2[0] < 0.05f * g[0]);
+}
+
+TEST(the_bass_send_feeds_the_lfe_channel_with_low_frequencies_only) {
+  const Layout l = Layout::named(LayoutId::S5_1);
+  auto lfeEnergy = [&](float hz, float send) {
+    SpatialVoice v(48000);
+    v.setTarget(l, {0, 0, 0, send}, true);
+    double e = 0;
+    for (int n = 0; n < 48000; ++n) {
+      float frame[kMaxChannels] = {};
+      v.process(static_cast<float>(std::sin(6.2831853 * hz * n / 48000.0)), frame, l.channels());
+      if (n > 4800) e += frame[l.lfeIndex()] * frame[l.lfeIndex()];
+    }
+    return e;
+  };
+  const double low = lfeEnergy(50, 1), high = lfeEnergy(2000, 1);
+  CHECK(low > 1000 * high);                  // a 2 kHz tone is far below the bass send
+  CHECK(lfeEnergy(50, 0) == 0.0);            // no send, no bass
+  CHECK(lfeEnergy(50, 0.5f) < 0.3 * low);    // half the send is a quarter of the energy
+}
+
+TEST(without_an_lfe_channel_the_bass_is_folded_into_the_front) {
+  const Layout st = Layout::named(LayoutId::Stereo);
+  SpatialVoice v(48000);
+  v.setTarget(st, {-90, 0, 0, 1}, true);  // hard left in the panner, but the bass folds to both
+  CHECK(std::fabs(v.bassGain(0) - 0.70710678f) < 1e-5f && std::fabs(v.bassGain(1) - 0.70710678f) < 1e-5f);
+  const Layout l = Layout::named(LayoutId::S7_1_4);
+  v.setTarget(l, {0, 0, 0, 1}, true);
+  CHECK(v.bassGain(l.lfeIndex()) == 1.0f);  // with an LFE channel it goes there alone
+  float others = 0;
+  for (int c = 0; c < l.channels(); ++c)
+    if (c != l.lfeIndex()) others += v.bassGain(c);
+  CHECK(others == 0.0f);
+  DeviceChannel side[2] = {{-100, 0, false, true}, {100, 0, false, true}};  // nothing in front: all share it
+  v.setTarget(Layout::fromDevice(side, 2), {0, 0, 0, 1}, true);
+  CHECK(std::fabs(v.bassGain(0) - 0.70710678f) < 1e-5f);
 }
 
 int main() {

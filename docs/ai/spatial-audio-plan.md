@@ -364,14 +364,20 @@ synth without restarting it.
 
 ### 5.2 miniaudio (terminal builds: macOS, Linux, Windows)
 
-- Auto layout idea (rev. 2026-11-13): open with `cfg.playback.channels = 0` so that miniaudio uses
-  the device's native channel count, then read the real count and map from `device.playback` after
-  init and build the synth layout from them **[verify that 0 selects the native count on every
-  backend]**. If this holds, `auto` negotiation is a lookup and the query below is only needed for
-  the menu text and the step-down.
-- Query the device (`ma_context_get_device_info`, native data formats) for its channel count and
-  channel map **[verify]**; open with `cfg.playback.channels` and `channelMap` set from the layout,
-  `ma_format_f32`, 48 kHz. Let miniaudio's own conversion handle any mismatch rather than failing.
+- Auto layout (rev. 2026-11-13, measured in the phase-0 spike, finding F-24): open with
+  `cfg.playback.channels = 0` so that miniaudio uses the device's native channel count and standard
+  map, then read the real count and map from `device.playback` after init and build the synth layout
+  from them. Measured on PulseAudio/PipeWire with a stereo device: 0 gives 2 channels, FL FR.
+  **[verify on CoreAudio, WASAPI, ALSA and on a surround or HDMI device]**
+- **Never infer the device from a successful open.** The same stereo device also opened with 6, 8, 12
+  and 16 channels because the sound server remaps; success says nothing about speakers. The device's
+  own count comes from `channels = 0` (or `ma_context_get_device_info` native data formats), and
+  that is the ceiling for `auto`. A user override above it is allowed (the server or driver
+  downmixes) but must be labelled as such in the menu text.
+- Opening with an explicit count or map: `ma_format_f32`, 48 kHz, `cfg.playback.pChannelMap` set from
+  the layout. An explicit 7.1.4 map with named height positions was accepted and reported back
+  unchanged (PulseAudio). **[verify per backend whether a height map is honoured]** Let miniaudio's
+  own conversion handle any mismatch rather than failing.
 - Keep the stderr silencing around `ma_device_init` (ALSA complaints).
 - macOS: the device's configured speaker layout decides (Audio MIDI Setup); an HDMI device often
   exposes up to 8 channels as PCM. **[verify]** No device is reconfigured by the app.
@@ -379,8 +385,18 @@ synth without restarting it.
   used. **[verify]**
 - Linux: PipeWire/PulseAudio expose a channel map; plain ALSA `default` is often stereo and needs a
   surround device. This is documented, not worked around. **[verify]**
-- Channel order mapping table: canonical → miniaudio `MA_CHANNEL_*` positions (it has top-front,
-  top-back, wide and front-center-left positions, and auxiliary channels).
+- Channel order mapping table: canonical → miniaudio `MA_CHANNEL_*` positions (rev. 2026-11-13,
+  checked against `third_party/miniaudio/miniaudio.h`). miniaudio names `FRONT_LEFT/RIGHT/CENTER`,
+  `LFE`, `SIDE_LEFT/RIGHT`, `BACK_LEFT/RIGHT`, `FRONT_LEFT_CENTER/RIGHT_CENTER`, `TOP_FRONT_LEFT/RIGHT`,
+  `TOP_BACK_LEFT/RIGHT`, a single `TOP_CENTER`, and `AUX_0` to `AUX_31`. It has **no wide pair** (Lw,
+  Rw; `FRONT_LEFT_CENTER` sits between L and C, not outside L) and **no top-middle pair** (Ltm, Rtm).
+  Its default maps above 8 channels are 7.1 plus `AUX` channels, **without** height positions, so every
+  height layout needs an explicit `pChannelMap`. Rules: Lrs/Rrs → `BACK_*`, Ls/Rs → `SIDE_*`,
+  Ltf/Rtf → `TOP_FRONT_*`, Ltr/Rtr → `TOP_BACK_*`; Lw/Rw and Ltm/Rtm → `AUX_n` in the canonical
+  order. The app's own layout table stays authoritative (it knows the true angles); the device map is
+  used only to route each canonical channel to a device index. How a driver routes `AUX` channels to
+  speakers is **[verify]** and may differ per backend, which is why 9.1.4 and 9.1.6 are expected to
+  work only where the device or an aggregate exposes that many channels.
 - Expectation to set in the README: plain PCM over HDMI is usually capped at 8 channels, so 9.1.6
   and 7.1.4 reach a receiver as 16/12 channels only through multichannel interfaces; over normal
   HDMI the app renders to what the device reports (typically 7.1). **[verify]**

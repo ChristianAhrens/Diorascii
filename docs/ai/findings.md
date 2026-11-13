@@ -28,6 +28,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
 | F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
 | F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
+| F-24 | M | Spatial audio phase-0 spike: first miniaudio facts; hardware still unmeasured | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -240,3 +241,19 @@ engine; the winged monster only dies, there is no wreck. (6) A screen under 28 r
 cancels the monster fight silently (no room); the yeti is 17 rows tall, so it fills most of a 24-row screen.
 (7) `World::clashStep`, `maulStep` and the others are special-purpose code in the generic core (adds to F-08, F-21).
 Fixed-seed tests of the first catastrophes now call `triggerRare(RarePick::Common)`.
+
+## F-24 Spatial audio, phase-0 spike (M)
+Added 2026-11-13. A throwaway program (not committed; it lived in the assistant's scratchpad) queried and opened miniaudio
+devices to replace some **[verify]** marks in `docs/ai/spatial-audio-plan.md`. **Measured** on Linux (a ThinkPad with
+PipeWire, reached through miniaudio's PulseAudio backend), one playback device, native format 2 channels at 48 kHz:
+(1) `channels = 0` opens with the native 2 channels and the map FL FR. (2) The same device also opened with 6, 8, 12 and 16
+channels (the sound server remaps), so **a successful open does not show that the speakers exist**; `auto` must start from
+the native count. (3) miniaudio's default maps above 8 channels are 7.1 plus `AUX_0..` with **no height positions**; an
+explicit 7.1.4 `pChannelMap` with `TOP_FRONT_*` and `TOP_BACK_*` was accepted and reported back unchanged. (4) By reading
+the header: miniaudio has **no wide pair and no top-middle pair**, only `TOP_CENTER` and `AUX` channels, so Lw/Rw and
+Ltm/Rtm (needed for 9.1.4, 9.1.6, 5.1.2, 7.1.2) can only be routed as `AUX`. The plan (section 5.2) was corrected accordingly.
+**Not verified:** anything on CoreAudio, WASAPI or ALSA; the HDMI outputs (they were not listed as separate devices
+by this PulseAudio setup); any real surround or Atmos-capable device; whether `channels = 0` means "native" on every
+backend; how drivers route `AUX` channels; the spike's audible modes (`identify`, `sweep`), which were never run; all of
+the Apple side (tvOS, AirPods), which is still the gate of phase 0. **Next:** run the spike on the Mac and on the Apple TV
+and receiver setups and record the native formats here.

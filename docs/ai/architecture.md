@@ -114,6 +114,13 @@ audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Un
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 
+**Speaker layouts** (2026-11-13, phase 1 of `spatial-audio-plan.md`; **not yet used by the synth or the backends**).
+`src/core/layout.*` holds `Layout`: an ordered set of `Speaker`s (canonical `Channel`, azimuth in degrees with + to the right, elevation, weight)
+for the nine named layouts 2.0 to 9.1.6 (`LayoutId`), at most `kMaxChannels` = 16, in canonical channel order (L R C LFE Lw Rw Ls Rs Lrs Rrs Ltf Rtf Ltm Rtm Ltr Rtr).
+The 5.1 family stands its sides at 110 degrees, everything else at 90. `Layout::fromDevice` builds a layout from what a backend reports
+(`DeviceChannel`: position, LFE flag, known or not): each channel keeps the device's angle (the panner needs only positions) and takes the identity of the
+nearest canonical channel (`nearestChannel`); unknown channels and a second LFE are `Channel::None`, which stays silent.
+
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`
 (`Weighted`, `Common`, `Other`) lets `triggerRare` choose: `x` and the timer are weighted, `X` (`Action::RareOther`), the

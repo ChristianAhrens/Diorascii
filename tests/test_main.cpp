@@ -11,6 +11,7 @@
 #include "app/session.h"
 #include "core/ambience.h"
 #include "core/assets.h"
+#include "core/layout.h"
 #include "core/menu.h"
 #include "version.h"
 #include "core/world.h"
@@ -4073,6 +4074,97 @@ TEST(the_second_catastrophes_are_deterministic_per_seed) {
     }
     CHECK(a == b);
   }
+}
+
+
+// ---------------------------------------------------- layouts and spatializer ---
+
+TEST(layouts_have_the_expected_channels) {
+  const int counts[kLayoutCount] = {2, 6, 8, 8, 10, 10, 12, 14, 16};
+  const bool heights[kLayoutCount] = {false, false, false, true, true, true, true, true, true};
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout l = Layout::named(static_cast<LayoutId>(i));
+    CHECK(l.channels() == counts[i]);
+    CHECK(l.channels() <= kMaxChannels);
+    CHECK(l.hasHeight() == heights[i]);
+    CHECK((l.lfeIndex() >= 0) == (i != 0));  // every layout but stereo has an LFE channel
+    if (l.lfeIndex() >= 0) CHECK(l.speaker(l.lfeIndex()).isLfe());
+    for (int c = 1; c < l.channels(); ++c)  // canonical order, no repeats
+      CHECK(static_cast<int>(l.speaker(c).channel) > static_cast<int>(l.speaker(c - 1).channel));
+    CHECK(l.isStereo() == (i == 0));
+  }
+  CHECK(Layout().channels() == 2 && Layout().isStereo());  // the default is stereo
+}
+
+TEST(layout_names_round_trip_and_bad_names_are_rejected) {
+  for (int i = 0; i < kLayoutCount; ++i) {
+    LayoutId id = LayoutId::Stereo;
+    CHECK(Layout::parse(Layout::nameOf(static_cast<LayoutId>(i)), id));
+    CHECK(static_cast<int>(id) == i);
+    CHECK(std::string(Layout::named(static_cast<LayoutId>(i)).name()) == Layout::nameOf(static_cast<LayoutId>(i)));
+  }
+  LayoutId id = LayoutId::S7_1;
+  for (const char* bad : {"", "5.0", "7.1.5", "stereo", "9.1.6 "}) CHECK(!Layout::parse(bad, id));
+  CHECK(id == LayoutId::S7_1);  // a failed parse leaves it alone
+}
+
+TEST(layout_speaker_angles_follow_the_tables) {
+  // The 5.1 family puts the sides at 110 degrees, 7.1 and up at 90.
+  for (LayoutId id : {LayoutId::S5_1, LayoutId::S5_1_2, LayoutId::S5_1_4}) {
+    const Layout l = Layout::named(id);
+    for (int i = 0; i < l.channels(); ++i)
+      if (l.speaker(i).channel == Channel::Ls) CHECK(l.speaker(i).azimuth == -110.0f);
+  }
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  for (int i = 0; i < l714.channels(); ++i) {
+    const Speaker& s = l714.speaker(i);
+    if (s.channel == Channel::Rs) CHECK(s.azimuth == 90.0f);
+    if (s.channel == Channel::Rtr) CHECK(s.azimuth == 135.0f && s.elevation == 45.0f);
+    if (s.channel == Channel::C) CHECK(s.azimuth == 0.0f && s.elevation == 0.0f);
+  }
+  // Wide speakers exist only in 9.1.x, top-middle ones only in x.1.2 and 9.1.6.
+  auto has = [](LayoutId id, Channel c) {
+    const Layout l = Layout::named(id);
+    for (int i = 0; i < l.channels(); ++i)
+      if (l.speaker(i).channel == c) return true;
+    return false;
+  };
+  CHECK(has(LayoutId::S9_1_4, Channel::Lw) && !has(LayoutId::S7_1_4, Channel::Lw));
+  CHECK(has(LayoutId::S9_1_6, Channel::Ltm) && has(LayoutId::S5_1_2, Channel::Rtm) && !has(LayoutId::S9_1_4, Channel::Ltm));
+}
+
+TEST(nearest_channel_maps_directions_to_canonical_channels) {
+  CHECK(nearestChannel(-30, 0) == Channel::L);
+  CHECK(nearestChannel(0, 0) == Channel::C);
+  CHECK(nearestChannel(110, 0) == Channel::Rs);
+  CHECK(nearestChannel(-100, 50) == Channel::Ltm);
+  CHECK(nearestChannel(-120, 40) == Channel::Ltr);
+  CHECK(nearestChannel(60, 5) == Channel::Rw);
+  CHECK(nearestChannel(NAN, INFINITY) == Channel::C);  // junk in, a defined channel out
+  for (int i = 0; i < kMaxChannels; ++i) {             // every canonical position maps to itself
+    const Channel c = static_cast<Channel>(i);
+    if (c == Channel::LFE) continue;
+    float az, el;
+    canonicalPosition(c, az, el);
+    CHECK(nearestChannel(az, el) == c);
+  }
+}
+
+TEST(device_channels_map_to_a_layout) {
+  DeviceChannel dev[8] = {{-30, 0, false, true}, {30, 0, false, true}, {0, 0, false, true}, {0, 0, true, true},
+                          {0, 0, false, false}, {0, 0, true, true},    {-100, 0, false, true}, {100, 0, false, true}};
+  const Layout l = Layout::fromDevice(dev, 8);
+  CHECK(l.channels() == 8);
+  CHECK(std::string(l.name()) == "custom");
+  CHECK(l.speaker(0).channel == Channel::L && l.speaker(1).channel == Channel::R && l.speaker(2).channel == Channel::C);
+  CHECK(l.lfeIndex() == 3);
+  CHECK(l.speaker(4).channel == Channel::None);  // no known position: silent
+  CHECK(l.speaker(5).channel == Channel::None);  // a second LFE is silent too
+  CHECK(l.speaker(6).channel == Channel::Ls && l.speaker(6).azimuth == -100.0f);  // the device's angle is kept
+  // More channels than the maximum are cut off; a nonsense count gives an empty layout.
+  std::vector<DeviceChannel> many(40);
+  CHECK(Layout::fromDevice(many.data(), 40).channels() == kMaxChannels);
+  CHECK(Layout::fromDevice(many.data(), -3).channels() == 0);
 }
 
 int main() {

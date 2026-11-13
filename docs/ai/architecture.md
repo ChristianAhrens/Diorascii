@@ -111,7 +111,7 @@ in-house xoshiro `Rng`, so a seed reproduces a world exactly.
 
 `ambientFor(World)` reduces world state to `AmbientParams` (kind, night, rain, flashes, storm
 proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, siren (ambulance, quick two-tone), wail (fire engine, slow sweep; the engine drops its tag when it leaves, so it drives off silent), train/plane nearness and fire level for the city, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
-fills a stereo float buffer; everything is smoothed and scenes crossfade, so nothing clicks. The
+fills an interleaved float buffer of `layout().channels()` channels per frame (stereo unless an `Ambience` is built with, or `setLayout` is given, another `Layout`; the backends still use stereo); everything is smoothed and scenes crossfade, so nothing clicks. The
 audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
@@ -131,6 +131,14 @@ needed. `SpatialVoice` glides every gain to its target with a one-pole filter of
 `spatial::kLfeCutoffHz`, times `Source::lfeSend`, goes to the LFE channel, or, if the layout has none, is folded at constant power into the speakers
 within 45 degrees of the front (all of them if none is). Everything is allocation-free and lock-free. All constants are tuned by measurement only; they
 have not been heard.
+
+**The synth in a layout** (2026-11-13, phase 2 of `spatial-audio-plan.md`). `Ambience(rate, seed, layout)` and `setLayout` take a `Layout`. The sounds
+themselves are still the stereo pair they have always been: `render` computes `stereo[2]` per frame as before and a routing stage
+(`route()`, `feed_`, `routeGain_`) plays it on the layout's front pair (`Layout::stereoPair`: the L and R channels, else the leftmost and rightmost directional speakers;
+one speaker gets the mean) and leaves every other channel at exactly 0, until phases 3 to 6 give beds and voices their places. With the stereo layout the output is
+**bit-identical** to the synth before the refactor (checked on this machine with `--dump-golden` and `cmp`, 12 cases of 2 s). A layout change does not reset anything: the
+routing gains glide with `spatial::kSmoothingSeconds`, so a channel that keeps its role plays on exactly as before and a channel with a new role fades in (one-pole curve
+`1 - (1 - k)^(n + 1)`, tested sample by sample). The random generator `rng_` is untouched by the layout, so each layout is deterministic per seed.
 
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`

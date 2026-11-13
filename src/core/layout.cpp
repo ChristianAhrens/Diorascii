@@ -160,6 +160,21 @@ bool Layout::hasHeight() const {
   return false;
 }
 
+bool Layout::stereoPair(int& left, int& right) const {
+  left = right = -1;
+  for (int i = 0; i < count_; ++i) {
+    if (speakers_[i].channel == Channel::L) left = i;
+    if (speakers_[i].channel == Channel::R) right = i;
+  }
+  if (left >= 0 && right >= 0) return true;
+  for (int i = 0; i < count_; ++i) {  // no L/R: the extremes by azimuth
+    if (!speakers_[i].isDirectional()) continue;
+    if (left < 0 || speakers_[i].azimuth < speakers_[left].azimuth) left = i;
+    if (right < 0 || speakers_[i].azimuth > speakers_[right].azimuth) right = i;
+  }
+  return left >= 0;
+}
+
 bool Layout::isStereo() const {
   return count_ == 2 && speakers_[0].isDirectional() && speakers_[1].isDirectional() &&
          speakers_[0].azimuth < 0 && speakers_[1].azimuth > 0 && speakers_[0].elevation == 0 &&

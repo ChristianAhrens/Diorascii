@@ -4,6 +4,7 @@
 #pragma once
 #include <cstdint>
 
+#include "core/layout.h"
 #include "core/rng.h"
 
 namespace dio {
@@ -91,9 +92,19 @@ class Ambience {
  public:
   /// @param sampleRate output rate in Hz
   /// @param seed seeds the noise
-  explicit Ambience(int sampleRate, uint64_t seed = 1);
-  /// Writes `frames` frames of interleaved stereo float samples, each within -1 to 1.
+  /// @param layout the speakers to render for (stereo by default)
+  explicit Ambience(int sampleRate, uint64_t seed = 1, const Layout& layout = Layout());
+  /// Writes `frames` frames of interleaved float samples, `layout().channels()` per frame, each
+  /// within -1 to 1. Until the beds and voices are placed per speaker (phases 3 to 6 of the
+  /// multichannel plan) the synth still makes a stereo pair: it plays on the layout's front left
+  /// and right speakers (`Layout::stereoPair`) and every other channel is silent. With the stereo
+  /// layout the output is exactly what the synth has always produced.
   void render(const AmbientParams& p, float* out, int frames);
+  /// Changes the layout between two render calls (a route change). Nothing in the synth is reset:
+  /// channels that keep their role play on without a break, new ones fade in over about 20 ms.
+  void setLayout(const Layout& layout);
+  /// The layout the synth renders for.
+  const Layout& layout() const { return layout_; }
 
  private:
   /// Moves `v` towards `target`; `k` is the per-sample smoothing coefficient.
@@ -126,6 +137,21 @@ class Ambience {
   /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
   void thunderLevels(float& crack, float& rumble, float& snap) const;
 
+  /// Chooses which part of the stereo pair each output channel plays and glides to the new choice.
+  void route();
+
+  /// Where an output channel gets its sound from.
+  enum Feed : int8_t {
+    kSilent = -1,  ///< nothing
+    kLeft = 0,     ///< the left of the stereo pair
+    kRight = 1,    ///< the right of the stereo pair
+    kBoth = 2      ///< the mean of both (a layout with a single speaker)
+  };
+
+  Layout layout_;                               ///< the speakers to render for
+  Feed feed_[kMaxChannels];                     ///< what each output channel plays
+  float routeGain_[kMaxChannels] = {};          ///< smoothed gain of each output channel
+  float routeTarget_[kMaxChannels] = {};        ///< gain each output channel glides to (1 or 0)
   int rate_;
   float noiseScale_;  ///< keeps the noise density per Hz the same at every sample rate
   Rng rng_;

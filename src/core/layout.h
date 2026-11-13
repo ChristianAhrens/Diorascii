@@ -88,6 +88,11 @@ class Layout {
   /// True for a plain left/right pair on the horizon (a left speaker at a negative azimuth and a
   /// right one at a positive one), which uses the stereo panning law.
   bool isStereo() const;
+  /// Finds the two speakers that carry a stereo signal: the L and R channels if the layout has them,
+  /// else the leftmost and rightmost directional speakers. With one directional speaker both indices
+  /// are that speaker.
+  /// @return false if the layout has no directional speaker (`left` and `right` are then -1)
+  bool stereoPair(int& left, int& right) const;
   /// The layout's name: for example "7.1.4", or "custom" if it came from a device.
   const char* name() const { return name_; }
 

@@ -4750,22 +4750,34 @@ constexpr int kGoldenBlock = 4800;
 /// onset of events in the last bits), so the bound is 8 %: still far below what a lost or misplaced sound does.
 constexpr float kGoldenTolerance = 8e-2f;
 
-/// Renders golden case `n` (scene 1 + n / 2, with the catastrophe if n is odd) as interleaved stereo.
-std::vector<float> goldenRender(int n) {
-  Ambience a(48000, 5);
+/// The parameters of golden case `n`: scene 1 + n / 2, with the catastrophe if n is odd, everything active.
+AmbientParams goldenParams(int n) {
   AmbientParams p;
   p.kind = static_cast<AmbientKind>(1 + n / 2);
   p.night = 0.5f; p.rain = 0.6f; p.storm = 0.8f; p.whale = 0.6f; p.tornado = 0.6f; p.avalanche = 0.6f;
   p.worm = 0.6f; p.siren = 0.6f; p.wail = 0.6f; p.train = 0.6f; p.plane = 0.6f; p.fire = 0.6f;
   p.flames = 0.5f; p.winged = 0.5f;
   p.menace = (n % 2) ? 0.8f : 0.0f;
-  std::vector<float> out;
-  std::vector<float> buf(2 * kGoldenBlock);
-  for (int block = 0; block < 2 * 48000 / kGoldenBlock; ++block) {
+  return p;
+}
+
+/// Renders `seconds` of golden case `n` with the synth `a`, in blocks of 0.1 s (the counters step up
+/// once, after 0.4 s, as in every golden case), appending interleaved samples of `channels` per frame.
+void goldenAppend(Ambience& a, AmbientParams& p, int channels, int firstBlock, int blocks, std::vector<float>& out) {
+  std::vector<float> buf(static_cast<size_t>(channels) * kGoldenBlock);
+  for (int block = firstBlock; block < firstBlock + blocks; ++block) {
     if (block == 4) { ++p.flashes; ++p.nibbles; ++p.impacts; ++p.crushes; ++p.squeals; ++p.shots; }
     a.render(p, buf.data(), kGoldenBlock);
     out.insert(out.end(), buf.begin(), buf.end());
   }
+}
+
+/// Renders golden case `n` as interleaved stereo.
+std::vector<float> goldenRender(int n) {
+  Ambience a(48000, 5);
+  AmbientParams p = goldenParams(n);
+  std::vector<float> out;
+  goldenAppend(a, p, 2, 0, 2 * 48000 / kGoldenBlock, out);
   return out;
 }
 
@@ -4797,6 +4809,134 @@ TEST(ambience_stereo_output_matches_the_golden_values_of_every_scene) {
         CHECK(std::fabs(got - want) <= 1e-6f + kGoldenTolerance * want);
       }
   }
+}
+
+
+// ------------------------------------------------- ambience in other layouts ---
+
+TEST(the_stereo_pair_of_a_layout_is_found) {
+  int l = -1, r = -1;
+  CHECK(Layout::named(LayoutId::S7_1_4).stereoPair(l, r) && l == 0 && r == 1);
+  DeviceChannel swapped[2] = {{100, 0, false, true}, {-100, 0, false, true}};  // right speaker first
+  CHECK(Layout::fromDevice(swapped, 2).stereoPair(l, r) && l == 1 && r == 0);
+  DeviceChannel odd[4] = {{0, 0, true, true}, {-60, 0, false, true}, {20, 0, false, true}, {0, 0, false, false}};
+  CHECK(Layout::fromDevice(odd, 4).stereoPair(l, r) && l == 1 && r == 2);  // LFE and unknown channels are skipped
+  DeviceChannel one[1] = {{0, 0, false, true}};
+  CHECK(Layout::fromDevice(one, 1).stereoPair(l, r) && l == 0 && r == 0);
+  DeviceChannel none[1] = {{0, 0, true, true}};
+  CHECK(!Layout::fromDevice(none, 1).stereoPair(l, r) && l == -1 && r == -1);
+}
+
+TEST(ambience_in_every_layout_is_finite_bounded_deterministic_and_stays_in_its_buffer) {
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout layout = Layout::named(static_cast<LayoutId>(i));
+    const int ch = layout.channels();
+    std::vector<float> first;
+    for (int run = 0; run < 2; ++run) {
+      Ambience a(48000, 5, layout);
+      AmbientParams p = goldenParams(4);  // the desert with its catastrophe
+      std::vector<float> out;
+      goldenAppend(a, p, ch, 0, 10, out);
+      for (float v : out) CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f);
+      CHECK(out.size() == static_cast<size_t>(ch) * kGoldenBlock * 10);
+      if (run == 0) first = out;
+      else CHECK(out == first);  // the same seed gives the same sound
+    }
+    // The synth writes exactly frames * channels values and nothing beyond.
+    Ambience a(48000, 5, layout);
+    AmbientParams p = goldenParams(0);
+    std::vector<float> buf(static_cast<size_t>(ch) * 100 + 32, 12345.0f);
+    a.render(p, buf.data(), 100);
+    for (size_t k = static_cast<size_t>(ch) * 100; k < buf.size(); ++k) CHECK(buf[k] == 12345.0f);
+  }
+}
+
+TEST(ambience_in_a_layout_plays_the_stereo_pair_on_the_front_speakers_and_is_silent_elsewhere) {
+  // The contract of phase 2 (replaced step by step in phases 3 to 6): the same stereo sound, placed.
+  std::vector<float> stereo = goldenRender(0);  // the forest, everything active
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout layout = Layout::named(static_cast<LayoutId>(i));
+    const int ch = layout.channels();
+    Ambience a(48000, 5, layout);
+    AmbientParams p = goldenParams(0);
+    std::vector<float> out;
+    goldenAppend(a, p, ch, 0, 2 * 48000 / kGoldenBlock, out);
+    for (size_t f = 0; f < stereo.size() / 2; ++f)
+      for (int c = 0; c < ch; ++c) {
+        if (c < 2) CHECK(out[f * ch + c] == stereo[f * 2 + c]);  // L and R are bit-identical to stereo
+        else CHECK(out[f * ch + c] == 0.0f);
+      }
+  }
+}
+
+TEST(ambience_in_a_layout_is_silent_when_the_scene_is_silent_or_muted) {
+  for (int i = 0; i < kLayoutCount; ++i) {
+    const Layout layout = Layout::named(static_cast<LayoutId>(i));
+    Ambience a(48000, 3, layout);
+    AmbientParams p;  // AmbientKind::Silent
+    std::vector<float> out(static_cast<size_t>(layout.channels()) * 4800);
+    a.render(p, out.data(), 4800);
+    for (float v : out) CHECK(v == 0.0f);
+    p = goldenParams(0);
+    p.volume = 0;
+    Ambience b(48000, 3, layout);
+    for (int k = 0; k < 3; ++k) b.render(p, out.data(), 4800);
+    for (float v : out) CHECK(std::fabs(v) < 1e-6f);
+  }
+}
+
+TEST(a_single_speaker_plays_the_mean_of_the_stereo_pair) {
+  DeviceChannel one[1] = {{0, 0, false, true}};
+  Ambience a(48000, 5, Layout::fromDevice(one, 1));
+  AmbientParams p = goldenParams(0);
+  std::vector<float> mono;
+  goldenAppend(a, p, 1, 0, 10, mono);
+  const std::vector<float> stereo = goldenRender(0);
+  for (size_t f = 0; f < mono.size(); ++f) CHECK(std::fabs(mono[f] - 0.5f * (stereo[2 * f] + stereo[2 * f + 1])) < 1e-6f);
+}
+
+TEST(changing_the_layout_while_rendering_keeps_the_sound_going_and_does_not_click) {
+  // One second in stereo, then 5.1 for a second, then 7.1.4: L and R must continue exactly as if
+  // nothing had happened (no reset), and the new channels must come in without a jump.
+  const std::vector<float> reference = goldenRender(0);
+  Ambience a(48000, 5);
+  AmbientParams p = goldenParams(0);
+  std::vector<float> stereoPart, part51, part714;
+  goldenAppend(a, p, 2, 0, 5, stereoPart);
+  a.setLayout(Layout::named(LayoutId::S5_1));
+  CHECK(a.layout().channels() == 6);
+  goldenAppend(a, p, 6, 5, 5, part51);
+  a.setLayout(Layout::named(LayoutId::S7_1_4));
+  goldenAppend(a, p, 12, 10, 10, part714);
+  for (size_t f = 0; f < reference.size() / 2; ++f) {
+    float l, r;
+    if (f < stereoPart.size() / 2) { l = stereoPart[2 * f]; r = stereoPart[2 * f + 1]; }
+    else if (f < stereoPart.size() / 2 + part51.size() / 6) { const size_t g = f - stereoPart.size() / 2; l = part51[6 * g]; r = part51[6 * g + 1]; }
+    else { const size_t g = f - stereoPart.size() / 2 - part51.size() / 6; l = part714[12 * g]; r = part714[12 * g + 1]; }
+    CHECK(l == reference[2 * f] && r == reference[2 * f + 1]);
+  }
+
+  // A channel that changes its role fades in along a known curve instead of jumping: swap the order of
+  // two speakers. The signal itself is noise, so the test compares with the continuing stereo signal
+  // times the gain 1 - (1 - k)^(n + 1) of a one-pole fade with k = 1 - exp(-1 / (20 ms * rate)).
+  Ambience b(48000, 5);
+  AmbientParams q = goldenParams(0);
+  std::vector<float> before, after;
+  goldenAppend(b, q, 2, 0, 10, before);
+  DeviceChannel swapped[2] = {{100, 0, false, true}, {-100, 0, false, true}};
+  b.setLayout(Layout::fromDevice(swapped, 2));
+  goldenAppend(b, q, 2, 10, 1, after);
+  const double k = 1.0 - std::exp(-1.0 / (0.02 * 48000.0));
+  float level = 0;
+  for (size_t f = 0; f < kGoldenBlock; ++f) {
+    const double gain = 1.0 - std::pow(1.0 - k, static_cast<double>(f + 1));
+    const float left = reference[2 * (10 * kGoldenBlock + f)], right = reference[2 * (10 * kGoldenBlock + f) + 1];
+    CHECK(std::fabs(after[2 * f] - right * gain) < 1e-5);      // channel 0 is now the right speaker
+    CHECK(std::fabs(after[2 * f + 1] - left * gain) < 1e-5);   // channel 1 the left one
+    level = std::max(level, std::fabs(after[2 * f]));
+  }
+  CHECK(level > 0.15f);  // the sound is loud, so an unfaded swap would have been plainly different
+  CHECK(std::fabs(before[2 * (10 * kGoldenBlock - 1)] - reference[2 * (10 * kGoldenBlock - 1)]) == 0.0f);  // same run as the reference
 }
 
 int main(int argc, char** argv) {

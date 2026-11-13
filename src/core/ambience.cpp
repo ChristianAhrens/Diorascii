@@ -7,6 +7,7 @@
 #include <cmath>
 #include <iterator>
 
+#include "core/spatializer.h"
 #include "core/world.h"
 
 namespace dio {
@@ -101,8 +102,11 @@ AmbientParams ambientFor(const World& world) {
   return p;
 }
 
-Ambience::Ambience(int sampleRate, uint64_t seed)
-    : rate_(sampleRate), noiseScale_(std::sqrt(static_cast<float>(sampleRate) / 48000.0f)), rng_(seed) {
+Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
+    : layout_(layout), rate_(sampleRate), noiseScale_(std::sqrt(static_cast<float>(sampleRate) / 48000.0f)), rng_(seed) {
+  std::fill(feed_, feed_ + kMaxChannels, kSilent);
+  route();
+  std::copy(routeTarget_, routeTarget_ + kMaxChannels, routeGain_);  // the first layout needs no fade-in
   lowHum_ = coeff(1.0f / 110.0f / 6.28f);
   lowMuffle_ = coeff(1.0f / 650.0f / 6.28f);
   lowDeep_ = coeff(1.0f / 55.0f / 6.28f);
@@ -136,6 +140,31 @@ Ambience::Ambience(int sampleRate, uint64_t seed)
   lowStreamTop_ = coeff(1.0f / 1300.0f / 6.28f);
   lowStreamBottom_ = coeff(1.0f / 380.0f / 6.28f);
   lowIce_ = coeff(1.0f / 2500.0f / 6.28f);
+}
+
+void Ambience::route() {
+  for (int c = 0; c < kMaxChannels; ++c) routeTarget_[c] = 0;
+  Feed next[kMaxChannels];
+  std::fill(next, next + kMaxChannels, kSilent);
+  int left, right;
+  if (layout_.stereoPair(left, right)) {
+    if (left == right) {
+      next[left] = kBoth;
+    } else {
+      next[left] = kLeft;
+      next[right] = kRight;
+    }
+  }
+  for (int c = 0; c < kMaxChannels; ++c) {
+    routeTarget_[c] = next[c] == kSilent ? 0.0f : 1.0f;
+    if (next[c] != feed_[c]) routeGain_[c] = 0;  // a channel with a new role fades in
+    feed_[c] = next[c];
+  }
+}
+
+void Ambience::setLayout(const Layout& layout) {
+  layout_ = layout;
+  route();
 }
 
 void Ambience::bubble(double delay, float f0, float dur, float amp) {
@@ -727,6 +756,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   const float rollScale = 1.0f / (0.577f * std::sqrt(lowRoll / 2.0f));
   const float lowRain = coeff(1.0f / 2500.0f / 6.28f);
   const float lowCrack = coeff(1.0f / 1800.0f / 6.28f), lowRumble = coeff(1.0f / 140.0f / 6.28f);
+  const int channels = layout_.channels();
+  const float kRoute = coeff(spatial::kSmoothingSeconds);
   const double dt = 1.0 / rate_;
   const float snapHz = std::min(2400.0f, static_cast<float>(rate_) / 7.0f);  // keeps the filter stable
   const float snapF = 2.0f * std::sin(3.14159265f * snapHz / static_cast<float>(rate_));
@@ -901,6 +932,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     if (mix_[static_cast<int>(AmbientKind::Mountains)] > 1e-3f) mountainSample(p, mountains);
     if (mix_[static_cast<int>(AmbientKind::City)] > 1e-3f) citySample(p, city);
 
+    float stereo[2];
     for (int ch = 0; ch < 2; ++ch) {
       // Wind: noise through two low-pass stages (no hiss, no crackle).
       const float wn = noise(rng_) * noiseScale_;
@@ -935,7 +967,13 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                            moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +
                            mountains[ch] * mix_[static_cast<int>(AmbientKind::Mountains)] +
                            city[ch] * mix_[static_cast<int>(AmbientKind::City)];
-      out[2 * i + ch] = softClip(sample) * volume_ * 0.8f;
+      stereo[ch] = softClip(sample) * volume_ * 0.8f;
+    }
+    float* frame = out + static_cast<size_t>(i) * channels;
+    for (int c = 0; c < channels; ++c) {
+      routeGain_[c] += (routeTarget_[c] - routeGain_[c]) * kRoute;
+      const float x = feed_[c] == kSilent ? 0.0f : feed_[c] == kBoth ? 0.5f * (stereo[0] + stereo[1]) : stereo[feed_[c]];
+      frame[c] = x * routeGain_[c];
     }
   }
 }

@@ -7,6 +7,13 @@ operating-system behaviour come from the assistant's general knowledge, not from
 repository; every one of them is marked **[verify]** and is a checkpoint in the spike (phase 0).
 Nothing in this plan has been heard, seen or run on a surround system, HDMI receiver or AirPods.
 
+**Revision 2026-11-13** (branch now after the v1.3.0 pin): the bed-plus-objects model is stated
+explicitly (section 3.0), beds become **one independent chain per speaker by default** instead of
+four shared groups (section 3.6, phase 3), a measured CPU baseline of today's stereo synth was added
+(sections 2.4 and 8), the miniaudio auto-detect idea and the alternatives considered were added
+(sections 3.3, 5.2), and the headphone stage was reframed as a speaker virtualizer (phase 9).
+Revised parts are marked **(rev. 2026-11-13)**.
+
 ## 1. Goal and scope
 
 Let the ambient sound use as many speakers as the output offers, up to 9.1.6, and let the
@@ -74,7 +81,45 @@ sound identical, a shot does not come from the helicopter, the winged monster's 
 where it flies. Multichannel without positions would only spread noise around; the positions are
 the work.
 
+### 2.4 Measured baseline (rev. 2026-11-13)
+
+Measured on 2026-11-13 with a throwaway benchmark (not committed) calling `Ambience::render()`
+for 10 s of audio at 48 kHz stereo per scene, rain 0.6, night 0.5, storm 0.8, built with plain
+`-O2` (not the release preset) on an Intel i3-4010U (2013, 1.7 GHz), single run, not profiled:
+
+| Scene | CPU per second of audio |
+|---|---|
+| Forest | 3.1 % of one core |
+| Aquarium | 3.0 % |
+| Desert | 3.5 % |
+| Moon | 4.3 % |
+| Mountains | 4.9 % |
+| City | 9.2 % |
+
+Not known: how much of this is the per-channel bed chains (scales with channel count) and how much
+is `sin`/`exp` in the voices (does not scale). The first phase-2 task is to profile that split.
+The cost is dominated by what the existing per-sample loops do, so the numbers are only a guide
+for relative scaling, not a prediction for Apple silicon.
+
 ## 3. Target design
+
+### 3.0 The model: one bed, many objects, one layout (rev. 2026-11-13)
+
+There is exactly one output format, the **channel layout** of the device. Two kinds of material are
+mixed into it by the synth itself:
+
+- **Bed:** continuous, non-directional or wrap-around ambience (wind, rain, hum, traffic, pad). It
+  is synthesized per speaker, so every full-range speaker carries its own independent noise and
+  the listener is enveloped, including the height speakers.
+- **Objects:** discrete sources with a position (a siren, a shot, a whale, a stamping monster).
+  They are synthesized mono and **rendered by Diorascii's own spatializer** (section 3.3) into the
+  same channels as the bed. They are "objects" only inside the synth; the output stays plain
+  channel PCM. This is what "object-based audio is out of scope" means: no Atmos metadata and no
+  OS object renderer (Windows `ISpatialAudioClient`, Apple `AVAudioEnvironmentNode`), because none
+  of them is portable and none is reachable through miniaudio.
+
+The same model serves speakers (render to the layout), AirPods (the OS spatializes the layout) and,
+if needed, any other headphones (the app virtualizes the layout, phase 9).
 
 ### 3.1 Space model: the diorama
 
@@ -124,6 +169,15 @@ of 90°) live in the layout table. Device-reported maps that match no named layo
 by speaker to the nearest canonical position by angle; unknown or unmappable channels stay silent.
 
 ### 3.3 Spatializer
+
+**Alternatives considered (rev. 2026-11-13).** *miniaudio's `ma_spatializer`:* already vendored and
+gives attenuation and Doppler, but it belongs to `ma_engine`'s node graph, its panning is basic and
+its handling of height channels is unknown **[verify]**; the synth is procedural, so it would only
+act as a pan stage. Not adopted unless a one-day check shows it covers heights and Doppler well.
+*Ambisonics intermediate (first or third order):* layout independent and elegant for beds, but
+point sources blur at low order and irregular layouts need an optimized decoder; more machinery than
+this app needs. *Third-party renderers (OpenAL Soft, Steam Audio, Resonance Audio, libiamf):*
+capable, but all violate rule 7. *VBAP:* needs triangulation of the speaker set; DBAP does not.
 
 `Spatializer` in `src/core` (pure, headless):
 
@@ -192,11 +246,30 @@ backend automatically. The offline path used by tests passes the same struct str
   `render(p, out, frames)` writes `layout.channels()` interleaved floats. Layout can change at run
   time (route change): only the spatializer matrix and the output stage change, no synth state is
   reset, so there is no click and no restart.
-- **Beds** are produced as a handful of **decorrelated groups** (front, side, rear, height), each a
-  stereo pair of independent noise chains, **not** one chain per speaker. Each speaker feeds from the
-  nearest group(s) by a fixed mixing matrix with small per-speaker gain trims. Sixteen full chains
-  per bed would multiply the CPU cost of today's sound by about eight for no audible gain.
-  Tonal beds (moon pad, hum) get a different phase offset per group.
+- **Beds (rev. 2026-11-13): one independent chain per full-range speaker is the default.** Today's
+  bed code is already a `for (ch < 2)` loop in which every ear has its own noise draw and filter
+  state, so it generalizes mechanically: the arrays `[2]` become `[kMaxChannels]` and the loop runs
+  to the layout's channel count. Independent noise per speaker is the best possible decorrelation;
+  shared groups make neighbouring speakers coherent, which collapses the envelopment into phantom
+  images and combs when the listener moves. The earlier plan of four shared groups (front, side,
+  rear, height) is demoted to a **fallback tier** used only if the benchmark says a layout is too
+  expensive. Details:
+  - Each speaker gets a **bed profile** per scene: a level trim and a tone tilt by position (rear a
+    little darker and quieter, heights lighter, rain and wind heavier overhead), and a slow
+    per-speaker gust modulation with different phases so that wind and storms drift around the room.
+  - Channels 0 and 1 keep the existing `rng_` draw order. Channels 2 and up draw noise from their own
+    `Rng` instances (seeded from the seed and the channel index), so the stereo draw order, the
+    golden hashes and the event timing of the shared `rng_` stay untouched and each layout is still
+    deterministic per seed.
+  - LFE is not a noise chain: it is a low-passed sum of the rumble parts of the bed plus the object
+    sends.
+  - Tonal beds (moon pad, hum) must not call `sin` per channel: compute the sine and cosine of each
+    partial once per sample and derive the per-channel phase offsets by rotation
+    (`sin(a+o) = sin a cos o + cos a sin o`), a few multiplies per extra channel.
+  - Voices and one-shot sounds are already computed once and added to both ears (dual mono), so they
+    cost nothing extra per channel; they go through the spatializer.
+  - Cost: bed work grows about 7.5x from 2.0 to 9.1.6 (15 full-range channels). Whether that fits is
+    a measurement (sections 2.4 and 8), not an assumption.
 - **Point voices** are generated mono, then `Spatializer` places them (azimuth, elevation,
   distance, spread, lfeSend). Voice structs that already carry `pan` (`Bubble`, `Song`, `Pass`,
   `Honk`, `Shot`, eagle and woodpecker members) get a full position instead.
@@ -291,6 +364,11 @@ synth without restarting it.
 
 ### 5.2 miniaudio (terminal builds: macOS, Linux, Windows)
 
+- Auto layout idea (rev. 2026-11-13): open with `cfg.playback.channels = 0` so that miniaudio uses
+  the device's native channel count, then read the real count and map from `device.playback` after
+  init and build the synth layout from them **[verify that 0 selects the native count on every
+  backend]**. If this holds, `auto` negotiation is a lookup and the query below is only needed for
+  the menu text and the step-down.
 - Query the device (`ma_context_get_device_info`, native data formats) for its channel count and
   channel map **[verify]**; open with `cfg.playback.channels` and `channelMap` set from the layout,
   `ma_format_f32`, 48 kHz. Let miniaudio's own conversion handle any mismatch rather than failing.
@@ -396,14 +474,16 @@ code, not committed (or kept under `scripts/` if useful and original).
   per scene and layout.
 - Docs: `architecture.md`, `README.md` (once the CLI option exists, phase 5).
 
-### Phase 3 – Core: bed groups (M)
+### Phase 3 – Core: per-speaker beds (M) (rev. 2026-11-13)
 
-- Beds produce 4 decorrelated groups (front, side, rear, height) and are mixed to the layout by a
-  fixed matrix. Stereo output stays identical (front group = today's two chains).
-- Tests: group decorrelation (cross-correlation of group outputs below a bound); each layout gets
+- Beds run one independent chain per full-range speaker (section 3.6) with a bed profile per scene.
+  Stereo output stays identical (channels 0 and 1 are today's two chains on today's `rng_`).
+- Tests: cross-correlation between any two speakers' bed output below a bound; each layout gets
   energy on every non-LFE speaker in a bed-only scene; height speakers silent for scenes that define
-  no height share (aquarium bed).
-- CPU budget check against the benchmark (section 8).
+  no height share (aquarium bed); LFE receives only low-passed material.
+- CPU budget check against the benchmark (section 8). **Gate:** if a layout is over budget, first
+  profile (voices vs. chains), then cheapen the chains (shared noise source with per-speaker
+  filtering), and only then fall back to shared groups for the rear and height speakers.
 
 ### Phase 4 – Thread boundary: snapshot and event ring (M)
 
@@ -451,8 +531,11 @@ converts the scene's sounds per section 4, re-baselines that scene's golden hash
 - `README.md` (options, sound section, the HDMI PCM channel caveat), `CHANGELOG.md`, `docs/ai/*`,
   `CLAUDE.md` if a command or rule changes, new finding(s) for the open points below.
 
-### Phase 9 – Optional: own binaural renderer for headphones (L, only if the spike needs it)
+### Phase 9 – Optional: own binaural speaker virtualizer for headphones (L, only if the spike needs it)
 
+- Reframed (rev. 2026-11-13): it is a final stage that virtualizes the **rendered layout** (each
+  speaker channel becomes a virtual source at its canonical angle), not a second renderer for
+  objects, so beds and objects keep one code path.
 - Used only when the output is a stereo headphone route and the OS does not spatialize the app's
   stream. A head model (interaural time and level differences, a head-shadow filter, simple
   pinna-free elevation cue); no HRTF data files, so no licence issues, no new libraries.
@@ -470,6 +553,11 @@ converts the scene's sounds per section 4, re-baselines that scene's golden hash
   lower the point-voice cap (voices already limited by the fixed-size arrays).
 - The benchmark runs per scene and layout in a script, outside `ctest` (timing is machine
   dependent), results recorded in the phase commit messages.
+- Reference point (rev. 2026-11-13, section 2.4): today's stereo synth costs 3 % (forest) to 9 %
+  (city) of one core on a 2013 i3 with `-O2`. If the bed chains were all of that, 9.1.6 would be up
+  to about 7x in the bed part, which is why the split between chains and voices must be profiled
+  first, and why the budget above is stated for the development Mac and Apple TV, not for old
+  x86 laptops. A minimum-hardware figure for the terminal build should be set once measured.
 
 ## 9. Testing strategy
 
@@ -511,13 +599,19 @@ speakers, receivers and AirPods needs ears (section 10).
 2. **Stereo.** Bit-identical through the refactor and deliberately re-baselined per scene when
    positions arrive (this plan), or keep a frozen legacy stereo path forever? Recommendation:
    this plan; a frozen path doubles the synth code.
-3. **Release order.** Before v1.2.0 tvOS or after? tvOS is where HDMI and AirPods matter, and it
-   carries the unverified risk. The spike (phase 0) can run first and independently.
+3. **Release order.** (Reworded 2026-11-13: v1.3.0 is pinned and this work is not in it.) Which
+   release carries it, and does tvOS come with it or after? tvOS is where HDMI and AirPods matter,
+   and it carries the unverified risk. The spike (phase 0) can run first and independently.
 4. **macOS AirPods and Atmos path.** If the spike shows the terminal build gets only stereo on
    AirPods, is an AVAudioEngine backend for macOS (system frameworks, but a new path next to
    miniaudio) acceptable, or does the terminal build stay miniaudio-only with phase 9?
 5. **Hardware** for phase 0: which Apple TV, receiver or soundbar, display, and AirPods.
 6. **Settings persistence.** Is the audio layout remembered between runs?
+7. **Bed density (rev. 2026-11-13).** Independent chain per speaker everywhere (best immersion,
+   most CPU) or per-speaker only up to a limit with shared groups beyond it? Recommendation:
+   per speaker everywhere, fall back per layout only if the benchmark requires it.
+8. **Minimum hardware for the terminal build.** What CPU must 9.1.6 run on? Older laptops may
+   need `auto` to cap the layout by measured headroom.
 
 ## 12. Risks
 

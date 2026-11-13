@@ -25,6 +25,7 @@ add_library(diorascii_core STATIC
   core/city.cpp
   core/disasters.cpp
   core/ambience.cpp
+  core/layout.cpp
   "${EMBED_CPP}")
 target_include_directories(diorascii_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}"

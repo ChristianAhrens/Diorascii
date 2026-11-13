@@ -4075,6 +4075,13 @@ TEST(the_second_catastrophes_are_deterministic_per_seed) {
   }
 }
 
+TEST(console_defaults_to_the_terminal_style) {
+  CHECK(defaultStyleFor(ColorMode::Console) == Style::Terminal);  // the text console cannot show the backdrop
+  CHECK(defaultStyleFor(ColorMode::TrueColor) == Style::Full);
+  CHECK(defaultStyleFor(ColorMode::Ansi256) == Style::Full);
+  CHECK(defaultStyleFor(ColorMode::Ansi16) == Style::Full);
+}
+
 int main() {
   for (auto& [name, fn] : registry()) {
     const int before = gFailures;

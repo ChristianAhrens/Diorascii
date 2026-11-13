@@ -106,6 +106,10 @@ bool sameBg(const Cell& a, const Cell& b) {
 
 }  // namespace
 
+Style defaultStyleFor(ColorMode mode) {
+  return mode == ColorMode::Console ? Style::Terminal : Style::Full;
+}
+
 std::string encodeFrame(const Frame* prev, const Frame& cur, ColorMode mode) {
   std::string out;
   const bool full = !prev || prev->width() != cur.width() || prev->height() != cur.height();

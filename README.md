@@ -85,7 +85,7 @@ macOS asks for confirmation (right-click, Open).
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
-    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
+    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full); the default is full, but terminal on the Linux text console
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
     diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20

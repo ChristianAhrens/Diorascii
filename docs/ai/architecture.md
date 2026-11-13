@@ -53,7 +53,9 @@ driven by the same actions, which is what makes it usable with a Siri Remote lat
 - `ColorMode`: TrueColor, Ansi256, Ansi16, Console. Console is the Linux text console
   (`TERM=linux`, also detected inside tmux via the client's terminal type, or `--console`):
   16 colors but only 8 usable backgrounds, snapped to the dark ones and dimmed; **no shade
-  glyphs** (`░▒▓`) because console fonts draw them as `#`.
+  glyphs** (`░▒▓`) because console fonts draw them as `#`. With no `--style`, Console mode starts in
+  the `terminal` style (`defaultStyleFor` in `vt.cpp`), and that style keeps Console mode instead of
+  Ansi16 there, because the console may not support the bright backgrounds (100-107).
 - Plain black is never used for text (it vanishes on dark backgrounds).
 - Sprite key `backing` darkens the backdrop behind a sprite's glyph cells (full style only) so
   pale animals read on bright backdrops; `contrast: yes` picks dark-on-pale / light-after-dark.

@@ -12,6 +12,7 @@ the GitHub release (see "Releasing" in the README).
 ### Added
 
 ### Changed
+- Changed the Linux text console (`TERM=linux`, also inside tmux, or `--console`) to start in the terminal style, as it cannot show the full style's gradient backdrop; an explicit `--style` still wins
 
 ### Fixed
 

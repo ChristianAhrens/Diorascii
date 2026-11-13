@@ -60,6 +60,8 @@ struct Options {
   bool listScenes = false, gallery = false;
   /// Render style (--style).
   Style style = Style::Full;
+  /// True if --style was given, which then wins over the style picked from the terminal.
+  bool styleSet = false;
 };
 
 /// Prints the command line help.
@@ -72,7 +74,7 @@ void usage() {
       "  --seed N         deterministic run\n"
       "  --assets DIR     load extra/override *.sprite and *.scene files from DIR\n"
       "  --fps N          frame rate (default 20)\n"
-      "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
+      "  --style NAME     full (default; terminal on the Linux text console) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
       "  --audio          ambient sound is on by default; with --audio a missing device is reported\n"
@@ -111,6 +113,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
       const char* v = next();
       if (!v) return false;
       const std::string n = v;
+      o.styleSet = true;
       if (n == "full") o.style = Style::Full;
       else if (n == "terminal") o.style = Style::Terminal;
       else if (n == "mono") o.style = Style::Mono;
@@ -221,7 +224,7 @@ int main(int argc, char** argv) {
   Session::Config config;
   config.seed = opt.seed;
   config.scene = sceneIdx;
-  config.style = opt.style;
+  config.style = opt.styleSet ? opt.style : defaultStyleFor(term.colorMode());  // an explicit --style wins
   config.hour = opt.hour;
   config.realtime = opt.realtime;
   config.sound = !opt.mute;
@@ -273,7 +276,9 @@ int main(int argc, char** argv) {
     if (session.takeRepaint()) havePrev = false;
     // The terminal style uses the user's 16 ANSI colors so it follows their theme.
     const Style style = session.style();
-    const ColorMode mode = style == Style::Terminal ? ColorMode::Ansi16 : term.colorMode();
+    // The Linux console keeps its own mode: it cannot show the bright backgrounds of Ansi16.
+    const ColorMode mode =
+        style == Style::Terminal && term.colorMode() != ColorMode::Console ? ColorMode::Ansi16 : term.colorMode();
     term.write(encodeFrame(havePrev ? &prev : nullptr, cur, mode));
     prev = cur;
     havePrev = true;

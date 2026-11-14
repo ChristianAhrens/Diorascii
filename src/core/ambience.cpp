@@ -21,6 +21,18 @@ float noise(Rng& r) { return static_cast<float>(r.uniform() * 2.0 - 1.0); }
 /// Soft limiter that keeps the mix within -1 to 1.
 float softClip(float x) { return std::tanh(x); }
 
+/// The level of a mono sound that was once added to both ears: at the middle of the stage in stereo the
+/// panning gains are 1/sqrt(2) each, so such a sound is scaled by sqrt(2) to stay as loud as it has always been.
+constexpr float kStereoRef = 1.41421356f;
+
+/// The direction of a stereo pan position (0 hard left, 1 hard right) in the synth's own constant-power
+/// law: in a stereo layout the spatializer reproduces exactly that pan.
+Source panSource(float pan) {
+  Source s;
+  s.azimuth = std::asin(std::clamp(2.0f * pan - 1.0f, -1.0f, 1.0f)) * 180.0f / 3.14159265f;
+  return s;
+}
+
 /// A cricket's chirp: bursts of short pulses on a high carrier, in [0, 1].
 float cricket(double t, double burstHz, double pulseHz, double carrierHz) {
   const double burst = std::fmod(t * burstHz, 1.0);
@@ -114,6 +126,8 @@ Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
     padSin_[c] = std::sin(offset);
   }
   std::fill(feed_, feed_ + kMaxChannels, static_cast<int8_t>(kSilent));
+  std::fill(speakerOf_, speakerOf_ + kMaxChannels, -1);
+  for (Place& pl : place_) pl.v = SpatialVoice(rate_);
   // How far the chains of each scene wander in level, slowly, so that wind and storms drift around the room.
   driftDepth_[static_cast<int>(AmbientKind::Forest)] = 0.3f;
   driftDepth_[static_cast<int>(AmbientKind::Aquarium)] = 0.15f;
@@ -164,7 +178,7 @@ void Ambience::route() {
   // the voices as well as the bed; every other directional speaker gets a bed chain of its own, in
   // output order; the LFE channel plays the bass of all of them.
   int8_t next[kMaxChannels];
-  int speakerOf[kMaxChannels];  // the output channel of each chain
+  int* speakerOf = speakerOf_;  // the output channel of each chain
   std::fill(next, next + kMaxChannels, static_cast<int8_t>(kSilent));
   std::fill(speakerOf, speakerOf + kMaxChannels, -1);
   int left, right, used = 2;
@@ -190,7 +204,7 @@ void Ambience::route() {
 
   // The level of every chain in every scene: the rear a little quieter, the centre not to form a
   // phantom image, the heights by how much of the scene's bed is overhead (none for the aquarium).
-  static constexpr float kHeightShare[kAmbientKinds] = {0.0f, 0.6f, 0.0f, 0.7f, 0.4f, 0.7f, 0.3f};
+  static constexpr float kHeightShare[kAmbientKinds] = {0.0f, 0.6f, 0.0f, 0.7f, 0.4f, 0.7f, 0.0f};
   for (int k = 0; k < kAmbientKinds; ++k) {
     liveMask_[k] = 0;
     for (int ch = 0; ch < kMaxChannels; ++ch) {
@@ -209,6 +223,7 @@ void Ambience::route() {
     }
   }
   updateDrift();
+  for (Place& pl : place_) pl.v.setTarget(layout_, forLayout(pl.src), false);  // placed sounds glide to their place in the new layout
 
   for (int c = 0; c < kMaxChannels; ++c) {
     routeTarget_[c] = next[c] == kSilent ? 0.0f : 1.0f;
@@ -226,6 +241,61 @@ void Ambience::updateDrift() {
       bedGain_[k][ch] = trim_[k][ch] * (1.0f + driftDepth_[k] * static_cast<float>(wave));
     }
   }
+}
+
+Source Ambience::stageSource(float x, float y, float spread, float lfeSend) {
+  Source s;
+  const float ax = std::fabs(x);
+  // The screen is a window of +-45 degrees; beyond it the sound moves round to the side (110 degrees at the limit).
+  const float az = ax <= 1.0f ? ax * 45.0f : 45.0f + (std::min(ax, kStageReach) - 1.0f) * (110.0f - 45.0f) / (kStageReach - 1.0f);
+  s.azimuth = x < 0 ? -az : az;
+  s.elevation = std::clamp(y, 0.0f, 1.0f) * 60.0f;
+  s.spread = spread;
+  s.lfeSend = lfeSend;
+  return s;
+}
+
+void Ambience::aim(int id, const Source& src) {
+  Place& pl = place_[id];
+  pl.src = src;
+  pl.v.setTarget(layout_, forLayout(src), !pl.on);
+  pl.on = true;
+}
+
+void Ambience::stepPlaces() {
+  const int n = layout_.channels();
+  for (Place& pl : place_)
+    if (pl.on) pl.v.step(n);
+}
+
+float Ambience::weight(int id, int chain) const {
+  const Place& pl = place_[id];
+  if (!pl.on || speakerOf_[chain] < 0) return 0.0f;
+  return pl.v.gain(speakerOf_[chain]) * kStereoRef;
+}
+
+void Ambience::flushRoom(float bus[kMaxChannels], float bassScale) {
+  for (int k = 0; k < chains_; ++k)
+    if (speakerOf_[k] >= 0) bus[k] += room_[speakerOf_[k]];
+  if (layout_.lfeIndex() >= 0) bassExtra_ += room_[layout_.lfeIndex()] * bassScale;
+  std::fill(room_, room_ + layout_.channels(), 0.0f);
+}
+
+void Ambience::aimCity(const AmbientParams& p) {
+  // A place is aimed when its sound is wanted: at the emitter if the world has one (it keeps its last
+  // place while the emitter is gone and the sound dies away), else straight ahead.
+  auto emitter = [&](int id, EmitterKey key, bool wanted, float spread, float lfe) {
+    const Emitter& e = p.emitters[static_cast<int>(key)];
+    if (wanted && (e.level > 0 || !place_[id].on)) aim(id, stageSource(e.x, e.y, spread, lfe));
+  };
+  emitter(kSiren, EmitterKey::Siren, p.siren > 0, 0.0f, 0.0f);
+  emitter(kWail, EmitterKey::Wail, p.wail > 0, 0.0f, 0.0f);
+  emitter(kTrain, EmitterKey::Train, p.train > 0, 0.1f, 0.5f);
+  emitter(kPlane, EmitterKey::Plane, p.plane > 0, 0.3f, 0.0f);
+  emitter(kFire, EmitterKey::Fire, p.fire > 0, 0.2f + 0.5f * p.fire, 0.0f);
+  emitter(kFlames, EmitterKey::Flames, p.flames > 0 && p.menace > 0, 0.4f, 0.0f);
+  emitter(kTitan, EmitterKey::Titan, p.menace > 0, 0.1f, 1.0f);
+  emitter(kWinged, EmitterKey::Winged, p.menace > 0 && p.winged > 0, 0.4f, 0.0f);
 }
 
 void Ambience::event(const SoundEvent& e) {
@@ -573,17 +643,24 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
     v.pan = static_cast<float>(rng_.range(0.1, 0.9));
     v.gain = static_cast<float>(rng_.range(0.5, 1.0));
     nextPass_ = t_ + rng_.range(1.2, 4.5) * (1.0 + 2.0 * night_);
+    Place& pl = place_[kEngine0 + static_cast<int>(&v - passes_)];  // the car is placed where its pan says
+    pl.src = panSource(v.pan);
+    pl.v.setTarget(layout_, pl.src, true);
   }
-  float engine[2] = {0, 0};
-  for (Pass& v : passes_) {
+  // Each engine is one mono sound, low-passed on its own and placed; the stereo pan is the spatializer's.
+  const int nch = layout_.channels();
+  for (int i = 0; i < 4; ++i) {
+    Pass& v = passes_[i];
+    float tone = 0;
     const double tau = t_ - v.start;
-    if (v.gain <= 0 || tau < 0 || tau > v.dur) continue;
-    const double u = tau / v.dur;
-    const double env = std::sin(3.14159265 * u) * std::sin(3.14159265 * u);
-    v.phase += kTwoPi * v.pitch * (1.3 - 0.55 * u) * dt;  // the pitch sinks as it drives away
-    const float tone = static_cast<float>(std::tanh(1.8 * std::sin(v.phase) + 0.8 * std::sin(2 * v.phase + 0.4) + 0.5 * std::sin(3 * v.phase)) * env * v.gain);
-    engine[0] += tone * std::cos(v.pan * 1.5708f);
-    engine[1] += tone * std::sin(v.pan * 1.5708f);
+    if (!(v.gain <= 0 || tau < 0 || tau > v.dur)) {
+      const double u = tau / v.dur;
+      const double env = std::sin(3.14159265 * u) * std::sin(3.14159265 * u);
+      v.phase += kTwoPi * v.pitch * (1.3 - 0.55 * u) * dt;  // the pitch sinks as it drives away
+      tone = static_cast<float>(std::tanh(1.8 * std::sin(v.phase) + 0.8 * std::sin(2 * v.phase + 0.4) + 0.5 * std::sin(3 * v.phase)) * env * v.gain);
+    }
+    engineLow_[i] += (tone - engineLow_[i]) * lowEngine_;
+    if (tone != 0 || std::fabs(engineLow_[i]) > 1e-7f) place_[kEngine0 + i].v.add(engineLow_[i] * 0.16f * day, room_, nch);
   }
   // Horns: now and then one or two honks, rarer at night.
   if (nextHonk_ == 0) nextHonk_ = t_ + rng_.range(2.0, 6.0);
@@ -596,8 +673,10 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
     h.long_ = rng_.chance(0.2) ? 1.0f : 0.0f;
     h.count = (h.long_ > 0 || rng_.chance(0.55)) ? 1 : 2;
     nextHonk_ = t_ + rng_.range(5.0, 16.0) * (1.0 + 2.5 * night_);
+    place_[kHorn].src = panSource(h.pan);  // honks are seconds apart: one place serves them all
+    place_[kHorn].v.setTarget(layout_, place_[kHorn].src, true);
   }
-  float horn[2] = {0, 0};
+  float horn = 0;
   for (Honk& h : honks_) {
     const double tau = t_ - h.start;
     if (h.gain <= 0 || tau < 0 || tau > 1.2) continue;
@@ -609,10 +688,11 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
       h.phaseA += kTwoPi * 420.0 * h.pitch * dt;
       h.phaseB += kTwoPi * 530.0 * h.pitch * dt;  // two notes a third apart, like a car horn
       const float s = static_cast<float>((std::tanh(3.0 * std::sin(h.phaseA)) + std::tanh(3.0 * std::sin(h.phaseB))) * 0.5 * env * h.gain);
-      horn[0] += s * std::cos(h.pan * 1.5708f);
-      horn[1] += s * std::sin(h.pan * 1.5708f);
+      horn += s;
     }
   }
+  hornLow_ += (horn - hornLow_) * lowHorn_;
+  if (horn != 0 || std::fabs(hornLow_) > 1e-7f) place_[kHorn].v.add(hornLow_ * 0.045f, room_, nch);
   // The siren of an ambulance or a fire engine: two notes, the pitch gliding between them.
   const float sirenTarget = std::fmod(t_, 1.0) < 0.5 ? 960.0f : 770.0f;
   sirenFreq_ += (sirenTarget - sirenFreq_) * 0.0025f * 48000.0f / static_cast<float>(rate_);
@@ -659,53 +739,69 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
   // A fire: a low roar and crackling.
   const bool crackle = rng_.uniform() < std::min(1.0, 90.0 * fireNear_ * dt * 4.0);
   const float spark = crackle ? static_cast<float>(rng_.range(0.4, 1.0)) * (rng_.chance(0.5) ? 1.0f : -1.0f) : 0.0f;
+  fireCrack_ += (spark - fireCrack_) * 0.35f;
 
-  // Traffic, the train's rumble, the fire's roar and the jet are the bed, one chain per speaker;
-  // engines, horns, sirens, the wheels' clatter and the crackling are voices, which only the stereo
-  // pair carries until they are placed.
+  // The sources the world has a place for sound from where they are: the sirens, the train's knocks and
+  // horn and the fire's sparks are mono sounds, placed at their emitters (a place that is off is silent).
+  // (Switched off once the sound has died away and is not wanted any more; a wanted one that is still
+  // swelling in stays on, so that it is placed from its first moment.)
+  if (sirenNear_ < 1e-3f && !(p.siren > 0)) place_[kSiren].on = false;
+  if (wailNear_ < 1e-3f && !(p.wail > 0)) place_[kWail].on = false;
+  if (trainNear_ < 1e-3f && !(p.train > 0)) place_[kTrain].on = false;
+  if (planeNear_ < 1e-3f && !(p.plane > 0)) place_[kPlane].on = false;
+  if (fireNear_ < 1e-3f && !(p.fire > 0)) place_[kFire].on = false;
+  if (place_[kSiren].on) place_[kSiren].v.add(siren * 0.15f * kStereoRef, room_, nch);
+  if (place_[kWail].on) place_[kWail].v.add(wail * 0.13f * kStereoRef, room_, nch);
+  if (place_[kTrain].on) place_[kTrain].v.add((thunk * 0.12f * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ + squeal * 0.08f) * kStereoRef, room_, nch);
+  if (place_[kFire].on) place_[kFire].v.add(fireCrack_ * 0.3f * fireNear_ * kStereoRef, room_, nch);
+
+  // Traffic is the bed, one chain per speaker. The train's rumble and clatter, the fire's roar and the
+  // jet are noise too, but they come from somewhere: each chain plays its own noise (so they stay wide
+  // and unlike one another) weighted by how near the speaker is to the source. The first two chains
+  // always run, so that the draws of the shared generator do not depend on where anything is.
   for (int ch = 0; ch < chains_; ++ch) {
-    if (!live(AmbientKind::City, ch)) continue;
+    const bool bed = live(AmbientKind::City, ch);
+    const float wTrain = weight(kTrain, ch), wFire = weight(kFire, ch), wPlane = weight(kPlane, ch);
+    const bool train = ch < 2 || wTrain >= 1e-3f, fire = ch < 2 || wFire >= 1e-3f, plane = ch < 2 || wPlane >= 1e-3f;
+    if (!bed && !train && !fire && !plane) continue;
     Rng& r = chainRng(ch);
-    const float n = noise(r) * noiseScale_;
-    carLow_[ch][0] += (n - carLow_[ch][0]) * lowCar_;
-    carLow_[ch][1] += (carLow_[ch][0] - carLow_[ch][1]) * lowCar_;
-    const float n2 = noise(r) * noiseScale_;
-    carMid_[ch][0] += (n2 - carMid_[ch][0]) * lowCarMid_;
-    carMid_[ch][1] += (n2 - carMid_[ch][1]) * lowCarTop_;
-    if (ch < 2) engineLow_[ch] += (engine[ch] - engineLow_[ch]) * lowEngine_;
-    const float n3 = noise(r) * noiseScale_;
-    trainLow_[ch][0] += (n3 - trainLow_[ch][0]) * lowTrain_;
-    trainLow_[ch][1] += (trainLow_[ch][0] - trainLow_[ch][1]) * lowTrain_;
-    float airHiss = 0;  // the air let out at the stop, heard by the two ears
-    if (ch < 2) {
+    if (bed) {
+      const float n = noise(r) * noiseScale_;
+      carLow_[ch][0] += (n - carLow_[ch][0]) * lowCar_;
+      carLow_[ch][1] += (carLow_[ch][0] - carLow_[ch][1]) * lowCar_;
+      const float n2 = noise(r) * noiseScale_;
+      carMid_[ch][0] += (n2 - carMid_[ch][0]) * lowCarMid_;
+      carMid_[ch][1] += (n2 - carMid_[ch][1]) * lowCarTop_;
+      out[ch] = carLow_[ch][1] * 9.0f * 0.075f * day + (carMid_[ch][0] - carMid_[ch][1]) * 0.45f * 0.04f * day;
+    }
+    float placed = 0;
+    if (train) {
+      const float n3 = noise(r) * noiseScale_;
+      trainLow_[ch][0] += (n3 - trainLow_[ch][0]) * lowTrain_;
+      trainLow_[ch][1] += (trainLow_[ch][0] - trainLow_[ch][1]) * lowTrain_;
       const float n4 = noise(r) * noiseScale_;
       trainBand_[ch][0] += (n4 - trainBand_[ch][0]) * lowTrainBand_;
       trainBand_[ch][1] += (n4 - trainBand_[ch][1]) * lowKlack_;
       trainHissLow_[ch] += (n4 - trainHissLow_[ch]) * 0.25f;  // what the low-pass leaves of the noise is the hiss
-      airHiss = (n4 - trainHissLow_[ch]) * trainHiss_ * trainNear_;
+      placed += wTrain * ((trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ +
+                           (trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack * trainNear_) * trainMove_ +
+                          (n4 - trainHissLow_[ch]) * 0.9f * trainHiss_ * trainNear_);
     }
-    const float n5 = noise(r) * noiseScale_;
-    fireLow_[ch][0] += (n5 - fireLow_[ch][0]) * lowFire_;
-    fireLow_[ch][1] += (fireLow_[ch][0] - fireLow_[ch][1]) * lowFire_;
-    if (ch < 2) fireCrack_[ch] += (spark * (ch ? -1.0f : 1.0f) - fireCrack_[ch]) * 0.35f;
-    const float n6 = noise(r) * noiseScale_;
-    planeLow_[ch][0] += (n6 - planeLow_[ch][0]) * lowJet_;
-    planeLow_[ch][1] += (planeLow_[ch][0] - planeLow_[ch][1]) * lowJet_;
-    const float traffic = carLow_[ch][1] * 9.0f * 0.075f * day + (carMid_[ch][0] - carMid_[ch][1]) * 0.45f * 0.04f * day;
-    if (ch < 2) {
-      hornLow_[ch] += ((ch ? horn[1] : horn[0]) - hornLow_[ch]) * lowHorn_;
-      const float hornOut = hornLow_[ch];
-      out[ch] = traffic + engineLow_[ch] * 0.16f * day + hornOut * 0.045f + siren * 0.15f + wail * 0.13f +
-                trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
-                ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ +
-                squeal * 0.08f + airHiss * 0.9f +
-                fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + fireCrack_[ch] * 0.3f * fireNear_ +
-                planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
-    } else {
-      out[ch] = traffic + trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
-                fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+    if (fire) {
+      const float n5 = noise(r) * noiseScale_;
+      fireLow_[ch][0] += (n5 - fireLow_[ch][0]) * lowFire_;
+      fireLow_[ch][1] += (fireLow_[ch][0] - fireLow_[ch][1]) * lowFire_;
+      placed += wFire * fireLow_[ch][1] * 9.0f * 0.11f * fireNear_;
     }
+    if (plane) {
+      const float n6 = noise(r) * noiseScale_;
+      planeLow_[ch][0] += (n6 - planeLow_[ch][0]) * lowJet_;
+      planeLow_[ch][1] += (planeLow_[ch][0] - planeLow_[ch][1]) * lowJet_;
+      placed += wPlane * planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+    }
+    voiceOut_[ch] += placed;
   }
+  flushRoom(voiceOut_, mix_[static_cast<int>(AmbientKind::City)]);
 }
 
 void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -810,7 +906,13 @@ float Ambience::coeff(float seconds) const {
 
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
-  if (menace_ < 1e-3f) return;
+  if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = false;
+    return;
+  }
+  if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
+  if (wingedNear_ < 1e-3f && !(p.winged > 0)) place_[kWinged].on = false;
+  const int nch = layout_.channels();
   const double dt = 1.0 / rate_;
   const float level = menace_;
   // The rush, the hiss and the rotor's chop are noise, one chain per speaker; the whine, the
@@ -860,8 +962,11 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     // swelling and with a few faint crackles. Nothing in it beats in time.
     flameWander_ += (noise(rng_) - flameWander_) * static_cast<float>(1.0 - std::exp(-kTwoPi * 2.0 * dt));
     const float swell = 0.88f + 0.12f * std::clamp(flameWander_ * 45.0f, -1.0f, 1.0f);
+    // The streams are placed at the monsters' fight: every chain plays its own noise, weighted by how
+    // near its speaker is to the streams (the first two always run, to keep the generator's draws).
     for (int ch = 0; ch < chains_; ++ch) {
-      if (!live(p.kind, ch)) continue;
+      const float w = weight(kFlames, ch);
+      if (ch >= 2 && w < 1e-3f) continue;
       Rng& r = chainRng(ch);
       const float n = noise(r) * noiseScale_;
       flameHi_[ch] += (n - flameHi_[ch]) * lowFlameTop_;
@@ -870,7 +975,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
       const float body = flameLo_[ch];                 // the deep roar under it
       float crackle = 0;
       if (r.uniform() < 14.0 * dt) crackle = noise(r) * 0.18f;
-      out[ch] += (band * 3.2f + body * 1.8f + crackle) * swell * 0.7f * flames_;
+      menaceBus_[ch] += w * (band * 3.2f + body * 1.8f + crackle) * swell * 0.7f * flames_;
     }
   }
   if (p.kind != AmbientKind::Mountains && p.kind != AmbientKind::City) return;
@@ -879,8 +984,19 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   const double period = big ? 0.95 : 0.55;
   const double ph = std::fmod(t_, period);
   const float thump = static_cast<float>(std::exp(-ph / (big ? 0.2 : 0.11)) * std::sin(kTwoPi * (big ? 44.0 : 62.0) * ph));
-  out[0] += thump * (big ? 0.36f : 0.38f) * level + menaceLow_[0][1] * (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
-  out[1] += thump * (big ? 0.36f : 0.38f) * level + menaceLow_[1][1] * (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
+  const float stampRumble = (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
+  if (big) {
+    // The stamps are placed at the lizard: the thump is one mono sound with a full bass send, the
+    // rumble under it noise per chain, weighted by how near each speaker is.
+    if (place_[kTitan].on) place_[kTitan].v.add(thump * 0.36f * level * kStereoRef, room_, nch);
+    for (int ch = 0; ch < chains_; ++ch) {
+      const float w = weight(kTitan, ch);
+      if (w >= 1e-3f && live(p.kind, ch)) menaceBus_[ch] += w * menaceLow_[ch][1] * stampRumble;
+    }
+  } else {
+    out[0] += thump * 0.38f * level + menaceLow_[0][1] * stampRumble;
+    out[1] += thump * 0.38f * level + menaceLow_[1][1] * stampRumble;
+  }
   if (nextMenaceRoar_ == 0) nextMenaceRoar_ = t_ + rng_.range(0.5, 1.5);
   if (t_ >= nextMenaceRoar_) {
     menaceRoarStart_ = t_;
@@ -897,8 +1013,13 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     menacePhase_[0] += kTwoPi * hz * dt;
     const double tone = std::tanh(2.2 * std::sin(menacePhase_[0]) + 1.1 * std::sin(2 * menacePhase_[0] + 0.5) + 0.5 * std::sin(3 * menacePhase_[0] + 1.0));
     const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f * wingedNear_ : 0.14f);
-    out[0] += roar;
-    out[1] += roar;
+    if (big) {  // the lizard bellows from where it stands, the winged monster screeches from where it flies
+      const int id = menaceRoarVoice_ == 1 ? kWinged : kTitan;
+      if (place_[id].on) place_[id].v.add(roar * kStereoRef, room_, nch);
+    } else {
+      out[0] += roar;
+      out[1] += roar;
+    }
   }
 }
 
@@ -918,6 +1039,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   const float lowWander = coeff(1.0f / 0.45f / 6.28f);
   const float wanderScale = 1.0f / (0.577f * std::sqrt(lowWander / 2.0f));  // back to unit spread
 
+  if (p.kind == AmbientKind::City) aimCity(p);  // the placed sounds follow their emitters, once per block
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
@@ -1078,8 +1200,13 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       seenShots_ = p.shots;
     }
     if ((driftTick_++ & 31u) == 0) updateDrift();
+    std::fill(voiceOut_, voiceOut_ + chains_, 0.0f);
+    std::fill(menaceBus_, menaceBus_ + chains_, 0.0f);
+    bassExtra_ = 0;
+    stepPlaces();
     float menaceOut[kMaxChannels];
     menaceSample(p, menaceOut);
+    flushRoom(menaceBus_, 1.0f);
     for (const Shot& s : shotVoices_) {  // a sharp crack that dies away at once, over a short thump
       const double tau = t_ - s.start;
       if (tau < 0 || tau > 0.4) continue;
@@ -1143,20 +1270,22 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
 
       // Every scene's level in this chain: its presence times the chain's own level (1 for the stereo pair).
-      const float sample = menaceOut[ch] * trim_[kind][ch] +
+      const float sample = menaceOut[ch] * trim_[kind][ch] + menaceBus_[ch] +
                            forest * (mix_[static_cast<int>(AmbientKind::Forest)] * bedGain_[static_cast<int>(AmbientKind::Forest)][ch]) +
                            aq[ch] * (mix_[static_cast<int>(AmbientKind::Aquarium)] * bedGain_[static_cast<int>(AmbientKind::Aquarium)][ch]) +
                            desert[ch] * (mix_[static_cast<int>(AmbientKind::Desert)] * bedGain_[static_cast<int>(AmbientKind::Desert)][ch]) +
                            moon[ch] * (mix_[static_cast<int>(AmbientKind::Moon)] * bedGain_[static_cast<int>(AmbientKind::Moon)][ch]) +
                            mountains[ch] * (mix_[static_cast<int>(AmbientKind::Mountains)] * bedGain_[static_cast<int>(AmbientKind::Mountains)][ch]) +
-                           city[ch] * (mix_[static_cast<int>(AmbientKind::City)] * bedGain_[static_cast<int>(AmbientKind::City)][ch]);
+                           city[ch] * (mix_[static_cast<int>(AmbientKind::City)] * bedGain_[static_cast<int>(AmbientKind::City)][ch]) +
+                           voiceOut_[ch] * mix_[static_cast<int>(AmbientKind::City)];
       chain[ch] = softClip(sample) * volume_ * 0.8f;
       bassIn += chain[ch];
     }
     // The bass channel plays what is low in all the chains together: their sum, scaled to the level
     // of one chain (they are independent), through two low-pass stages.
     if (layout_.lfeIndex() >= 0) {
-      bassLow_[0] += (bassIn * bassNorm - bassLow_[0]) * bassK_;
+      bassIn = bassIn * bassNorm + bassExtra_;  // plus the bass sends of the placed sounds
+      bassLow_[0] += (bassIn - bassLow_[0]) * bassK_;
       bassLow_[1] += (bassLow_[0] - bassLow_[1]) * bassK_;
     }
     float* frame = out + static_cast<size_t>(i) * channels;

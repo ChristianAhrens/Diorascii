@@ -6,6 +6,7 @@
 
 #include "core/layout.h"
 #include "core/rng.h"
+#include "core/spatializer.h"
 #include "core/soundstage.h"
 
 namespace dio {
@@ -156,6 +157,45 @@ class Ambience {
   void route();
   /// Recomputes the slowly drifting level of every bed chain of every scene (called every few samples).
   void updateDrift();
+  /// Where the placed sounds are (see Place): the ids of the sources of the city.
+  enum PlaceId : int {
+    kEngine0 = 0,                 ///< the four passing cars (kEngine0 + slot)
+    kHorn = 4,                    ///< a car horn
+    kSiren, kWail, kTrain,        ///< the ambulance, the fire engine, the train
+    kPlane, kFire, kFlames,       ///< the jet, the burning building, the streams of fire
+    kTitan, kWinged,              ///< the monsters' bodies and the winged one's screech
+    kPlaceCount
+  };
+  /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
+  /// gains towards every speaker, and whether it is sounding.
+  struct Place {
+    SpatialVoice v;      ///< the gains and the bass send
+    Source src;          ///< where it should be
+    bool on = false;     ///< sounding: the gains are stepped every sample and the sound is added
+  };
+  /// Points a place at a direction and marks it as sounding (a place that was silent starts in
+  /// position instead of gliding in).
+  void aim(int id, const Source& src);
+  /// `src` as it is used in the current layout: a layout without a bass channel gets no bass send, because
+  /// the full-range speakers already play the whole sound (the spatializer's fold-in would double its bass).
+  Source forLayout(Source src) const {
+    if (layout_.lfeIndex() < 0) src.lfeSend = 0;
+    return src;
+  }
+  /// Steps the gains of every sounding place by one sample.
+  void stepPlaces();
+  /// The weight of place `id` in bed chain `chain`: its gain towards the chain's speaker, scaled so
+  /// that a source straight ahead in stereo is 1, the level the synth has always had for mono sounds
+  /// (the sum of the squares of the weights over all chains is 2 in any layout). 0 if it is off.
+  float weight(int id, int chain) const;
+  /// Adds the sounds placed into `room_` to the chain bus `bus` and their bass send, times `bassScale`, to
+  /// `bassExtra_`; then clears the room.
+  void flushRoom(float bus[kMaxChannels], float bassScale);
+  /// The direction of a stage position: the screen edges are +-45 degrees, +-1.5 is 110 degrees, 0 to 1 high is 0 to 60 degrees up.
+  static Source stageSource(float x, float y, float spread, float lfeSend);
+  /// Aims the city's places at the emitters of `p` (called once per render block).
+  void aimCity(const AmbientParams& p);
+
   /// The random generator of bed chain `chain`: chains 0 and 1 (the stereo pair) draw from the shared
   /// generator, as the synth always has; the others have their own, so that the stereo sound and
   /// the timing of events are untouched by the layout.
@@ -172,6 +212,12 @@ class Ambience {
 
   Layout layout_;                               ///< the speakers to render for
   int8_t feed_[kMaxChannels];                   ///< what each output channel plays (a Feed or a chain index)
+  int speakerOf_[kMaxChannels];                 ///< the output channel that each bed chain plays on (-1 if none)
+  Place place_[kPlaceCount];                    ///< the placed sources
+  float room_[kMaxChannels] = {};               ///< what the placed sounds add in this sample, by output channel
+  float voiceOut_[kMaxChannels] = {};           ///< the placed sounds of the scenes in this sample, by chain (scaled by the scene's presence)
+  float menaceBus_[kMaxChannels] = {};          ///< the placed sounds of the second catastrophe in this sample, by chain
+  float bassExtra_ = 0;                         ///< the bass sends of the placed sounds in this sample
   SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
   int pendingCount_ = 0;                        ///< how many of them
   int chains_ = 2;                              ///< how many bed chains run: one per directional speaker, at least two
@@ -316,7 +362,7 @@ class Ambience {
   double nextPass_ = 0;             ///< when the next car passes (0 = not planned)
   float carLow_[kMaxChannels][2] = {};         ///< traffic rumble, two low-pass stages per ear
   float carMid_[kMaxChannels][2] = {};         ///< the hiss of tyres: band limits per ear
-  float engineLow_[2] = {};         ///< low-pass over the passing engines, per ear
+  float engineLow_[4] = {};         ///< low-pass over each passing engine
   float lowCar_, lowCarMid_, lowCarTop_, lowEngine_;  ///< city filter coefficients
   /// A car horn: one or two honks.
   struct Honk {
@@ -326,7 +372,7 @@ class Ambience {
   };
   Honk honks_[3];
   double nextHonk_ = 0;             ///< when the next horn sounds (0 = not planned)
-  float hornLow_[2] = {};           ///< takes the edge off the horns, per ear
+  float hornLow_ = 0;              ///< takes the edge off the horns
   float lowHorn_;                   ///< filter coefficient of the horns
   float sirenNear_ = 0, sirenFreq_ = 700;  ///< smoothed siren proximity, and the pitch it glides to
   double sirenPhase_ = 0;
@@ -336,12 +382,12 @@ class Ambience {
   double trainClock_ = 0;           ///< seconds into the current "klack-klack" of the wheels
   float trainMove_ = 1, trainBrake_ = 0, trainHiss_ = 0;  ///< smoothed motion, braking and air hiss of the train
   double trainSquealPhase_ = 0;     ///< phase of the brakes' squeal
-  float trainHissLow_[2] = {};      ///< low-pass state that is taken off the noise to leave the hiss, per ear
+  float trainHissLow_[kMaxChannels] = {};  ///< low-pass state that is taken off the noise to leave the hiss, per chain
   static constexpr double kKlackPeriod = 0.64;  ///< seconds from one "klack-klack" to the next
   double trainHornStart_ = -10, trainHornPhase_ = 0;  ///< the train's horn
   bool trainHorned_ = false;        ///< this train has sounded its horn already
-  float trainLow_[kMaxChannels][2] = {}, trainBand_[2][2] = {};  ///< rumble and clatter filters, per ear
-  float fireLow_[kMaxChannels][2] = {}, fireCrack_[2] = {}, planeLow_[kMaxChannels][2] = {};  ///< fire and jet filters
+  float trainLow_[kMaxChannels][2] = {}, trainBand_[kMaxChannels][2] = {};  ///< rumble and clatter filters, per chain
+  float fireLow_[kMaxChannels][2] = {}, fireCrack_ = 0, planeLow_[kMaxChannels][2] = {};  ///< fire and jet filters
   float lowTrain_, lowTrainBand_, lowKlack_, lowFire_, lowJet_;  ///< their coefficients
   float menace_ = 0;                ///< smoothed strength of the second catastrophe
   float flames_ = 0, wingedNear_ = 0;  ///< smoothed strength of the fire streams, and proximity of the winged monster

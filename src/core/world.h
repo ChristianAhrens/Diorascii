@@ -498,7 +498,7 @@ class World {
   /// position is zero if there is no such creature. Does not change the world.
   Emitter emitter(const std::string& key) const;
   /// emitter() for one of the known sound sources.
-  Emitter emitter(EmitterKey key) const { return emitter(emitterTag(key)); }
+  Emitter emitter(EmitterKey key) const;
   /// Where a point of the world is on the stage: `cx` and `cy` in cells, `z` the layer.
   /// @param[out] x, y, depth the stage position (see Emitter)
   void stagePoint(double cx, double cy, int z, float& x, float& y, float& depth) const;
@@ -707,6 +707,8 @@ class World {
   void raiseBarriers();
   void liftBarriers();
   double fireLevel_ = 0;
+  double fireX_ = 0, fireY_ = 0;  ///< centre of the building whose fire is strongest, in cells (for the sound)
+  int fireZ_ = 0;                  ///< its layer
   double smokePuffs_ = 0;
   /// Fading trace of the avalanche over every cell, row by row.
   std::vector<float> scar_;

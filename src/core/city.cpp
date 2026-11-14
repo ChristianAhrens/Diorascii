@@ -164,6 +164,7 @@ void World::blazeStep(Entity& e, double dt) {
 bool World::stepBuildings(double dt) {
   double level = 0;
   bool allDone = true;
+  fireX_ = fireY_ = 0;
   for (int idx : blazeBuildings_) {
     Building& b = city_[static_cast<size_t>(idx)];
     if (b.state == Building::State::Normal) continue;
@@ -172,6 +173,11 @@ bool World::stepBuildings(double dt) {
     if (b.state == Building::State::Burning) {
       if (!blazeFails_ && sprayTime_ > 0) b.timer += 0.7 * dt;  // the water puts a fire it can beat out sooner
       const double now = fireAt(b.timer);
+      if (now > level) {  // the sound comes from the building that burns hardest
+        fireX_ = b.x + b.w / 2.0;
+        fireY_ = seabedY_ - b.h / 2.0;
+        fireZ_ = 24 - 8 * b.layer;  // far buildings are further away
+      }
       level = std::max(level, now);
       smokePuffs_ += 6.0 * now * dt;  // smoke billows up from the roof
       for (; smokePuffs_ >= 1; smokePuffs_ -= 1) {

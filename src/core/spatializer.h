@@ -52,7 +52,7 @@ class Spatializer {
 class SpatialVoice {
  public:
   /// @param sampleRate output rate in Hz
-  explicit SpatialVoice(int sampleRate);
+  explicit SpatialVoice(int sampleRate = 48000);
 
   /// Sets where the sound should be. Normally called once per block. With `snap` the current gains
   /// jump to the target (a new voice starts at its place instead of gliding in from silence).
@@ -62,6 +62,12 @@ class SpatialVoice {
   /// current gain of channel c, plus the low-passed sample times the bass share. Moves the gains one
   /// step towards their targets.
   void process(float x, float* frame, int channels);
+
+  /// Moves the gains one step towards their targets without playing anything (for a placement whose
+  /// gains are used by several sounds in the same sample: step once, then add() each).
+  void step(int channels);
+  /// Adds one mono sample like process(), but with the gains as they are (no step).
+  void add(float x, float* frame, int channels);
 
   /// The current (smoothed) gain of channel `c`, for tests.
   float gain(int c) const { return gain_[c]; }

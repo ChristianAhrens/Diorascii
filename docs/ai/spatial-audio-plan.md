@@ -602,6 +602,21 @@ Original plan text:
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
 
+**City: done 2026-11-14** (first of six; details in `architecture.md`, "Placed sounds"). Result against section 4.6:
+
+- Done: the sirens, the train (rumble and clatter as placed noise, knocks and horn as placed voices), the plane (overhead through its height), the fire (at the building that burns hardest, spread by its level, crackle as placed sparks), the streams of fire (at the fight),
+  the lizard's stamps (full bass send) and bellow, the winged one's screech (still silent once it is destroyed), the cars and horns (placed at the old random pan), the city bed without overhead share. Two new emitter keys, `Fire` and `Flames`.
+- **Not done**: Doppler pitch, distance darkening, "emitter per real vehicle" (the cars are the synth's own random passes, only placed), separate emitters for the blue and violet streams (one emitter at their middle), roar spread beyond 0.1.
+- **Stereo is kept**: with every emitter at the centre the golden values hold (the mono sounds are scaled by sqrt(2); the old random pans are reproduced exactly by the stereo law). The two city golden cases were **re-baselined** because the fire's crackle
+  is now one mono sound (its polarity was inverted in the right ear), which moves windowed RMS by up to about 0.3 %; everything else is unchanged to rounding. In real play the stereo image changes deliberately: sirens, trains, planes, fire and monsters now sit where their sprites are.
+- **A catch worth keeping**: the spatializer's bass fold-in for layouts without an LFE channel doubled the bass of a full-range voice (the stamps were 48 % louder in stereo); the synth now sends bass only in layouts that have an LFE.
+- **Tests** (4 new, 4 adjusted): each source is louder on the side it stands, from the side when off-screen (+-1.5), on the height speakers when high, the bass channel follows the stamps and the train; a siren sweeping across the stage crosses from the left speakers to the right with no sample jump;
+  the fire emitter stands at the burning building and the flame emitter follows the monsters. Mutations of the stereo reference, the azimuth, the elevation, the bass fold, the titan's bass send, the noise weighting, the pan and the off-screen mapping each fail a test.
+  The adjusted ones: the city's heights are no longer part of the bed, and its cars and horns correlate between speakers by design.
+- **CPU** (release, 2013 i3, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6, calm city): 8.0 / 10.0 / 13.3 / 15.8 (before: 8.5 / 9.8 / 12.4 / 13.9). The benchmark does not switch the placed sources on, so their cost is not measured.
+- **Found on the way**: the concurrent event-ring test failed on a loaded machine because it required the reader to see more than 1000 events; the ring's own guarantees (no torn event, the newest arrives, nothing lost unaccounted) held every time. The check was a scheduler assumption and is now `> 0`.
+- Unverified: how any of it sounds, in stereo or in a room; the sirens' and the train's levels in surround; Apple silicon.
+
 Order: city (most sources, tests the model), mountains, desert, aquarium, forest, moon. Each commit
 converts the scene's sounds per section 4, re-baselines that scene's golden hash, and adds tests:
 

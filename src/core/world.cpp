@@ -1377,6 +1377,30 @@ void World::stagePoint(double cx, double cy, int z, float& x, float& y, float& d
   depth = static_cast<float>(std::clamp(static_cast<double>(z) / kStageDepthLayers, 0.0, 1.0));
 }
 
+Emitter World::emitter(EmitterKey key) const {
+  if (key == EmitterKey::Fire) {  // the building that burns hardest
+    Emitter out;
+    out.level = static_cast<float>(fireLevel_);
+    if (fireLevel_ > 0) stagePoint(fireX_, fireY_, fireZ_, out.x, out.y, out.depth);
+    return out;
+  }
+  if (key == EmitterKey::Flames) {  // the middle of the streams of fire, held by the monsters
+    Emitter out;
+    out.level = static_cast<float>(flameLevel());
+    double sx = 0, sy = 0;
+    int n = 0;
+    for (const Tongue& t : tongues_) {
+      if (!t.fire) continue;
+      sx += (t.x0 + t.x1) / 2.0;
+      sy += (t.y0 + t.y1) / 2.0;
+      ++n;
+    }
+    if (n > 0) stagePoint(sx / n, sy / n, 8, out.x, out.y, out.depth);  // the monsters fight in the middle layers
+    return out;
+  }
+  return emitter(std::string(emitterTag(key)));
+}
+
 Emitter World::emitter(const std::string& key) const {
   Emitter out;
   const Entity* best = nullptr;

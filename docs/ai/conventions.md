@@ -73,9 +73,11 @@ levels were only measured. Accumulated preferences from the forest iterations:
   (sounded like a cellphone); an eagle cry every 15-35 s and a woodpecker every 15-35 s, by day,
   silenced in a snowstorm; avalanche = roar plus crackle at the break and thumps/clicks while it
   rolls; a stream must not sound like "brushing" (low-passed, rippled).
-- Multichannel (2026-11-13, not yet applied to any sound): positions are azimuth in degrees (+ to the right) and elevation; a sound that
+- Multichannel (2026-11-13): positions are azimuth in degrees (+ to the right) and elevation; a sound that
   has a place goes through `Spatializer`/`SpatialVoice`, never through a hand-written pan. Gains are constant power; test levels and directions
-  (which speakers get the energy), not timbre. Bed sounds get one independent noise chain per full-range speaker (see the plan, section 3.6).
+  (which speakers get the energy), not timbre. Bed sounds get one independent noise chain per full-range speaker (see the plan, section 3.6; applied since
+  2026-11-14, see `architecture.md`): a new continuous sound runs `for ch < chains_` with `chainRng(ch)`, skips chains that are not `live`, and is classed as bed; a discrete event or tone
+  is a voice and plays on chains 0 and 1 until it is placed. Never draw a chain-0/1 noise from anywhere but `rng_`, and never from `rng_` for chain 2 and up.
 - Noise level is sample-rate independent (`noiseScale_`); quote levels at 48 kHz.
 - Thunder/flash counters must not trigger on world rebuild or when sound is switched on mid-storm
   (the first counter value is the baseline).

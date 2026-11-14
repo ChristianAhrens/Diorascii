@@ -104,9 +104,25 @@ AmbientParams ambientFor(const World& world) {
 
 Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
     : layout_(layout), rate_(sampleRate), noiseScale_(std::sqrt(static_cast<float>(sampleRate) / 48000.0f)), rng_(seed) {
-  std::fill(feed_, feed_ + kMaxChannels, kSilent);
+  for (int c = 0; c < kMaxChannels; ++c) {
+    bedRng_[c] = Rng(seed ^ (0xD1B54A32D192ED03ull * static_cast<uint64_t>(c + 1)));
+    // The moon pad's phase offset of chain c: 0 and 0.9 for the stereo pair, as it has always been, and
+    // then steps of the golden angle, which keep any two chains as far apart in phase as 16 can be.
+    const double offset = c < 2 ? 0.9 * c : std::fmod(0.9 + 2.399963229728653 * (c - 1), kTwoPi);
+    padCos_[c] = std::cos(offset);
+    padSin_[c] = std::sin(offset);
+  }
+  std::fill(feed_, feed_ + kMaxChannels, static_cast<int8_t>(kSilent));
+  // How far the chains of each scene wander in level, slowly, so that wind and storms drift around the room.
+  driftDepth_[static_cast<int>(AmbientKind::Forest)] = 0.3f;
+  driftDepth_[static_cast<int>(AmbientKind::Aquarium)] = 0.15f;
+  driftDepth_[static_cast<int>(AmbientKind::Desert)] = 0.3f;
+  driftDepth_[static_cast<int>(AmbientKind::Moon)] = 0.1f;
+  driftDepth_[static_cast<int>(AmbientKind::Mountains)] = 0.3f;
+  driftDepth_[static_cast<int>(AmbientKind::City)] = 0.1f;
   route();
   std::copy(routeTarget_, routeTarget_ + kMaxChannels, routeGain_);  // the first layout needs no fade-in
+  bassK_ = coeff(1.0f / spatial::kLfeCutoffHz / 6.28f);
   lowHum_ = coeff(1.0f / 110.0f / 6.28f);
   lowMuffle_ = coeff(1.0f / 650.0f / 6.28f);
   lowDeep_ = coeff(1.0f / 55.0f / 6.28f);
@@ -143,22 +159,71 @@ Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
 }
 
 void Ambience::route() {
-  for (int c = 0; c < kMaxChannels; ++c) routeTarget_[c] = 0;
-  Feed next[kMaxChannels];
-  std::fill(next, next + kMaxChannels, kSilent);
-  int left, right;
+  // The directional speaker nearest the left and right of the room play chains 0 and 1, which carry
+  // the voices as well as the bed; every other directional speaker gets a bed chain of its own, in
+  // output order; the LFE channel plays the bass of all of them.
+  int8_t next[kMaxChannels];
+  int speakerOf[kMaxChannels];  // the output channel of each chain
+  std::fill(next, next + kMaxChannels, static_cast<int8_t>(kSilent));
+  std::fill(speakerOf, speakerOf + kMaxChannels, -1);
+  int left, right, used = 2;
   if (layout_.stereoPair(left, right)) {
     if (left == right) {
       next[left] = kBoth;
     } else {
-      next[left] = kLeft;
-      next[right] = kRight;
+      next[left] = 0;
+      next[right] = 1;
+    }
+    speakerOf[0] = left;
+    speakerOf[1] = right;
+  }
+  for (int c = 0; c < layout_.channels(); ++c) {
+    if (next[c] != kSilent) continue;
+    if (c == layout_.lfeIndex()) next[c] = kBass;
+    else if (layout_.speaker(c).isDirectional() && used < kMaxChannels) {
+      speakerOf[used] = c;
+      next[c] = static_cast<int8_t>(used++);
     }
   }
+  chains_ = used;
+
+  // The level of every chain in every scene: the rear a little quieter, the centre not to form a
+  // phantom image, the heights by how much of the scene's bed is overhead (none for the aquarium).
+  static constexpr float kHeightShare[kAmbientKinds] = {0.0f, 0.6f, 0.0f, 0.7f, 0.4f, 0.7f, 0.3f};
+  for (int k = 0; k < kAmbientKinds; ++k) {
+    liveMask_[k] = 0;
+    for (int ch = 0; ch < kMaxChannels; ++ch) {
+      float t = 0;
+      if (ch < 2) {
+        t = 1.0f;  // the stereo pair is the synth as it always was
+      } else if (ch < chains_) {
+        const Speaker& sp = layout_.speaker(speakerOf[ch]);
+        if (sp.elevation > 1.0f) t = kHeightShare[k];
+        else if (std::fabs(sp.azimuth) > 100.0f) t = 0.85f;
+        else if (std::fabs(sp.azimuth) < 5.0f) t = 0.7f;
+        else t = 1.0f;
+      }
+      trim_[k][ch] = t;
+      if (t > 0) liveMask_[k] |= 1u << ch;
+    }
+  }
+  updateDrift();
+
   for (int c = 0; c < kMaxChannels; ++c) {
     routeTarget_[c] = next[c] == kSilent ? 0.0f : 1.0f;
     if (next[c] != feed_[c]) routeGain_[c] = 0;  // a channel with a new role fades in
     feed_[c] = next[c];
+  }
+}
+
+void Ambience::updateDrift() {
+  for (int k = 0; k < kAmbientKinds; ++k) {
+    for (int ch = 0; ch < kMaxChannels; ++ch) {
+      // The stereo pair does not drift. The others swell and ebb at slightly different, very slow
+      // rates and phases, so the wind seems to move round the room.
+      const double wave = ch < 2 ? 0.0 : std::sin(kTwoPi * (0.045 + 0.0137 * ch) * t_ + 1.9 * ch);
+      bedGain_[k][ch] = trim_[k][ch] * (1.0f + driftDepth_[k] * static_cast<float>(wave));
+    }
   }
 }
 
@@ -177,20 +242,37 @@ void Ambience::bubble(double delay, float f0, float dur, float amp) {
   b.pan = static_cast<float>(rng_.range(0.2, 0.8));
 }
 
-void Ambience::moonSample(const AmbientParams& p, float out[2]) {
+void Ambience::moonSample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
   // No air, so nothing to hear but what could be felt through the ground: a faint, deep drone of
   // stacked fifths that drifts slowly, with a hint of shimmer above it.
   const double drift = 0.7 + 0.3 * std::sin(kTwoPi * 0.043 * t_);
   const double shimmer = 0.5 + 0.5 * std::sin(kTwoPi * 0.11 * t_ + 0.8);
-  float pad[2];
+  float pad[kMaxChannels];
   for (int ch = 0; ch < 2; ++ch) {
     const double o = ch ? 0.9 : 0.0;
     pad[ch] = static_cast<float>(
         drift * (0.5 * std::sin(kTwoPi * 55.0 * t_ + o) + 0.35 * std::sin(kTwoPi * 82.5 * t_ + 1.0 + o)) +
         0.18 * std::sin(kTwoPi * 220.0 * t_ + 2.0 + o) * drift +
         0.07 * shimmer * std::sin(kTwoPi * 330.7 * t_ + o) + 0.03 * (1 - shimmer) * std::sin(kTwoPi * 441.0 * t_ + o)) * 0.06f;
+  }
+  if (chains_ > 2) {
+    // The other speakers play the same chord with their own phase offsets. The sine and cosine of
+    // each partial are computed once, and every chain rotates them: sin(a + o) = sin a cos o + cos a sin o.
+    const double arg[5] = {kTwoPi * 55.0 * t_, kTwoPi * 82.5 * t_ + 1.0, kTwoPi * 220.0 * t_ + 2.0, kTwoPi * 330.7 * t_, kTwoPi * 441.0 * t_};
+    double sn[5], cs[5];
+    for (int k = 0; k < 5; ++k) {
+      sn[k] = std::sin(arg[k]);
+      cs[k] = std::cos(arg[k]);
+    }
+    for (int ch = 2; ch < chains_; ++ch) {
+      if (!live(AmbientKind::Moon, ch)) continue;
+      double s[5];
+      for (int k = 0; k < 5; ++k) s[k] = sn[k] * padCos_[ch] + cs[k] * padSin_[ch];
+      pad[ch] = static_cast<float>(drift * (0.5 * s[0] + 0.35 * s[1]) + 0.18 * s[2] * drift + 0.07 * shimmer * s[3] +
+                                   0.03 * (1 - shimmer) * s[4]) * 0.06f;
+    }
   }
 
   // A meteorite strike: a thud that thumps up out of the ground and falls away, a dull rumble,
@@ -220,19 +302,26 @@ void Ambience::moonSample(const AmbientParams& p, float out[2]) {
   }
 
   const float debrisF = 2.0f * std::sin(3.14159265f * std::min(900.0f, static_cast<float>(rate_) / 7.0f) / static_cast<float>(rate_));
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // The drone and the impacts' rumble are the bed, one chain per speaker; the thud, the debris
+  // and the warble are voices, which only the stereo pair carries until they are placed.
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(AmbientKind::Moon, ch)) continue;
+    const float n = noise(chainRng(ch)) * noiseScale_;
     moonLow_[ch][0] += (n - moonLow_[ch][0]) * lowMoon_;
     moonLow_[ch][1] += (moonLow_[ch][0] - moonLow_[ch][1]) * lowMoon_;
-    // Debris: each click rings a short, dull resonance.
-    debrisLow_[ch] += debrisF * debrisBand_[ch];
-    const float high = patter * 6.0f - debrisLow_[ch] - 0.6f * debrisBand_[ch];
-    debrisBand_[ch] += debrisF * high;
-    out[ch] = pad[ch] + thud * 0.55f + moonLow_[ch][1] * 14.0f * rumble * 0.35f + debrisBand_[ch] * 0.3f + zap;
+    if (ch < 2) {
+      // Debris: each click rings a short, dull resonance.
+      debrisLow_[ch] += debrisF * debrisBand_[ch];
+      const float high = patter * 6.0f - debrisLow_[ch] - 0.6f * debrisBand_[ch];
+      debrisBand_[ch] += debrisF * high;
+      out[ch] = pad[ch] + thud * 0.55f + moonLow_[ch][1] * 14.0f * rumble * 0.35f + debrisBand_[ch] * 0.3f + zap;
+    } else {
+      out[ch] = pad[ch] + moonLow_[ch][1] * 14.0f * rumble * 0.35f;
+    }
   }
 }
 
-void Ambience::mountainSample(const AmbientParams& p, float out[2]) {
+void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
   // Thin alpine wind. In a snowstorm it is much stronger and higher, with a whistle that glides
@@ -325,33 +414,44 @@ void Ambience::mountainSample(const AmbientParams& p, float out[2]) {
   squealLow_[0] += (squeal - squealLow_[0]) * lowSqueal_;
   squealLow_[1] += (squealLow_[0] - squealLow_[1]) * lowSqueal_;
 
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // Wind, ice, stream and the avalanche's rumble and roar are the bed, one chain per speaker; the
+  // whistle, the cries, the knocks, the clicks, the thump and the squeals are voices, which only
+  // the stereo pair carries until they are placed.
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(AmbientKind::Mountains, ch)) continue;
+    Rng& r = chainRng(ch);
+    const float n = noise(r) * noiseScale_;
     mountLow_[ch][0] += (n - mountLow_[ch][0]) * lowWind;
     mountLow_[ch][1] += (mountLow_[ch][0] - mountLow_[ch][1]) * lowWind;
-    const float n2 = noise(rng_) * noiseScale_;
+    const float n2 = noise(r) * noiseScale_;
     iceLow_[ch] += (n2 - iceLow_[ch]) * lowIce_;
-    const float n3 = noise(rng_) * noiseScale_;
+    const float n3 = noise(r) * noiseScale_;
     streamLow_[ch][0] += (n3 - streamLow_[ch][0]) * lowStreamTop_;
     streamLow_[ch][1] += (n3 - streamLow_[ch][1]) * lowStreamBottom_;
-    const float n4 = noise(rng_) * noiseScale_;
+    const float n4 = noise(r) * noiseScale_;
     slideLow_[ch][0] += (n4 - slideLow_[ch][0]) * lowSlide_;
     slideLow_[ch][1] += (slideLow_[ch][0] - slideLow_[ch][1]) * lowSlide_;
-    const float n5 = noise(rng_) * noiseScale_;
+    const float n5 = noise(r) * noiseScale_;
     slideMid_[ch] += (n5 - slideMid_[ch]) * lowSlideMid_;
-    crackLowAv_[ch] += crackF * crackBandAv_[ch];
-    const float highClick = click * 8.0f - crackLowAv_[ch] - 0.5f * crackBandAv_[ch];
-    crackBandAv_[ch] += crackF * highClick;
-    const float panCry = ch ? std::sin(cryPan_ * 1.5708f) : std::cos(cryPan_ * 1.5708f);
-    out[ch] = mountLow_[ch][1] * 9.0f * windGain + whistle * (ch ? 0.9f : 1.0f) + (n2 - iceLow_[ch]) * 0.6f * hiss +
-              (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
-              cry * panCry * 1.4f +
-              peck * (ch ? std::sin(peckPan_ * 1.5708f) : std::cos(peckPan_ * 1.5708f)) * 1.4f + crackBandAv_[ch] * 0.35f + thump + slideLow_[ch][1] * 14.0f * slide * slide * roll +
-              slideMid_[ch] * 0.7f * slide * slide * slide * roll + squealLow_[1] * 0.6f;
+    if (ch < 2) {
+      crackLowAv_[ch] += crackF * crackBandAv_[ch];
+      const float highClick = click * 8.0f - crackLowAv_[ch] - 0.5f * crackBandAv_[ch];
+      crackBandAv_[ch] += crackF * highClick;
+      const float panCry = ch ? std::sin(cryPan_ * 1.5708f) : std::cos(cryPan_ * 1.5708f);
+      out[ch] = mountLow_[ch][1] * 9.0f * windGain + whistle * (ch ? 0.9f : 1.0f) + (n2 - iceLow_[ch]) * 0.6f * hiss +
+                (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
+                cry * panCry * 1.4f +
+                peck * (ch ? std::sin(peckPan_ * 1.5708f) : std::cos(peckPan_ * 1.5708f)) * 1.4f + crackBandAv_[ch] * 0.35f + thump + slideLow_[ch][1] * 14.0f * slide * slide * roll +
+                slideMid_[ch] * 0.7f * slide * slide * slide * roll + squealLow_[1] * 0.6f;
+    } else {
+      out[ch] = mountLow_[ch][1] * 9.0f * windGain + (n2 - iceLow_[ch]) * 0.6f * hiss +
+                (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
+                slideLow_[ch][1] * 14.0f * slide * slide * roll + slideMid_[ch] * 0.7f * slide * slide * slide * roll;
+    }
   }
 }
 
-void Ambience::desertSample(const AmbientParams& p, float out[2]) {
+void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
   // Dry wind: low-passed noise like the forest's, but steadier and a little higher. In a sandstorm
@@ -413,31 +513,44 @@ void Ambience::desertSample(const AmbientParams& p, float out[2]) {
     grumble += static_cast<float>(c.gain * std::sin(kTwoPi * 62.0 * tau) * std::min(1.0, tau / 0.12) * std::exp(-tau / 0.7));
   }
 
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // Wind, sand, the tornado's roar and the growl are the bed, one chain per speaker; the crickets,
+  // the bellow, the grumble and the chewing are voices, which only the stereo pair carries until
+  // they are placed.
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(AmbientKind::Desert, ch)) continue;
+    Rng& r = chainRng(ch);
+    const float n = noise(r) * noiseScale_;
     desertLow_[ch][0] += (n - desertLow_[ch][0]) * lowWind;
     desertLow_[ch][1] += (desertLow_[ch][0] - desertLow_[ch][1]) * lowWind;
-    const float n2 = noise(rng_) * noiseScale_;
+    const float n2 = noise(r) * noiseScale_;
     sandLow_[ch][0] += (n2 - sandLow_[ch][0]) * lowSandCut_;
     sandLow_[ch][1] += (n2 - sandLow_[ch][1]) * lowSandTop_;
-    const float n3 = noise(rng_) * noiseScale_;
+    const float n3 = noise(r) * noiseScale_;
     tornadoLow_[ch][0] += (n3 - tornadoLow_[ch][0]) * lowTornado_;
     tornadoLow_[ch][1] += (tornadoLow_[ch][0] - tornadoLow_[ch][1]) * lowTornado_;
-    const float nc = noise(rng_) * noiseScale_;
-    crunchLow_[ch][0] += (nc - crunchLow_[ch][0]) * lowCrunch_;
-    crunchLow_[ch][1] += (crunchLow_[ch][0] - crunchLow_[ch][1]) * lowCrunch_;
-    // the grinding is the noise below ~500 Hz, with a little more of the bite's grit above it
-    const float crunchOut = (crunchLow_[ch][1] * 7.0f + (nc - crunchLow_[ch][0]) * 0.25f) * crunchEnv;
-    const float n4 = noise(rng_) * noiseScale_;
+    float crunchOut = 0;
+    if (ch < 2) {
+      const float nc = noise(r) * noiseScale_;
+      crunchLow_[ch][0] += (nc - crunchLow_[ch][0]) * lowCrunch_;
+      crunchLow_[ch][1] += (crunchLow_[ch][0] - crunchLow_[ch][1]) * lowCrunch_;
+      // the grinding is the noise below ~500 Hz, with a little more of the bite's grit above it
+      crunchOut = (crunchLow_[ch][1] * 7.0f + (nc - crunchLow_[ch][0]) * 0.25f) * crunchEnv;
+    }
+    const float n4 = noise(r) * noiseScale_;
     deepLow_[ch][0] += (n4 - deepLow_[ch][0]) * lowDeep_;
     deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
-    out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
-              tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl +
-              chirps * (ch ? 0.9f : 1.0f) + roarOut + grumble * 0.03f + crunchOut;
+    if (ch < 2) {
+      out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
+                tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl +
+                chirps * (ch ? 0.9f : 1.0f) + roarOut + grumble * 0.03f + crunchOut;
+    } else {
+      out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
+                tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl;
+    }
   }
 }
 
-void Ambience::citySample(const AmbientParams& p, float out[2]) {
+void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
   const float day = 1.0f - 0.55f * night_;
@@ -538,42 +651,55 @@ void Ambience::citySample(const AmbientParams& p, float out[2]) {
   const bool crackle = rng_.uniform() < std::min(1.0, 90.0 * fireNear_ * dt * 4.0);
   const float spark = crackle ? static_cast<float>(rng_.range(0.4, 1.0)) * (rng_.chance(0.5) ? 1.0f : -1.0f) : 0.0f;
 
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // Traffic, the train's rumble, the fire's roar and the jet are the bed, one chain per speaker;
+  // engines, horns, sirens, the wheels' clatter and the crackling are voices, which only the stereo
+  // pair carries until they are placed.
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(AmbientKind::City, ch)) continue;
+    Rng& r = chainRng(ch);
+    const float n = noise(r) * noiseScale_;
     carLow_[ch][0] += (n - carLow_[ch][0]) * lowCar_;
     carLow_[ch][1] += (carLow_[ch][0] - carLow_[ch][1]) * lowCar_;
-    const float n2 = noise(rng_) * noiseScale_;
+    const float n2 = noise(r) * noiseScale_;
     carMid_[ch][0] += (n2 - carMid_[ch][0]) * lowCarMid_;
     carMid_[ch][1] += (n2 - carMid_[ch][1]) * lowCarTop_;
-    engineLow_[ch] += (engine[ch] - engineLow_[ch]) * lowEngine_;
-    const float n3 = noise(rng_) * noiseScale_;
+    if (ch < 2) engineLow_[ch] += (engine[ch] - engineLow_[ch]) * lowEngine_;
+    const float n3 = noise(r) * noiseScale_;
     trainLow_[ch][0] += (n3 - trainLow_[ch][0]) * lowTrain_;
     trainLow_[ch][1] += (trainLow_[ch][0] - trainLow_[ch][1]) * lowTrain_;
-    const float n4 = noise(rng_) * noiseScale_;
-    trainBand_[ch][0] += (n4 - trainBand_[ch][0]) * lowTrainBand_;
-    trainBand_[ch][1] += (n4 - trainBand_[ch][1]) * lowKlack_;
-    trainHissLow_[ch] += (n4 - trainHissLow_[ch]) * 0.25f;  // what the low-pass leaves of the noise is the hiss
-    const float airHiss = (n4 - trainHissLow_[ch]) * trainHiss_ * trainNear_;
-    const float n5 = noise(rng_) * noiseScale_;
+    float airHiss = 0;  // the air let out at the stop, heard by the two ears
+    if (ch < 2) {
+      const float n4 = noise(r) * noiseScale_;
+      trainBand_[ch][0] += (n4 - trainBand_[ch][0]) * lowTrainBand_;
+      trainBand_[ch][1] += (n4 - trainBand_[ch][1]) * lowKlack_;
+      trainHissLow_[ch] += (n4 - trainHissLow_[ch]) * 0.25f;  // what the low-pass leaves of the noise is the hiss
+      airHiss = (n4 - trainHissLow_[ch]) * trainHiss_ * trainNear_;
+    }
+    const float n5 = noise(r) * noiseScale_;
     fireLow_[ch][0] += (n5 - fireLow_[ch][0]) * lowFire_;
     fireLow_[ch][1] += (fireLow_[ch][0] - fireLow_[ch][1]) * lowFire_;
-    fireCrack_[ch] += (spark * (ch ? -1.0f : 1.0f) - fireCrack_[ch]) * 0.35f;
-    const float n6 = noise(rng_) * noiseScale_;
+    if (ch < 2) fireCrack_[ch] += (spark * (ch ? -1.0f : 1.0f) - fireCrack_[ch]) * 0.35f;
+    const float n6 = noise(r) * noiseScale_;
     planeLow_[ch][0] += (n6 - planeLow_[ch][0]) * lowJet_;
     planeLow_[ch][1] += (planeLow_[ch][0] - planeLow_[ch][1]) * lowJet_;
-    hornLow_[ch] += ((ch ? horn[1] : horn[0]) - hornLow_[ch]) * lowHorn_;
-    const float hornOut = hornLow_[ch];
     const float traffic = carLow_[ch][1] * 9.0f * 0.075f * day + (carMid_[ch][0] - carMid_[ch][1]) * 0.45f * 0.04f * day;
-    out[ch] = traffic + engineLow_[ch] * 0.16f * day + hornOut * 0.045f + siren * 0.15f + wail * 0.13f +
-              trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
-              ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ +
-              squeal * 0.08f + airHiss * 0.9f +
-              fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + fireCrack_[ch] * 0.3f * fireNear_ +
-              planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+    if (ch < 2) {
+      hornLow_[ch] += ((ch ? horn[1] : horn[0]) - hornLow_[ch]) * lowHorn_;
+      const float hornOut = hornLow_[ch];
+      out[ch] = traffic + engineLow_[ch] * 0.16f * day + hornOut * 0.045f + siren * 0.15f + wail * 0.13f +
+                trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
+                ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ +
+                squeal * 0.08f + airHiss * 0.9f +
+                fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + fireCrack_[ch] * 0.3f * fireNear_ +
+                planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+    } else {
+      out[ch] = traffic + trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
+                fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
+    }
   }
 }
 
-void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
+void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
   // Slow swells of the water, from the same irregular gusts that move the wind; night is a bit calmer.
@@ -646,18 +772,26 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[2]) {
   gulpLow_[0] += (gulp - gulpLow_[0]) * lowGulp_;
   gulpLow_[1] += (gulpLow_[0] - gulpLow_[1]) * lowGulp_;
 
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // Hum, flow and growl are the bed, one chain per speaker; bubbles, song and gulps are voices,
+  // which only the stereo pair carries until they are placed.
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(AmbientKind::Aquarium, ch)) continue;
+    Rng& r = chainRng(ch);
+    const float n = noise(r) * noiseScale_;
     waterLow_[ch][0] += (n - waterLow_[ch][0]) * lowHum_;
     waterLow_[ch][1] += (waterLow_[ch][0] - waterLow_[ch][1]) * lowHum_;
-    const float n2 = noise(rng_) * noiseScale_;
+    const float n2 = noise(r) * noiseScale_;
     muffleLow_[ch] += (n2 - muffleLow_[ch]) * lowMuffle_;
-    const float n3 = noise(rng_) * noiseScale_;
+    const float n3 = noise(r) * noiseScale_;
     deepLow_[ch][0] += (n3 - deepLow_[ch][0]) * lowDeep_;
     deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
-    const float panSong = ch ? std::sin(song_.pan * 1.5708f) : std::cos(song_.pan * 1.5708f);
-    out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell +
-              deepLow_[ch][1] * 20.0f * growl + bub[ch] + song * panSong * 1.4f + gulpLow_[1] * 0.45f;
+    if (ch < 2) {
+      const float panSong = ch ? std::sin(song_.pan * 1.5708f) : std::cos(song_.pan * 1.5708f);
+      out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell +
+                deepLow_[ch][1] * 20.0f * growl + bub[ch] + song * panSong * 1.4f + gulpLow_[1] * 0.45f;
+    } else {
+      out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell + deepLow_[ch][1] * 20.0f * growl;
+    }
   }
 }
 
@@ -665,13 +799,17 @@ float Ambience::coeff(float seconds) const {
   return 1.0f - std::exp(-1.0f / (static_cast<float>(rate_) * seconds));
 }
 
-void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
-  out[0] = out[1] = 0;
+void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
+  std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) return;
   const double dt = 1.0 / rate_;
   const float level = menace_;
-  for (int ch = 0; ch < 2; ++ch) {
-    const float n = noise(rng_) * noiseScale_;
+  // The rush, the hiss and the rotor's chop are noise, one chain per speaker; the whine, the
+  // thumps, the roars and the bubbles are voices of the stereo pair.
+  const double chop = p.kind == AmbientKind::Desert ? std::pow(0.5 + 0.5 * std::sin(kTwoPi * 11.5 * t_), 2.2) : 0.0;
+  for (int ch = 0; ch < chains_; ++ch) {
+    if (!live(p.kind, ch)) continue;
+    const float n = noise(chainRng(ch)) * noiseScale_;
     menaceLow_[ch][0] += (n - menaceLow_[ch][0]) * lowThump_;
     menaceLow_[ch][1] += (menaceLow_[ch][0] - menaceLow_[ch][1]) * lowThump_;
     out[ch] = 0;
@@ -688,11 +826,14 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
         break;
       }
       case AmbientKind::Desert: {  // a helicopter: the chop of the rotor, over a whine
-        const double chop = std::pow(0.5 + 0.5 * std::sin(kTwoPi * 11.5 * t_), 2.2);
         menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowChop_;
-        menacePhase_[1] += kTwoPi * 390.0 * dt * 0.5;
+        float whine = 0;
+        if (ch < 2) {  // (advanced once per stereo channel, as it always was)
+          menacePhase_[1] += kTwoPi * 390.0 * dt * 0.5;
+          whine = 0.012f * static_cast<float>(std::sin(menacePhase_[1]));
+        }
         out[ch] = (menaceHigh_[ch] * static_cast<float>(chop) * 1.9f + menaceLow_[ch][1] * 1.5f * static_cast<float>(chop) +
-                   0.012f * static_cast<float>(std::sin(menacePhase_[1]))) * 0.7f * level;
+                   whine) * 0.7f * level;
         break;
       }
       case AmbientKind::Moon: {  // the big meteor: a rumble in the ground that swells as it nears
@@ -710,14 +851,16 @@ void Ambience::menaceSample(const AmbientParams& p, float out[2]) {
     // swelling and with a few faint crackles. Nothing in it beats in time.
     flameWander_ += (noise(rng_) - flameWander_) * static_cast<float>(1.0 - std::exp(-kTwoPi * 2.0 * dt));
     const float swell = 0.88f + 0.12f * std::clamp(flameWander_ * 45.0f, -1.0f, 1.0f);
-    for (int ch = 0; ch < 2; ++ch) {
-      const float n = noise(rng_) * noiseScale_;
+    for (int ch = 0; ch < chains_; ++ch) {
+      if (!live(p.kind, ch)) continue;
+      Rng& r = chainRng(ch);
+      const float n = noise(r) * noiseScale_;
       flameHi_[ch] += (n - flameHi_[ch]) * lowFlameTop_;
       flameLo_[ch] += (n - flameLo_[ch]) * lowFlameBottom_;
       const float band = flameHi_[ch] - flameLo_[ch];  // the rush
       const float body = flameLo_[ch];                 // the deep roar under it
       float crackle = 0;
-      if (rng_.uniform() < 14.0 * dt) crackle = noise(rng_) * 0.18f;
+      if (r.uniform() < 14.0 * dt) crackle = noise(r) * 0.18f;
       out[ch] += (band * 3.2f + body * 1.8f + crackle) * swell * 0.7f * flames_;
     }
   }
@@ -757,6 +900,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   const float lowRain = coeff(1.0f / 2500.0f / 6.28f);
   const float lowCrack = coeff(1.0f / 1800.0f / 6.28f), lowRumble = coeff(1.0f / 140.0f / 6.28f);
   const int channels = layout_.channels();
+  const float bassNorm = 1.0f / std::sqrt(static_cast<float>(chains_));
   const float kRoute = coeff(spatial::kSmoothingSeconds);
   const double dt = 1.0 / rate_;
   const float snapHz = std::min(2400.0f, static_cast<float>(rate_) / 7.0f);  // keeps the filter stable
@@ -924,7 +1068,8 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       }
       seenShots_ = p.shots;
     }
-    float menaceOut[2];
+    if ((driftTick_++ & 31u) == 0) updateDrift();
+    float menaceOut[kMaxChannels];
     menaceSample(p, menaceOut);
     for (const Shot& s : shotVoices_) {  // a sharp crack that dies away at once, over a short thump
       const double tau = t_ - s.start;
@@ -934,45 +1079,53 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       menaceOut[0] += (crack + thump) * (1.2f - s.pan);
       menaceOut[1] += (crack + thump) * (0.2f + s.pan);
     }
-    float aq[2] = {0, 0}, desert[2] = {0, 0}, moon[2] = {0, 0}, mountains[2] = {0, 0}, city[2] = {0, 0};
+    float aq[kMaxChannels], desert[kMaxChannels], moon[kMaxChannels], mountains[kMaxChannels], city[kMaxChannels];
+    std::fill(aq, aq + chains_, 0.0f);
+    std::fill(desert, desert + chains_, 0.0f);
+    std::fill(moon, moon + chains_, 0.0f);
+    std::fill(mountains, mountains + chains_, 0.0f);
+    std::fill(city, city + chains_, 0.0f);
     if (mix_[static_cast<int>(AmbientKind::Aquarium)] > 1e-3f) aquariumSample(p, aq);
     if (mix_[static_cast<int>(AmbientKind::Desert)] > 1e-3f) desertSample(p, desert);
     if (mix_[static_cast<int>(AmbientKind::Moon)] > 1e-3f) moonSample(p, moon);
     if (mix_[static_cast<int>(AmbientKind::Mountains)] > 1e-3f) mountainSample(p, mountains);
     if (mix_[static_cast<int>(AmbientKind::City)] > 1e-3f) citySample(p, city);
 
-    float stereo[2];
-    for (int ch = 0; ch < 2; ++ch) {
+    const int kind = static_cast<int>(p.kind);
+    float chain[kMaxChannels];  // what each bed chain plays; chains 0 and 1 are the stereo pair
+    float bassIn = 0;
+    for (int ch = 0; ch < chains_; ++ch) {
       float forest = 0;
-      if (forestOn) {
+      Rng& r = chainRng(ch);
+      if (forestOn && live(AmbientKind::Forest, ch)) {
         // Wind: noise through two low-pass stages (no hiss, no crackle).
-        const float wn = noise(rng_) * noiseScale_;
+        const float wn = noise(r) * noiseScale_;
         windLow_[ch][0] += (wn - windLow_[ch][0]) * lowWind;
         windLow_[ch][1] += (windLow_[ch][0] - windLow_[ch][1]) * lowWind;
         const float wind = windLow_[ch][1] * 9.0f * windGain;
 
         // Rain: the hiss is noise with its low end removed, plus a quiet rumble beneath it.
-        const float n = noise(rng_) * noiseScale_;
+        const float n = noise(r) * noiseScale_;
         rainLow_[ch] += (n - rainLow_[ch]) * lowRain;
         const float rain = ((n - rainLow_[ch]) * 0.30f + rainLow_[ch] * 0.9f) * rain_;
 
         // Thunder: a brief crack of mid-high noise, then deep rumbling noise.
         float thunder = 0;
-        if (snapEnv > 1e-3f) {
+        if (snapEnv > 1e-3f && ch < 2) {  // the lightning's snap is a voice of the stereo pair
           snapLow_[ch] += snapF * snapBand_[ch];
           const float high = click * 9.0f - snapLow_[ch] - kSnapDamp * snapBand_[ch];
           snapBand_[ch] += snapF * high;
           thunder += snapBand_[ch] * snapEnv;
         }
         if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) {
-          const float tn = noise(rng_) * noiseScale_;
+          const float tn = noise(r) * noiseScale_;
           crackLow_[ch] += (tn - crackLow_[ch]) * lowCrack;
           rumbleLow_[ch][0] += (tn - rumbleLow_[ch][0]) * lowRumble;
           rumbleLow_[ch][1] += (rumbleLow_[ch][0] - rumbleLow_[ch][1]) * lowRumble;
           thunder += crackLow_[ch] * crackEnv * 0.85f + rumbleLow_[ch][1] * rumbleEnv * 17.0f;
         }
-        forest = wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f);
-      } else {
+        forest = wind + rain + thunder + (ch < 2 ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);  // crickets are voices too
+      } else if (ch < 2) {
         // Silent, but the generator advances as if the chain had run: one draw each for the wind
         // and the rain, and one for the thunder's noise while a clap is still ringing.
         noise(rng_);
@@ -980,18 +1133,28 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
         if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) noise(rng_);
       }
 
-      const float sample = menaceOut[ch] + forest * mix_[static_cast<int>(AmbientKind::Forest)] +
-                           aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
-                           desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
-                           moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +
-                           mountains[ch] * mix_[static_cast<int>(AmbientKind::Mountains)] +
-                           city[ch] * mix_[static_cast<int>(AmbientKind::City)];
-      stereo[ch] = softClip(sample) * volume_ * 0.8f;
+      // Every scene's level in this chain: its presence times the chain's own level (1 for the stereo pair).
+      const float sample = menaceOut[ch] * trim_[kind][ch] +
+                           forest * (mix_[static_cast<int>(AmbientKind::Forest)] * bedGain_[static_cast<int>(AmbientKind::Forest)][ch]) +
+                           aq[ch] * (mix_[static_cast<int>(AmbientKind::Aquarium)] * bedGain_[static_cast<int>(AmbientKind::Aquarium)][ch]) +
+                           desert[ch] * (mix_[static_cast<int>(AmbientKind::Desert)] * bedGain_[static_cast<int>(AmbientKind::Desert)][ch]) +
+                           moon[ch] * (mix_[static_cast<int>(AmbientKind::Moon)] * bedGain_[static_cast<int>(AmbientKind::Moon)][ch]) +
+                           mountains[ch] * (mix_[static_cast<int>(AmbientKind::Mountains)] * bedGain_[static_cast<int>(AmbientKind::Mountains)][ch]) +
+                           city[ch] * (mix_[static_cast<int>(AmbientKind::City)] * bedGain_[static_cast<int>(AmbientKind::City)][ch]);
+      chain[ch] = softClip(sample) * volume_ * 0.8f;
+      bassIn += chain[ch];
+    }
+    // The bass channel plays what is low in all the chains together: their sum, scaled to the level
+    // of one chain (they are independent), through two low-pass stages.
+    if (layout_.lfeIndex() >= 0) {
+      bassLow_[0] += (bassIn * bassNorm - bassLow_[0]) * bassK_;
+      bassLow_[1] += (bassLow_[0] - bassLow_[1]) * bassK_;
     }
     float* frame = out + static_cast<size_t>(i) * channels;
     for (int c = 0; c < channels; ++c) {
       routeGain_[c] += (routeTarget_[c] - routeGain_[c]) * kRoute;
-      const float x = feed_[c] == kSilent ? 0.0f : feed_[c] == kBoth ? 0.5f * (stereo[0] + stereo[1]) : stereo[feed_[c]];
+      const int f = feed_[c];
+      const float x = f == kSilent ? 0.0f : f == kBoth ? 0.5f * (chain[0] + chain[1]) : f == kBass ? std::clamp(bassLow_[1], -1.0f, 1.0f) : chain[f];
       frame[c] = x * routeGain_[c];
     }
   }

@@ -533,7 +533,27 @@ wrong frame stride) each fail a test. Differences from the text below:
   per scene and layout.
 - Docs: `architecture.md`, `README.md` (once the CLI option exists, phase 5).
 
-### Phase 3 – Core: per-speaker beds (M) (rev. 2026-11-13)
+### Phase 3 – Core: per-speaker beds (M) (rev. 2026-11-13) — **done 2026-11-14 (bed only; voices are phases 5 and 6)**
+
+Done as planned, with these differences and results:
+
+- **The bed/voice split** is by kind of sound, listed in `architecture.md`: noise through filters is bed (every chain); events and tones are voices (chains 0 and 1 until placed). Voices therefore are still front-only in every layout.
+- **Stereo and the front pair are bit-identical** to before (`--dump-golden` and `cmp`, 12 cases; and L/R in every layout equal the stereo render): chains 0 and 1 keep `rng_`; chains 2 and up use `bedRng_[c]` seeded from the seed and the chain.
+  A speaker's bed does not depend on the layout's size (tested: the centre of 5.1 and 7.1.4 is the same samples).
+- **Bed profile**: trim by position (rear 0.85, centre 0.7), height share per scene (forest 0.6, aquarium 0, desert 0.7, moon 0.4, mountains 0.7, city 0.3) and a slow per-chain drift (depth 0.1 to 0.3). **The tone tilt is not done**
+  (it would cost an extra filter per chain); the rear is only quieter, not darker.
+- **Moon**: the drone is tonal, so per-speaker independence is impossible; chains differ in phase (golden-angle offsets, one sine and cosine per partial, rotated per chain). Their correlation stays high by nature.
+- **LFE**: the low-passed (120 Hz, two stages) sum of all chains, scaled by 1/sqrt(chains). Object sends come with phase 6.
+- **Not done**: no loudness compensation for the number of speakers (each speaker is as loud as a stereo channel).
+- **CPU** (release preset, 2013 i3-4010U, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6): forest 2.9 / 4.3 / 6.9 / 8.7, aquarium 2.7 / 3.8 / 4.7 / 5.4, desert 4.2 / 5.4 / 7.6 / 8.9, moon 3.5 / 5.4 / 7.2 / 8.3,
+  mountains 6.0 / 7.2 / 9.6 / 11.2, city 8.5 / 9.8 / 12.4 / 13.9. The worst case, the city at 9.1.6, is 14 % of one core, well under the 36 % projected in section 2.4, because chains skip the voices and
+  dead chains (heights in the aquarium) are not computed. (The 2.0 column of this run reads about 0.5 points above the earlier gated numbers; the machine's load varies between runs.) The fallback tiers of the gate below are not needed.
+- **Tests** (14): front pair exact in every layout, energy on every full-range speaker (and exact 0 overhead in the aquarium) in every layout and scene, small cross-correlation between speakers (noise scenes), moon speakers differ,
+  LFE low-passed only, layout-size independence, sample-rate invariance, the trims by position and scene, the catastrophes reach every speaker, a layout switch and a scene switch do not jump. Mutations (city height share to 1, aquarium heights
+  on, one shared generator, unfiltered bass, equal moon phases, no rear trim) each fail at least one test; the rear trim survived until its own test was added.
+- **Unverified**: how any of it sounds (the trims, the drift, the bass level and the loudness of a big room are measured constants only); Apple silicon; anything but Linux/GCC.
+
+Original plan text:
 
 - Beds run one independent chain per full-range speaker (section 3.6) with a bed profile per scene.
   Stereo output stays identical (channels 0 and 1 are today's two chains on today's `rng_`).

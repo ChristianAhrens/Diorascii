@@ -4893,8 +4893,9 @@ TEST(ambience_in_every_layout_is_finite_bounded_deterministic_and_stays_in_its_b
   }
 }
 
-TEST(ambience_in_a_layout_plays_the_stereo_pair_on_the_front_speakers_and_is_silent_elsewhere) {
-  // The contract of phase 2 (replaced step by step in phases 3 to 6): the same stereo sound, placed.
+TEST(ambience_in_a_layout_plays_the_stereo_pair_on_the_front_speakers_exactly_as_in_stereo) {
+  // However many speakers there are, the front left and right play the stereo synth bit for bit
+  // (they carry the voices, and their bed draws from the same generator as ever).
   std::vector<float> stereo = goldenRender(0);  // the forest, everything active
   for (int i = 0; i < kLayoutCount; ++i) {
     const Layout layout = Layout::named(static_cast<LayoutId>(i));
@@ -4904,10 +4905,7 @@ TEST(ambience_in_a_layout_plays_the_stereo_pair_on_the_front_speakers_and_is_sil
     std::vector<float> out;
     goldenAppend(a, p, ch, 0, 2 * 48000 / kGoldenBlock, out);
     for (size_t f = 0; f < stereo.size() / 2; ++f)
-      for (int c = 0; c < ch; ++c) {
-        if (c < 2) CHECK(out[f * ch + c] == stereo[f * 2 + c]);  // L and R are bit-identical to stereo
-        else CHECK(out[f * ch + c] == 0.0f);
-      }
+      for (int c = 0; c < 2; ++c) CHECK(out[f * ch + c] == stereo[f * 2 + c]);
   }
 }
 
@@ -4979,6 +4977,214 @@ TEST(changing_the_layout_while_rendering_keeps_the_sound_going_and_does_not_clic
   }
   CHECK(level > 0.15f);  // the sound is loud, so an unfaded swap would have been plainly different
   CHECK(std::fabs(before[2 * (10 * kGoldenBlock - 1)] - reference[2 * (10 * kGoldenBlock - 1)]) == 0.0f);  // same run as the reference
+}
+
+// ------------------------------------------------------- per-speaker bed chains ---
+
+namespace {
+/// Renders `seconds` of the scene `kind` in `layout` with nothing but its calm bed (optionally rain), and
+/// returns the interleaved samples of the last second.
+std::vector<float> bedRender(AmbientKind kind, const Layout& layout, float rain = 0, int seconds = 3, int rate = 48000, uint64_t seed = 5) {
+  Ambience a(rate, seed, layout);
+  AmbientParams p;
+  p.kind = kind;
+  p.rain = rain;
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * rate), last;
+  for (int s = 0; s < seconds; ++s) a.render(p, buf.data(), rate);
+  return buf;
+}
+
+/// RMS of channel `c` of an interleaved render with `ch` channels.
+double channelRms(const std::vector<float>& v, int ch, int c) {
+  double sum = 0;
+  const size_t n = v.size() / static_cast<size_t>(ch);
+  for (size_t i = 0; i < n; ++i) sum += static_cast<double>(v[i * ch + c]) * v[i * ch + c];
+  return std::sqrt(sum / static_cast<double>(n));
+}
+
+/// Correlation coefficient (no mean removal) of two channels of an interleaved render.
+double channelCorrelation(const std::vector<float>& v, int ch, int a, int b) {
+  double sab = 0;
+  const size_t n = v.size() / static_cast<size_t>(ch);
+  for (size_t i = 0; i < n; ++i) sab += static_cast<double>(v[i * ch + a]) * v[i * ch + b];
+  return sab / (static_cast<double>(n) * channelRms(v, ch, a) * channelRms(v, ch, b) + 1e-30);
+}
+}  // namespace
+
+TEST(every_full_range_speaker_carries_the_bed_of_every_scene_except_overhead_in_the_aquarium) {
+  for (int k = 1; k < kAmbientKinds; ++k) {
+    for (int i = 0; i < kLayoutCount; ++i) {
+      const Layout layout = Layout::named(static_cast<LayoutId>(i));
+      const int ch = layout.channels();
+      const std::vector<float> out = bedRender(static_cast<AmbientKind>(k), layout);
+      for (int c = 0; c < ch; ++c) {
+        const double rms = channelRms(out, ch, c);
+        if (layout.speaker(c).isLfe()) CHECK(rms > 1e-3);  // the bass channel has the low end
+        else if (static_cast<AmbientKind>(k) == AmbientKind::Aquarium && layout.speaker(c).elevation > 1.0f) CHECK(rms == 0.0);
+        else CHECK(rms > 2e-3);
+      }
+    }
+  }
+}
+
+TEST(the_beds_of_different_speakers_are_not_correlated) {
+  // Independent noise per speaker: whatever pair of speakers is picked, the correlation is small.
+  // (The moon's drone is a chord, whose speakers can only differ in phase; see the next test. The
+  // city's front pair also carries the passing cars, so only the other speakers are compared there.)
+  const Layout layout = Layout::named(LayoutId::S9_1_6);
+  const int ch = layout.channels();
+  for (AmbientKind kind : {AmbientKind::Forest, AmbientKind::Aquarium, AmbientKind::Desert, AmbientKind::Mountains, AmbientKind::City}) {
+    const std::vector<float> out = bedRender(kind, layout, 0, 4);
+    for (int a = kind == AmbientKind::City ? 2 : 0; a < ch; ++a)
+      for (int b = a + 1; b < ch; ++b) {
+        if (layout.speaker(a).isLfe() || layout.speaker(b).isLfe()) continue;
+        CHECK(std::fabs(channelCorrelation(out, ch, a, b)) < 0.25);
+      }
+  }
+  const std::vector<float> rainy = bedRender(AmbientKind::Forest, layout, 1.0f, 3);  // the rain's hiss as well
+  for (int a = 0; a < ch; ++a)
+    for (int b = a + 1; b < ch; ++b)
+      if (!layout.speaker(a).isLfe() && !layout.speaker(b).isLfe()) CHECK(std::fabs(channelCorrelation(rainy, ch, a, b)) < 0.1);
+}
+
+TEST(the_moon_drone_plays_in_every_speaker_with_its_own_phase) {
+  const Layout layout = Layout::named(LayoutId::S9_1_6);
+  const int ch = layout.channels();
+  const std::vector<float> out = bedRender(AmbientKind::Moon, layout, 0, 3);
+  for (int a = 0; a < ch; ++a)
+    for (int b = a + 1; b < ch; ++b) {
+      if (layout.speaker(a).isLfe() || layout.speaker(b).isLfe()) continue;
+      CHECK(std::fabs(channelCorrelation(out, ch, a, b)) < 0.995);  // no two speakers play the same waveform
+    }
+}
+
+TEST(the_bass_channel_plays_only_low_frequencies) {
+  // The rain's hiss is broadband; the bass channel must not carry any of it. The ratio of the RMS of
+  // the first difference to the RMS of the signal is about 1.4 for white noise and small for a
+  // low-passed one.
+  const Layout layout = Layout::named(LayoutId::S5_1);
+  const int ch = layout.channels();
+  const std::vector<float> out = bedRender(AmbientKind::Forest, layout, 1.0f);
+  const int lfe = layout.lfeIndex();
+  CHECK(lfe == 3);
+  auto roughness = [&](int c) {
+    double d = 0;
+    const size_t n = out.size() / static_cast<size_t>(ch);
+    for (size_t i = 1; i < n; ++i) {
+      const double w = static_cast<double>(out[i * ch + c]) - out[(i - 1) * ch + c];
+      d += w * w;
+    }
+    return std::sqrt(d / static_cast<double>(n)) / channelRms(out, ch, c);
+  };
+  CHECK(channelRms(out, ch, lfe) > 0.01);
+  CHECK(roughness(lfe) < 0.05);
+  CHECK(roughness(0) > 0.3);  // the front speaker has the hiss
+}
+
+TEST(a_speakers_bed_does_not_depend_on_how_many_other_speakers_there_are) {
+  // The centre is the third chain in 5.1 and in 7.1.4 alike, so it plays the same samples.
+  const Layout small = Layout::named(LayoutId::S5_1), large = Layout::named(LayoutId::S7_1_4);
+  const std::vector<float> a = bedRender(AmbientKind::Mountains, small), b = bedRender(AmbientKind::Mountains, large);
+  const size_t n = a.size() / 6;
+  for (size_t i = 0; i < n; ++i) CHECK(a[i * 6 + 2] == b[i * 12 + 2]);
+  CHECK(channelRms(a, 6, 2) > 2e-3);
+}
+
+TEST(the_bed_is_as_loud_at_other_sample_rates) {
+  // The noise density per Hz is kept, so a rear speaker's level agrees within noise at 44.1 and 48 kHz.
+  const Layout layout = Layout::named(LayoutId::S5_1);
+  for (AmbientKind kind : {AmbientKind::Forest, AmbientKind::Desert, AmbientKind::City}) {
+    const double r48 = channelRms(bedRender(kind, layout, 0.5f, 6, 48000), 6, 4);
+    const double r44 = channelRms(bedRender(kind, layout, 0.5f, 6, 44100), 6, 4);
+    CHECK(r44 > 0.7 * r48 && r44 < 1.4 * r48);
+  }
+}
+
+TEST(overhead_speakers_play_less_of_a_scene_with_a_small_height_share_than_ear_level_ones) {
+  const Layout layout = Layout::named(LayoutId::S7_1_4);
+  const int ch = layout.channels();
+  // The city's overhead share (0.3) is the smallest of the scenes that have any.
+  const std::vector<float> out = bedRender(AmbientKind::City, layout, 0, 6);
+  double ground = 0, high = 0;
+  int ng = 0, nh = 0;
+  for (int c = 2; c < ch; ++c) {  // skip the stereo pair, which carries the voices
+    if (layout.speaker(c).isLfe()) continue;
+    if (layout.speaker(c).elevation > 1.0f) { high += channelRms(out, ch, c); ++nh; }
+    else { ground += channelRms(out, ch, c); ++ng; }
+  }
+  CHECK(high / nh < 0.6 * ground / ng);
+}
+
+TEST(the_second_catastrophe_reaches_the_other_speakers_and_the_height_speakers_stay_silent_in_the_aquarium) {
+  const Layout layout = Layout::named(LayoutId::S7_1_4);
+  const int ch = layout.channels();
+  for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Moon}) {
+    Ambience a(48000, 5, layout);
+    AmbientParams p;
+    p.kind = kind;
+    p.menace = 1.0f;
+    std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+    for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
+    for (int c = 0; c < ch; ++c) {
+      if (layout.speaker(c).isLfe()) continue;
+      if (kind == AmbientKind::Aquarium && layout.speaker(c).elevation > 1.0f) CHECK(channelRms(buf, ch, c) == 0.0);
+      else CHECK(channelRms(buf, ch, c) > 1e-3);
+    }
+  }
+  // The city's fire streams and the yeti's menace too (the city's monsters have flames).
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::City;
+  p.menace = 1.0f;
+  p.flames = 1.0f;
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < 3; ++s) a.render(p, buf.data(), 48000);
+  for (int c = 0; c < ch; ++c) CHECK(channelRms(buf, ch, c) > 1e-3);
+}
+
+TEST(speakers_that_join_later_come_in_without_a_jump_and_a_scene_switch_keeps_every_chain_going) {
+  Ambience a(48000, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  p.rain = 1.0f;
+  std::vector<float> buf(2 * 4800), wide(12 * 4800);
+  for (int s = 0; s < 5; ++s) a.render(p, buf.data(), 4800);
+  a.setLayout(Layout::named(LayoutId::S7_1_4));
+  a.render(p, wide.data(), 4800);
+  // The new speakers start from silence and rise along the fade (about 20 ms), no sample jumps.
+  float jump = 0;
+  for (int c = 2; c < 12; ++c) {
+    jump = std::max(jump, std::fabs(wide[c]));  // first frame of a new channel
+    CHECK(std::fabs(wide[c]) < 0.02f);
+  }
+  CHECK(jump < 0.02f);
+  // Switching the scene fades the chains over with the presence, as for the stereo pair: no sample of any speaker jumps.
+  p.kind = AmbientKind::Desert;
+  float prev[12];
+  for (int c = 0; c < 12; ++c) prev[c] = wide[11 * 12 + c];
+  a.render(p, wide.data(), 4800);
+  for (int f = 0; f < 4800; ++f)
+    for (int c = 0; c < 12; ++c) {
+      CHECK(std::fabs(wide[f * 12 + c]) <= 1.0f);
+      CHECK(std::fabs(wide[f * 12 + c] - prev[c]) < 0.35f);
+      prev[c] = wide[f * 12 + c];
+    }
+}
+
+TEST(a_speakers_level_follows_its_position_the_rear_quieter_the_centre_lower_the_heights_by_the_scene) {
+  // Three speakers differing only in where the third stands: it is chain 2 in each, so it plays the
+  // same noise and the same drift, and the RMS ratio is the ratio of the trims (the soft clip is
+  // negligible at these levels).
+  auto third = [](float azimuth, float elevation, AmbientKind kind) {
+    DeviceChannel d[3] = {{-30, 0, false, true}, {30, 0, false, true}, {azimuth, elevation, false, true}};
+    return channelRms(bedRender(kind, Layout::fromDevice(d, 3)), 3, 2);
+  };
+  const double side = third(90, 0, AmbientKind::Forest);
+  CHECK(std::fabs(third(150, 0, AmbientKind::Forest) / side - 0.85) < 0.01);
+  CHECK(std::fabs(third(0, 0, AmbientKind::Forest) / side - 0.7) < 0.01);
+  CHECK(std::fabs(third(90, 45, AmbientKind::Forest) / side - 0.6) < 0.01);
+  CHECK(std::fabs(third(90, 45, AmbientKind::City) / third(90, 0, AmbientKind::City) - 0.3) < 0.01);
 }
 
 int main(int argc, char** argv) {

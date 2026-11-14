@@ -146,6 +146,20 @@ routing gains glide with `spatial::kSmoothingSeconds`, so a channel that keeps i
 draws from `rng_` that it took when it ran (`noise(rng_)` twice per channel and sample, once more while a clap rings): without them every other scene's noise and events would change. A new
 forest-only sound added to the per-channel loop must go inside `if (forestOn)` and keep that draw count in the `else`.
 
+**Per-speaker beds** (2026-11-14, phase 3). `route()` gives every directional speaker of the layout a **bed chain**: chains 0 and 1 are the stereo pair (the front L/R, or the extremes) and
+the rest follow in output order (`chains_` of them, at most `kMaxChannels`); the LFE channel plays `kBass`. The per-ear filter state of every scene is `[kMaxChannels]` and the sample functions run
+`for ch < chains_`, skipping chains that are not `live(kind, ch)`. **Bed** (continuous noise through filters: wind, rain, hum, flow, traffic, roar, rumble, stream, ice, the moon drone) exists in
+every chain; **voices** (discrete events and tones: bubbles, whale song, gulps, cries, knocks, avalanche clicks and thump, squeals, horns, sirens, engines, train clatter and horn, crackling, thunder's snap,
+crickets, chewing, the bellow, the moon's thud, debris and warble, the whine and the roars of the catastrophes) are still computed once and play on chains 0 and 1 only, until phases 5 and 6 place them. A new sound
+must be classed as one or the other and, if it is a bed, keep its noise per chain. Chains 0 and 1 draw noise from the shared `rng_` exactly as the stereo synth always did (so the stereo output, the golden values and the
+event timing are bit-identical, and the front pair is bit-identical in every layout); chains 2 and up each have their own `Rng` (`bedRng_`, seeded from the seed and the chain), so a speaker's bed does not depend on how many
+other speakers there are. The **bed profile** is `trim_[kind][chain]` (chains 2 and up: 0.85 behind 100 degrees, 0.7 at the centre, the scene's height share overhead: forest 0.6, aquarium 0, desert 0.7, moon 0.4,
+mountains 0.7, city 0.3) times a slow **drift** (`updateDrift`, every 32 samples, a different very slow sine per chain and scene, depth 0.1 to 0.3), so that wind and storms wander around the room; the stereo pair has
+neither. The moon's chord has no noise: chain `c` plays it with a phase offset (0, 0.9, then golden-angle steps) derived from one sine and cosine per partial by rotation, which costs a few multiplies per chain; tones can only differ in
+phase between speakers, so the moon's speakers stay correlated (they differ, not decorrelate). The **bass channel** is the sum of all chains (scaled by 1/sqrt(chains), they are independent) through two low-pass
+stages at `spatial::kLfeCutoffHz`, clamped to +-1. All trims, depths, offsets and the bass level are constants chosen by measurement, **not by ear**; no layout has been heard. The levels of a scene are not compensated
+for the number of speakers: every speaker plays as loud as a stereo channel does, so a 9.1.6 room is louder overall than stereo (unverified whether that is wanted).
+
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`
 (`Weighted`, `Common`, `Other`) lets `triggerRare` choose: `x` and the timer are weighted, `X` (`Action::RareOther`), the

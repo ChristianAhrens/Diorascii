@@ -103,6 +103,10 @@ class Session {
   void soundUnavailable(bool announce = true);
   /// What the ambient sound should reflect now (muted while paused).
   AmbientParams ambient() const;
+  /// Moves the one-off sounds (with their places on the stage) that happened since the last call to the
+  /// end of `out`. The frontend calls this every frame, also while muted, and hands them to the
+  /// sound output.
+  void takeSoundEvents(std::vector<SoundEvent>& out);
 
  private:
   /// Builds a fresh world for the current scene, size and carried-over time of day.

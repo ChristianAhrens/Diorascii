@@ -299,6 +299,8 @@ void Session::render(Frame& out) {
   menu_.render(out, style_);
 }
 
+void Session::takeSoundEvents(std::vector<SoundEvent>& out) { world_->takeEvents(out); }
+
 AmbientParams Session::ambient() const {
   AmbientParams p = ambientFor(*world_);
   if (outgoing_) {  // out with the old scene's sound, then in with the new one's

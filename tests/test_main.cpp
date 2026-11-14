@@ -5278,6 +5278,12 @@ TEST(a_seqlock_reader_never_sees_a_torn_value_while_the_writer_keeps_writing) {
   CHECK(reads > 100);
 }
 
+/// Compares two sound events field by field; memcmp would also compare the padding after `kind`, which the
+/// compilers (MSVC) leave undefined in a default-constructed struct.
+static bool sameEvent(const SoundEvent& a, const SoundEvent& b) {
+  return a.kind == b.kind && a.x == b.x && a.y == b.y && a.depth == b.depth && a.strength == b.strength;
+}
+
 TEST(an_event_ring_hands_events_over_in_order_and_an_empty_ring_gives_nothing) {
   EventRing<int, 8> ring;
   int v = -1;
@@ -5339,6 +5345,258 @@ TEST(an_event_ring_under_concurrent_use_loses_only_old_events_and_never_tears_on
   CHECK(last == static_cast<int64_t>(kEvents) - 1);  // the newest event always arrives
   CHECK(received + ring.dropped() == kEvents);       // every event was either read or counted as lost
   CHECK(received > 1000);
+}
+
+// ------------------------------------------------------- emitters and sound events ---
+
+namespace {
+/// A world with one creature called "whale" (4 x 2 cells, layer 16) that the test can move around.
+struct WhaleWorld {
+  AssetPack pack = miniPack("medium: yes\n--- population\nwhale count 1\n",
+                            {"name: whale\nhabitat: medium\nspeed: 0..0\ndepth: 16\n--- art\nWWWW\nWWWW\n"});
+  World world{pack, pack.scene("t"), 100, 30, 5};
+  /// The whale (the first one found).
+  Entity& whale() {
+    for (auto& e : world.entities()) if (e->sprite->name() == "whale") return *e;
+    return *world.entities().front();
+  }
+  /// Puts the centre of the whale at column `cx`, row `cy`.
+  void place(double cx, double cy, int z = 16) {
+    Entity& w = whale();
+    w.x = cx - w.width() / 2.0;
+    w.y = cy - w.height() / 2.0;
+    w.z = z;
+  }
+};
+}  // namespace
+
+TEST(an_emitter_stands_where_its_creature_is_on_the_stage_and_goes_off_screen_with_it) {
+  WhaleWorld t;
+  Emitter e = t.world.emitter("whale");
+  CHECK(t.world.entities().size() >= 1 && t.whale().sprite->name() == "whale");
+  t.place(50, 14);  // the middle of a 100-column scene
+  e = t.world.emitter("whale");
+  CHECK(e.level > 0.99f && std::fabs(e.x) < 0.01f);
+  CHECK(e.depth == 0.5f);  // layer 16 of 32
+  t.place(0, 14);          // the left edge
+  e = t.world.emitter(EmitterKey::Whale);
+  CHECK(std::fabs(e.x + 1.0f) < 0.01f && e.level > 0.2f && e.level < 0.5f);
+  t.place(100, 14);        // the right edge
+  CHECK(std::fabs(t.world.emitter("whale").x - 1.0f) < 0.01f);
+  t.place(-20, 14);        // off-screen to the left, still heard (it starts before it is in view)
+  e = t.world.emitter("whale");
+  CHECK(e.x < -1.3f && e.x >= -kStageReach && e.level > 0.0f);
+  t.place(-26, 14);        // as far as it is still heard: the position stops at the limit
+  e = t.world.emitter("whale");
+  CHECK(e.level > 0.0f && e.x == -kStageReach);
+  t.place(-60, 14);        // far away: not heard, no position
+  e = t.world.emitter("whale");
+  CHECK(e.level == 0.0f && e.x == 0.0f && e.y == 0.0f);
+  // Height: the ground is 0, the top of the screen 1.
+  t.place(50, t.world.seabedY());
+  const float ground = t.world.emitter("whale").y;
+  t.place(50, 3);
+  const float high = t.world.emitter("whale").y;
+  CHECK(ground < 0.02f && high > 0.85f && high <= 1.0f);
+  t.place(50, 14, 4);
+  CHECK(t.world.emitter("whale").depth < 0.15f);  // a near layer
+}
+
+TEST(the_nearest_creature_gives_the_emitter_its_position_and_its_level_is_nearness) {
+  AssetPack pack = miniPack("medium: yes\n--- population\nwhale count 2\n",
+                            {"name: whale\nhabitat: medium\nspeed: 0..0\ndepth: 16\n--- art\nWWWW\nWWWW\n"});
+  World w(pack, pack.scene("t"), 100, 30, 5);
+  Entity* a = nullptr;
+  Entity* b = nullptr;
+  for (auto& e : w.entities()) {
+    if (e->sprite->name() != "whale") continue;
+    (a ? b : a) = e.get();
+  }
+  CHECK(a && b);
+  a->x = 10 - a->width() / 2.0;  // left of the middle
+  b->x = 60 - b->width() / 2.0;  // just right of it: the nearer one
+  const Emitter e = w.emitter("whale");
+  CHECK(std::fabs(e.x - 0.2f) < 0.01f);
+  CHECK(e.level == static_cast<float>(w.nearness("whale")));
+  CHECK(w.emitter("nothing").level == 0.0f);  // no such creature: no level, no position
+  AmbientParams p = ambientFor(w);  // the parameters carry the emitters, with the same levels as before
+  CHECK(p.emitters[static_cast<int>(EmitterKey::Whale)].level == p.whale);
+  CHECK(std::fabs(p.emitters[static_cast<int>(EmitterKey::Whale)].x - 0.2f) < 0.01f);
+  CHECK(p.emitters[static_cast<int>(EmitterKey::Train)].level == 0.0f);
+  w.step(0.05);  // looking does not change the world: asking twice gives the same
+  CHECK(w.emitter("whale").x == w.emitter("whale").x);
+}
+
+TEST(a_meteorite_strike_is_an_event_at_its_column_and_the_queue_keeps_the_latest) {
+  AssetPack pack = AssetPack::embedded();
+  World w(pack, pack.scene("moon"), 140, 30, 3);
+  std::vector<SoundEvent> ev;
+  w.takeEvents(ev);
+  ev.clear();
+  w.impactAt(35);
+  w.takeEvents(ev);
+  CHECK(ev.size() == 1 && ev[0].kind == EventKind::Impact);
+  CHECK(std::fabs(ev[0].x + 0.5f) < 0.01f && ev[0].y < 0.01f && ev[0].strength == 1.0f);
+  ev.clear();
+  w.takeEvents(ev);
+  CHECK(ev.empty());  // taken once
+  for (int i = 0; i < 200; ++i) w.impactAt(70);
+  w.takeEvents(ev);
+  CHECK(ev.size() == World::kMaxPendingEvents);  // nobody took them: only the latest are kept
+}
+
+TEST(nibbles_squeals_crushes_and_shots_are_events_that_carry_the_place_they_happened) {
+  auto count = [](const std::vector<SoundEvent>& ev, EventKind k) {
+    float n = 0;
+    for (const SoundEvent& e : ev) n += e.kind == k ? e.strength : 0;
+    return n;
+  };
+  auto inStage = [](const std::vector<SoundEvent>& ev) {
+    for (const SoundEvent& e : ev)
+      if (std::fabs(e.x) > kStageReach || e.y < 0 || e.y > 1 || e.depth < 0 || e.depth > 1) return false;
+    return true;
+  };
+  {  // fish nibbling at food
+    AssetPack pack = miniPack("action: drop food\n--- population\nfish count 4\n",
+                              {"name: fish\nhabitat: medium\nspeed: 3..3\ndepth: 5\nbehaviors: seek_food swim\n--- art\n<o>\n",
+                               "name: food\ntag: food\nbehaviors: sink\n--- art\n*\n"});
+    World w(pack, pack.scene("t"), 60, 24, 5);
+    w.interact();
+    std::vector<SoundEvent> ev;
+    int nearFish = 0, nibbles = 0;
+    for (int i = 0; i < 1200; ++i) {
+      w.step(0.05);
+      ev.clear();
+      w.takeEvents(ev);
+      for (const SoundEvent& e : ev) {  // each nibble is at a fish's mouth: a fish is right there
+        const double cx = 30.0 + e.x * 30.0, cy = w.seabedY() - e.y * w.seabedY();
+        ++nibbles;
+        for (auto& f : w.entities())
+          if (f->sprite->name() == "fish" && std::fabs(f->x + f->width() / 2.0 - cx) < 4 && std::fabs(f->y + f->height() / 2.0 - cy) < 3) { ++nearFish; break; }
+      }
+    }
+    CHECK(nibbles == static_cast<int>(w.foodEatenCount()) && nibbles > 0 && nearFish == nibbles);
+    CHECK(inStage(ev));
+  }
+  {  // an avalanche buries animals
+    AssetPack pack = AssetPack::embedded();
+    World w(pack, quietMountains(pack), 140, 40, 7);
+    w.setTimeMode(World::TimeMode::Day);
+    w.triggerRare(RarePick::Common);
+    std::vector<SoundEvent> ev;
+    for (int i = 0; i < 1200; ++i) { w.step(0.05); w.takeEvents(ev); }
+    CHECK(w.squealCount() > 0 && count(ev, EventKind::Squeal) == static_cast<float>(w.squealCount()));
+    CHECK(inStage(ev));
+  }
+  {  // the sandworm crushes what it reaches
+    AssetPack pack = AssetPack::embedded();
+    World w(pack, pack.scene("desert"), 160, 36, 3);
+    w.setTimeMode(World::TimeMode::Day);
+    w.triggerRare(RarePick::Common);
+    std::vector<SoundEvent> ev;
+    for (int i = 0; i < 1500; ++i) { w.step(0.05); w.takeEvents(ev); }
+    CHECK(w.crushCount() > 3 && count(ev, EventKind::Crush) == static_cast<float>(w.crushCount()));
+    CHECK(inStage(ev));
+  }
+  {  // the poachers' rifle shots come from the helicopter, in the air
+    AssetPack pack = AssetPack::embedded();
+    World w(pack, pack.scene("desert"), 160, 36, 3);
+    w.setHour(12);
+    w.setTimeMode(World::TimeMode::Day);
+    w.triggerRare(RarePick::Other);
+    std::vector<SoundEvent> ev, step;
+    int shots = 0, nearChopper = 0;
+    for (int i = 0; i < 2000; ++i) {
+      w.step(0.05);
+      step.clear();
+      w.takeEvents(step);
+      for (const SoundEvent& e : step) {
+        if (e.kind != EventKind::Shot) continue;
+        ++shots;
+        const double cx = 80.0 + e.x * 80.0;  // the shot comes from the helicopter that fires it
+        for (auto& h : w.entities())
+          if (h->sprite->name() == "helicopter" && std::fabs(h->x + h->width() / 2.0 - cx) <= h->width() / 2.0 + 2) { ++nearChopper; break; }
+      }
+      ev.insert(ev.end(), step.begin(), step.end());
+    }
+    CHECK(w.shotCount() > 5 && count(ev, EventKind::Shot) == static_cast<float>(w.shotCount()));
+    CHECK(shots > 5 && nearChopper == shots);
+    CHECK(inStage(ev));
+    // Same seed, same events: the sound events are as deterministic as the world.
+    World w2(pack, pack.scene("desert"), 160, 36, 3);
+    w2.setHour(12);
+    w2.setTimeMode(World::TimeMode::Day);
+    w2.triggerRare(RarePick::Other);
+    std::vector<SoundEvent> ev2;
+    for (int i = 0; i < 2000; ++i) { w2.step(0.05); w2.takeEvents(ev2); }
+    CHECK(ev.size() == ev2.size() && std::equal(ev.begin(), ev.end(), ev2.begin(), sameEvent));
+  }
+}
+
+TEST(a_lightning_strike_is_an_event_from_the_top_of_the_sky_and_the_big_meteor_is_a_strong_impact) {
+  AssetPack pack = rarePack("screen-flash: 0.5\nstrike-at: 0.25\n");  // it strikes a quarter of the way across, not in the middle
+  World w(pack, pack.scene("t"), 120, 30, 4);
+  w.triggerRare(RarePick::Common);
+  std::vector<SoundEvent> ev;
+  for (int i = 0; i < 600 && w.killedCount() == 0; ++i) { w.step(0.05); w.takeEvents(ev); }
+  CHECK(w.flashCount() == 1 && ev.size() == 1 && ev[0].kind == EventKind::Flash);
+  CHECK(ev[0].y > 0.99f && ev[0].x < -0.3f && ev[0].x > -0.7f);  // left of the middle, where the creature struck
+  for (auto& e : w.entities())  // the bolt strikes under the catastrophe that causes it
+    if (e->sprite->name() == "beast") CHECK(std::fabs(60.0 + ev[0].x * 60.0 - (e->x + e->width() / 2.0)) < 2.0);
+  World crusher(pack, pack.scene("t"), 100, 30, 4);
+  std::vector<SoundEvent> cr;
+  crusher.noteCrushed(0, 50, 10, 8);  // nothing crushed: nothing to hear
+  crusher.noteCrushed(5, 25, 10, 8);  // five at once: one event that says so
+  crusher.takeEvents(cr);
+  CHECK(cr.size() == 1 && cr[0].kind == EventKind::Crush && cr[0].strength == 5.0f && crusher.crushCount() == 5);
+  CHECK(std::fabs(cr[0].x + 0.5f) < 0.01f);
+  AssetPack moonPack = AssetPack::embedded();
+  World moon(moonPack, moonPack.scene("moon"), 140, 30, 3);
+  moon.setHour(12);
+  moon.setTimeMode(World::TimeMode::Day);
+  moon.triggerRare(RarePick::Other);
+  ev.clear();
+  for (int i = 0; i < 400 && moon.impactCount() == 0; ++i) { moon.step(0.05); moon.takeEvents(ev); }
+  float strongest = 0;
+  for (const SoundEvent& e : ev) if (e.kind == EventKind::Impact) strongest = std::max(strongest, e.strength);
+  CHECK(moon.impactCount() > 0 && strongest == 2.0f);
+}
+
+TEST(the_synth_keeps_the_latest_events_until_the_next_render_and_the_session_hands_them_on) {
+  Ambience a(48000, 5);
+  CHECK(a.pendingEvents() == 0);
+  for (int i = 0; i < 40; ++i) {
+    SoundEvent e;
+    e.strength = static_cast<float>(i);
+    a.event(e);
+  }
+  CHECK(a.pendingEvents() == Ambience::kMaxPendingEvents);  // the newest are kept
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  std::vector<float> buf(2 * 100);
+  a.render(p, buf.data(), 100);
+  CHECK(a.pendingEvents() == 0);  // heard; gone
+  // Through the lock-free queue, the way the audio output hands them over.
+  EventRing<SoundEvent, 64> ring;
+  SoundEvent in, out;
+  in.kind = EventKind::Shot;
+  in.x = -0.5f;
+  in.y = 0.25f;
+  in.depth = 0.75f;
+  in.strength = 3;
+  ring.push(in);
+  CHECK(ring.pop(out) && sameEvent(in, out));
+  // The session hands the world's events on, once.
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  std::vector<SoundEvent> ev;
+  s.takeSoundEvents(ev);
+  s.step(0.05);
+  s.takeSoundEvents(ev);
+  s.takeSoundEvents(ev);  // taking again adds nothing
+  const size_t n = ev.size();
+  s.takeSoundEvents(ev);
+  CHECK(ev.size() == n);
 }
 
 int main(int argc, char** argv) {

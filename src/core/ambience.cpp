@@ -99,6 +99,7 @@ AmbientParams ambientFor(const World& world) {
   p.shots = world.shotCount();
   p.flames = static_cast<float>(world.flameLevel());
   p.winged = static_cast<float>(world.nearness("winged_titan"));
+  for (int k = 0; k < kEmitterKeys; ++k) p.emitters[k] = world.emitter(static_cast<EmitterKey>(k));
   return p;
 }
 
@@ -225,6 +226,14 @@ void Ambience::updateDrift() {
       bedGain_[k][ch] = trim_[k][ch] * (1.0f + driftDepth_[k] * static_cast<float>(wave));
     }
   }
+}
+
+void Ambience::event(const SoundEvent& e) {
+  if (pendingCount_ == kMaxPendingEvents) {  // keep the newest
+    std::copy(pending_ + 1, pending_ + kMaxPendingEvents, pending_);
+    --pendingCount_;
+  }
+  pending_[pendingCount_++] = e;
 }
 
 void Ambience::setLayout(const Layout& layout) {
@@ -1158,6 +1167,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       frame[c] = x * routeGain_[c];
     }
   }
+  pendingCount_ = 0;  // the events of this block have been heard (by the sounds that use them, in phase 6)
 }
 
 }  // namespace dio

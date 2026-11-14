@@ -42,7 +42,7 @@ is in [docs/ai/](docs/ai/README.md).
 
 ## Where things are
 
-    src/core    simulation, frame buffer, menu, ambient-sound synth, speaker layouts and panning, lock-free thread hand-over (headless, deterministic per seed)
+    src/core    simulation, frame buffer, menu, ambient-sound synth, speaker layouts and panning, lock-free thread hand-over, stage positions of sounds (headless, deterministic per seed)
     src/term    VT/ANSI encoder + posix/windows terminal backends
     src/audio   miniaudio playback wrapper
     src/app     Session (shared interactive state, no I/O) + command line and terminal loop

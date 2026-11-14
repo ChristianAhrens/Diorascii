@@ -584,7 +584,15 @@ Original plan text:
   no-op; a field added to `AmbientParams` shows up in the render without touching a backend
   (a test that fills every field with a distinct value and compares).
 
-### Phase 5 – World: emitters and events (L)
+### Phase 5 – World: emitters and events (L) — **done 2026-11-14 (data and plumbing; no sound uses the positions yet)**
+
+- Built as planned: `core/soundstage.h` (`Emitter`, `EmitterKey`, `SoundEvent`, `EventKind`), `World::emitter`, `stagePoint`, `emit`, `takeEvents`, events at the six places that count today, `AmbientParams::emitters[]`, `Session::takeSoundEvents`,
+  and the phase 4 ring wired through both backends (`AudioOutput::pushEvent`, the audio thread drains it into `Ambience::event`). Details in `architecture.md`. The `tvOS` view controller and `audio_apple.mm` were edited but **not compiled**.
+- **Deviations**: the emitter fields live in an `emitters[]` array next to the old level fields (which stay until phase 6) instead of replacing them; `spread` is part of `Emitter` but the world leaves it 0 (a spread belongs to the sound, set in phase 6);
+  the sources without a creature behind them (fire, avalanche, flood, toxin, meteor, flames) have no emitter yet; an impact's depth is a fixed layer 8 and a lightning flash is at the top of the stage at depth 0, because neither has an entity.
+- **Tests** (6): the emitter follows the creature (middle, edges, off-screen, the +-1.5 limit, silent beyond reach, height, depth); the nearest of two creatures wins and the level equals `nearness`; the params carry the emitters; impact position and the queue's limit;
+  nibble, squeal, crush and shot events equal the counters and carry the place (a fish at every nibble, the helicopter at every shot); same seed same events; lightning at the top of the stage and the big meteor as strength 2; the synth keeps the latest events until its render call; the session hands them on once.
+  Mutations (see the commit message): an unclamped x, a reversed height, the weakest creature, and zeroed nibble, shot and flash positions, an ignored layer and a lost crush count.
 
 - `Emitter`, `SoundEvent` in the params; `World::emitter(key)` and event pushes at the places that
   count today; `ambientFor()` fills them. Counters and `nearness()` stay.

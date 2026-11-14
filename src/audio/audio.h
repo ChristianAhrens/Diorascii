@@ -30,6 +30,9 @@ class AudioOutput {
   bool running() const;
   /// Sets what the sound reflects; takes effect smoothly.
   void setParams(const AmbientParams& p);
+  /// Hands a one-off sound to the synth (see SoundEvent). Safe to call from the main loop; events
+  /// pile up in a lock-free queue (the latest 64 are kept) and are taken by the audio thread.
+  void pushEvent(const SoundEvent& e);
 
   struct Impl;  ///< device state (public so the audio callback can reach it)
 

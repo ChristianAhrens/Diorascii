@@ -91,6 +91,8 @@ levels were only measured. Accumulated preferences from the forest iterations:
 - Second catastrophes (2026-11-10, measured only): `menace` sets the level of the hiss, rush, rotor and roars; keep it
   below about 0.3 RMS (the storms), and the calm-to-menace ratio at least 1.5 at 48 kHz (the hiss does not exist at
   8 kHz). Event cracks (shots) are noise bursts of 12 ms over a 150 Hz thump, no sharper than the thunder snap.
+- A sound that has a place gets it from the world, not from the synth's own dice: a continuous source is an `Emitter` (`World::emitter`), a one-off is a `SoundEvent` (`World::emit` at the place where the counter ticks). Positions are stage units (see `architecture.md`); never
+  re-derive them from cells in the audio code. Every new counter that triggers a sound gets an event with the causing entity's position, and a test that checks the position against that entity.
 - A new `AmbientParams` field needs nothing in the audio backends: they copy the whole struct through a `Seqlock`
   (since 2026-11-14, finding F-19). Keep `AmbientParams` trivially copyable (no pointers, strings or containers).
 

@@ -246,6 +246,7 @@ int main(int argc, char** argv) {
   // Ambient sound is on unless muted; a machine without a sound device just stays silent. The
   // missing device is only announced when the user asked for sound (--audio or the a key).
   AudioOutput audio;
+  std::vector<SoundEvent> soundEvents;  // the one-off sounds of one frame
   bool startup = true;
   auto syncSound = [&]() {
     if (session.soundWanted() && !audio.running() && !audio.start()) {
@@ -277,7 +278,12 @@ int main(int argc, char** argv) {
     session.setMeasuredFps(measuredFps);
     session.setClockHour(localClockHour());
     session.step(dt);
-    if (audio.running()) audio.setParams(session.ambient());
+    soundEvents.clear();
+    session.takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
+    if (audio.running()) {
+      audio.setParams(session.ambient());
+      for (const SoundEvent& e : soundEvents) audio.pushEvent(e);
+    }
     session.render(cur);
     if (session.takeRepaint()) havePrev = false;
     // The terminal style uses the user's 16 ANSI colors so it follows their theme.

@@ -141,6 +141,15 @@ routing gains glide with `spatial::kSmoothingSeconds`, so a channel that keeps i
 `1 - (1 - k)^(n + 1)`, tested sample by sample). The random generator `rng_` is untouched by the layout, so each layout is deterministic per seed. `scripts/bench-audio.sh`
 (`tests/bench_audio.cpp`, not in ctest) prints the CPU share per scene and layout.
 
+**Emitters and sound events** (2026-11-14, phase 5). `core/soundstage.h` defines the data: `Emitter {level, x, y, depth, spread}` (a continuous source), `EmitterKey` (twelve creatures found by the tag or sprite name that `World::nearness` has always used)
+and `SoundEvent {kind, x, y, depth, strength}` with `EventKind` (Flash, Nibble, Impact, Crush, Squeal, Shot). **The stage is the screen as a window**: x runs -1 (left edge) to 1 (right edge) and up to +-1.5 off-screen (`kStageReach`; a creature is heard from the
+side before it appears, as `nearness` already did), y 0 on the ground (`seabedY_`, the first ground row) to 1 at the top of the screen, depth `z / 32` (larger z is further away). `World::emitter(key)` returns the creature `nearness` reports with its position (`level` is exactly
+`nearness`; no creature gives all zeros), and `AmbientParams::emitters[]` carries all twelve (`ambientFor` fills them); the plain level fields (`whale`, `siren`, ...) stay until the scenes are converted (phase 6). The world pushes a `SoundEvent` wherever its counters tick
+(`flash` at the strike column, `noteFoodEaten` at the fish's mouth, `impactAt`/`bigImpactAt` at the column (strength 1 or 2), `noteCrushed` at the victim or the devourer's front (strength: how many), the squeal at the buried animal, the shot at the muzzle) in a queue of 64 that
+`World::takeEvents` empties; `Session::takeSoundEvents` hands them to the frontend, which calls it every frame (also while muted) and pushes them with `AudioOutput::pushEvent` into an `EventRing<SoundEvent, 64>` that the audio thread drains before each render into
+`Ambience::event` (at most 32 kept until the render call ends). **No sound uses the positions yet**: the counters still trigger the sounds, and phase 6 switches each scene to the emitters and events. Not covered: the sources that have a level but no creature to find
+(fire, avalanche, flood, toxin, meteor, flames) have no emitter; they get a position source when their scene is converted.
+
 **The forest chain is gated** (2026-11-13, finding F-25). The forest's own sounds (wind, rain, thunder, crickets) are made only while `mix_[Forest]` is above 0.001, as the other scenes are
 (`forestOn` in `render`). The gust and wander state, `thunderLevels` and `roll_` keep running because other scenes and the draw order depend on them, and a silent forest still takes the same
 draws from `rng_` that it took when it ran (`noise(rng_)` twice per channel and sample, once more while a clap rings): without them every other scene's noise and events would change. A new

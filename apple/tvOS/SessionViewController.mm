@@ -114,7 +114,12 @@ static NSString* const kHintCountKey = @"menuHintCount";
   static int ticks = 0;
   if (++ticks % 100 == 1) DIO_INPUT_LOG(@"grid focused=%d window key=%d", _grid.isFocused, self.view.window.isKeyWindow);
   [self syncSound];
-  if (_audio.running()) _audio.setParams(_session->ambient());
+  std::vector<dio::SoundEvent> soundEvents;
+  _session->takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
+  if (_audio.running()) {
+    _audio.setParams(_session->ambient());
+    for (const dio::SoundEvent& e : soundEvents) _audio.pushEvent(e);
+  }
   _session->render(_frame);
   _session->takeRepaint();  // the view redraws every cell each frame anyway
   [_grid showFrame:_frame];

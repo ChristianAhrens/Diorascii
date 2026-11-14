@@ -30,12 +30,16 @@ struct AudioOutput::Impl {
   Seqlock<AmbientParams> shared;
   /// The parameters the audio thread uses: the last copy it read (kept if a read does not succeed).
   AmbientParams current;
+  /// One-off sounds from the main loop to the audio thread.
+  EventRing<SoundEvent, 64> events;
 };
 
 namespace {
 void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   auto* impl = static_cast<AudioOutput::Impl*>(device->pUserData);
   impl->shared.load(impl->current);
+  SoundEvent e;
+  while (impl->events.pop(e)) impl->ambience.event(e);
   impl->ambience.render(impl->current, static_cast<float*>(output), static_cast<int>(frames));
 }
 }  // namespace
@@ -81,5 +85,7 @@ void AudioOutput::stop() {
 bool AudioOutput::running() const { return impl_->open; }
 
 void AudioOutput::setParams(const AmbientParams& p) { impl_->shared.store(p); }
+
+void AudioOutput::pushEvent(const SoundEvent& e) { impl_->events.push(e); }
 
 }  // namespace dio

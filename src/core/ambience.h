@@ -6,6 +6,7 @@
 
 #include "core/layout.h"
 #include "core/rng.h"
+#include "core/soundstage.h"
 
 namespace dio {
 
@@ -77,6 +78,10 @@ struct AmbientParams {
   float winged = 0;
   /// Counts the poachers' rifle shots (World::shotCount()); each one cracks.
   unsigned shots = 0;
+  /// Where each continuous sound source stands (World::emitter): its level is the matching field above
+  /// (`whale`, `tornado`, ...) and its x, y and depth place it on the stage. Indexed by EmitterKey. Not
+  /// yet used by the synth (the scenes switch to it in phase 6 of the multichannel plan).
+  Emitter emitters[kEmitterKeys];
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -105,6 +110,15 @@ class Ambience {
   void setLayout(const Layout& layout);
   /// The layout the synth renders for.
   const Layout& layout() const { return layout_; }
+  /// Hands the synth a one-off sound with its place (see SoundEvent). The events wait until the next
+  /// render call; at most kMaxPendingEvents are kept (the newest), and they are dropped after that
+  /// call. Not used by any sound yet (the scenes switch to it in phase 6 of the multichannel plan);
+  /// the counters in AmbientParams still trigger them.
+  void event(const SoundEvent& e);
+  /// The events handed in since the last render call (for the sounds and for tests).
+  int pendingEvents() const { return pendingCount_; }
+  /// The most events kept between two render calls.
+  static constexpr int kMaxPendingEvents = 32;
 
  private:
   /// Moves `v` towards `target`; `k` is the per-sample smoothing coefficient.
@@ -158,6 +172,8 @@ class Ambience {
 
   Layout layout_;                               ///< the speakers to render for
   int8_t feed_[kMaxChannels];                   ///< what each output channel plays (a Feed or a chain index)
+  SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
+  int pendingCount_ = 0;                        ///< how many of them
   int chains_ = 2;                              ///< how many bed chains run: one per directional speaker, at least two
   Rng bedRng_[kMaxChannels];                    ///< generators of the chains from 2 up (0 and 1 use rng_)
   float trim_[kAmbientKinds][kMaxChannels];     ///< level of each chain in each scene (1 for the stereo pair)

@@ -255,7 +255,7 @@ void seekFood(Entity& e, World& w, double dt) {
   const double dx = f->x - mouthX, dy = f->y - mouthY;
   if (std::fabs(dx) <= 1.5 && std::fabs(dy) <= 1.0) {
     f->dead = true;
-    w.noteFoodEaten();
+    w.noteFoodEaten(mouthX, mouthY, e.z);
     return;
   }
   if (std::fabs(dx) > 1.5 && (dx > 0) != right && e.vx != 0) {
@@ -309,10 +309,10 @@ void catastrophe(Entity& e, World& w, double dt) {
     // A cell of leeway each way, so that a victim walking towards it is not stepped over.
     const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
                                    devour);
-    if (devour) w.noteCrushed(taken);
+    if (devour) w.noteCrushed(taken, now, e.y + e.height() / 2.0, e.z);
     e.lastPoint = now;
     if (taken > 0) {
-      if (e.flashTime > 0) w.flash(e.flashTime);
+      if (e.flashTime > 0) w.flash(e.flashTime, now);
       e.struck = true;
     }
     return;
@@ -330,7 +330,7 @@ void catastrophe(Entity& e, World& w, double dt) {
     }
   }
   w.wipeOut(e.wipes, e.strikeEffect, &e);
-  if (e.flashTime > 0) w.flash(e.flashTime);
+  if (e.flashTime > 0) w.flash(e.flashTime, middle);
 }
 
 /// Hunts the closest prey in sight: turns towards it, changes lane to line up with it and closes
@@ -1036,6 +1036,7 @@ bool World::lash(const Entity& a) {
     t.reach = 0.1;
     t.dur = 0.3;
     ++shots_;
+    emit(EventKind::Shot, bestX, baseY, a.z);  // from the muzzle
   }
   t.ox = bestX - a.x;
   t.x0 = bestX;
@@ -1078,7 +1079,7 @@ void World::stepTongues(double dt) {
       t.hit = true;
       if (alive && !t.harmless) {
         claim(*v, t.effect);
-        if (!t.shot) noteCrushed(1);
+        if (!t.shot) noteCrushed(1, v->x + v->width() / 2.0, v->y + v->height() / 2.0, v->z);
       }
     }
     if (t.age >= t.dur) {
@@ -1153,10 +1154,11 @@ double World::trafficLevel() const {
   return std::clamp(std::max({day, morning, evening}), 0.0, 1.0);
 }
 
-void World::flash(double seconds) {
+void World::flash(double seconds, double cx) {
   flashLen_ = seconds;
   flashElapsed_ = 0;
   ++flashCount_;
+  emit(EventKind::Flash, cx < -1e8 ? w_ / 2.0 : cx, 0, 0);  // the bolt comes down from the top of the sky
 }
 
 bool World::flashing() const {
@@ -1310,6 +1312,7 @@ double World::deepestCrater() const {
 
 void World::impactAt(double cx) {
   ++impacts_;
+  emit(EventKind::Impact, cx, seabedY_, 8);
   const int c = static_cast<int>(std::lround(cx));
   const int hw = craterHalfWidth();
   const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
@@ -1365,6 +1368,44 @@ double World::nearness(const std::string& key) const {
 }
 
 double World::stormProximity() const { return nearness("gloom"); }
+
+void World::stagePoint(double cx, double cy, int z, float& x, float& y, float& depth) const {
+  const double half = std::max(w_ / 2.0, 1.0);
+  x = static_cast<float>(std::clamp((cx - w_ / 2.0) / half, -static_cast<double>(kStageReach), static_cast<double>(kStageReach)));
+  const double ground = std::max(seabedY_, 1);  // the first ground row: the horizon of the stage
+  y = static_cast<float>(std::clamp((ground - cy) / ground, 0.0, 1.0));
+  depth = static_cast<float>(std::clamp(static_cast<double>(z) / kStageDepthLayers, 0.0, 1.0));
+}
+
+Emitter World::emitter(const std::string& key) const {
+  Emitter out;
+  const Entity* best = nullptr;
+  double bestLevel = 0;
+  for (const auto& e : entities_) {
+    if (e->dead || (e->tag != key && e->sprite->name() != key)) continue;
+    const double cx = e->x + e->width() / 2.0;
+    const double reach = w_ / 2.0 + e->width() / 2.0 + w_ * 0.25;  // starts before it is in view
+    const double level = std::clamp(1.0 - std::fabs(cx - w_ / 2.0) / reach, 0.0, 1.0);
+    if (level > bestLevel) { bestLevel = level; best = e.get(); }
+  }
+  out.level = static_cast<float>(bestLevel);
+  if (best) stagePoint(best->x + best->width() / 2.0, best->y + best->height() / 2.0, best->z, out.x, out.y, out.depth);
+  return out;
+}
+
+void World::emit(EventKind kind, double cx, double cy, int z, float strength) {
+  SoundEvent e;
+  e.kind = kind;
+  e.strength = strength;
+  stagePoint(cx, cy, z, e.x, e.y, e.depth);
+  if (events_.size() >= kMaxPendingEvents) events_.erase(events_.begin());
+  events_.push_back(e);
+}
+
+void World::takeEvents(std::vector<SoundEvent>& out) {
+  out.insert(out.end(), events_.begin(), events_.end());
+  events_.clear();
+}
 
 Entity* World::nearest(const std::string& tag, double x, double y, double maxDist) {
   Entity* best = nullptr;
@@ -1706,7 +1747,10 @@ void World::slideStep(Entity& e, double dt) {
       if (o.dead || o.isRare || !o.destructible || isAirZone(o.zone)) continue;
       if (!o.life && o.zone == Zone::None && !o.grounded) continue;  // effects
       if (o.x + o.width() <= x0 || o.x >= x1 || o.y + o.height() <= top || o.y >= bot) continue;
-      if (o.life && !isAsleep(o)) ++squeals_;  // an animal under the snow cries out
+      if (o.life && !isAsleep(o)) {  // an animal under the snow cries out
+        ++squeals_;
+        emit(EventKind::Squeal, o.x + o.width() / 2.0, o.y + o.height() / 2.0, o.z);
+      }
       claim(o, "snowpuff");
     }
     // Powder billows up around the head, and rock and uprooted trees tumble out of the forest.

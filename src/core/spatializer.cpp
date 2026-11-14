@@ -121,15 +121,23 @@ void SpatialVoice::process(float x, float* frame, int channels) {
 
 void SpatialVoice::step(int channels) {
   const int n = std::min(channels, kMaxChannels);
+  // A gain that glides towards 0 would sink into the denormal numbers, which the processor computes
+  // with many times the effort: once it is this close it has arrived.
+  auto glide = [this](float& g, float target) {
+    g += (target - g) * k_;
+    if (std::fabs(target - g) < 1e-10f) g = target;
+  };
   for (int c = 0; c < n; ++c) {
-    gain_[c] += (target_[c] - gain_[c]) * k_;
-    bassGain_[c] += (bassTarget_[c] - bassGain_[c]) * k_;
+    glide(gain_[c], target_[c]);
+    glide(bassGain_[c], bassTarget_[c]);
   }
 }
 
 void SpatialVoice::add(float x, float* frame, int channels) {
   low_[0] += (x - low_[0]) * lowK_;
   low_[1] += (low_[0] - low_[1]) * lowK_;
+  if (std::fabs(low_[0]) < 1e-18f) low_[0] = 0;  // a silent voice's filter must not sink into the denormal numbers
+  if (std::fabs(low_[1]) < 1e-18f) low_[1] = 0;
   const int n = std::min(channels, kMaxChannels);
   for (int c = 0; c < n; ++c) frame[c] += x * gain_[c] + low_[1] * bassGain_[c];
 }

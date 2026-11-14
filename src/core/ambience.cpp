@@ -314,8 +314,30 @@ void Ambience::aimMountains(const AmbientParams& p) {
   }
 }
 
+void Ambience::aimDesert(const AmbientParams& p) {
+  auto emitter = [&](int id, EmitterKey key, bool wanted, float spread, float lfe, float swirl) {
+    const Emitter& e = p.emitters[static_cast<int>(key)];
+    if (wanted && (e.level > 0 || !place_[id].on)) {
+      Source s = stageSource(e.x, e.y, spread, lfe);
+      s.azimuth += swirl;
+      aim(id, s);
+    }
+  };
+  // The tornado's spin is heard as a turn round its place where there are speakers to turn through (in
+  // stereo it stays the swell of the roar).
+  const float swirl = layout_.channels() > 2 ? 30.0f * static_cast<float>(std::sin(tornadoPhase_)) : 0.0f;
+  emitter(kTornado, EmitterKey::Tornado, p.tornado > 0, 0.4f, 0.0f, swirl);
+  emitter(kWorm, EmitterKey::Worm, p.worm > 0 || p.storm > 0, 0.5f, 1.0f, 0.0f);
+  emitter(kChopper, EmitterKey::Chopper, p.menace > 0, 0.4f, 0.0f, 0.0f);
+}
+
 void Ambience::event(const SoundEvent& e) {
   if (e.kind == EventKind::Squeal) squealAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
+  if (e.kind == EventKind::Crush) crushAt_ = stageSource(e.x, e.y, 0.0f, 0.4f);
+  if (e.kind == EventKind::Shot) {
+    shotAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
+    shotFresh_ = true;
+  }
   if (pendingCount_ == kMaxPendingEvents) {  // keep the newest
     std::copy(pending_ + 1, pending_ + kMaxPendingEvents, pending_);
     --pendingCount_;
@@ -570,8 +592,11 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
 }
 
 void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
-  (void)p;
   const double dt = 1.0 / rate_;
+  const int nch = layout_.channels();
+  const float mixDesert = mix_[static_cast<int>(AmbientKind::Desert)];
+  if (tornado_ < 1e-3f && !(p.tornado > 0)) place_[kTornado].on = false;
+  if (wormNear_ < 1e-3f && storm_ < 1e-3f && !(p.worm > 0) && !(p.storm > 0)) place_[kWorm].on = false;
   // Dry wind: low-passed noise like the forest's, but steadier and a little higher. In a sandstorm
   // it howls stronger, with the hiss of blown sand on top.
   const float cutoffHz = (260.0f + 300.0f * gust_) * (1.0f + 0.7f * rain_);
@@ -615,57 +640,74 @@ void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
   roarLow_[0] += (bellow - roarLow_[0]) * lowRoar_;
   roarLow_[1] += (roarLow_[0] - roarLow_[1]) * lowRoar_;
   const float roarOut = roarLow_[1] * 0.45f * wormNear_;
+  if (place_[kWorm].on && std::fabs(roarOut) > 1e-9f) place_[kWorm].v.add(roarOut * kStereoRef, room_, nch);  // the bellow comes from the worm (nothing to add between bellows)
   // Crushing: chewing. Each thing it swallows is ground between a few soft bites, every one a
   // short swell of low-passed noise (no sharp start, so it never sounds like a shot), over a faint
   // low grumble.
-  float crunchEnv = 0, grumble = 0;
-  for (const Crunch& c : crunches_) {
+  float crunchEnv[4] = {};  // the chewing of each slot (placed where it was crushed)
+  for (int i = 0; i < 4; ++i) {
+    const Crunch& c = crunches_[i];
     const double tau = t_ - c.start;
+    if (c.gain <= 0 || tau > 1.6) place_[kCrunch0 + i].on = false;
     if (c.gain <= 0 || tau < 0 || tau > 1.6) continue;
     for (int b = 0; b < c.bites; ++b) {
       const double bt = tau - c.bite[b];
       if (bt < 0 || bt > 0.09) continue;
       const double swell = std::sin(3.14159265 * bt / 0.09);
-      crunchEnv += static_cast<float>(c.gain * c.force[b] * swell * swell);
+      crunchEnv[i] += static_cast<float>(c.gain * c.force[b] * swell * swell);
     }
-    grumble += static_cast<float>(c.gain * std::sin(kTwoPi * 62.0 * tau) * std::min(1.0, tau / 0.12) * std::exp(-tau / 0.7));
+    const float g = static_cast<float>(c.gain * std::sin(kTwoPi * 62.0 * tau) * std::min(1.0, tau / 0.12) * std::exp(-tau / 0.7));
+    if (place_[kCrunch0 + i].on) place_[kCrunch0 + i].v.add(g * 0.03f * kStereoRef, room_, nch);
   }
+  const bool chewing = crunchEnv[0] > 0 || crunchEnv[1] > 0 || crunchEnv[2] > 0 || crunchEnv[3] > 0;
 
-  // Wind, sand, the tornado's roar and the growl are the bed, one chain per speaker; the crickets,
-  // the bellow, the grumble and the chewing are voices, which only the stereo pair carries until
-  // they are placed.
+  // Wind and sand are the bed, one chain per speaker. The tornado's roar, the worm's growl and the
+  // chewing are placed: noise per chain, weighted by how near each speaker is to the sound. The
+  // crickets are voices, which only the stereo pair carries until they are placed.
   for (int ch = 0; ch < chains_; ++ch) {
     if (!live(AmbientKind::Desert, ch)) continue;
     Rng& r = chainRng(ch);
     const float n = noise(r) * noiseScale_;
     desertLow_[ch][0] += (n - desertLow_[ch][0]) * lowWind;
     desertLow_[ch][1] += (desertLow_[ch][0] - desertLow_[ch][1]) * lowWind;
-    const float n2 = noise(r) * noiseScale_;
-    sandLow_[ch][0] += (n2 - sandLow_[ch][0]) * lowSandCut_;
-    sandLow_[ch][1] += (n2 - sandLow_[ch][1]) * lowSandTop_;
-    const float n3 = noise(r) * noiseScale_;
-    tornadoLow_[ch][0] += (n3 - tornadoLow_[ch][0]) * lowTornado_;
-    tornadoLow_[ch][1] += (tornadoLow_[ch][0] - tornadoLow_[ch][1]) * lowTornado_;
+    // (Past the stereo pair, whose generator must advance as it always did, a layer that is silent is not computed.)
+    if (ch < 2 || sandLevel > 0) {
+      const float n2 = noise(r) * noiseScale_;
+      sandLow_[ch][0] += (n2 - sandLow_[ch][0]) * lowSandCut_;
+      sandLow_[ch][1] += (n2 - sandLow_[ch][1]) * lowSandTop_;
+    }
+    if (ch < 2 || roar > 0) {
+      const float n3 = noise(r) * noiseScale_;
+      tornadoLow_[ch][0] += (n3 - tornadoLow_[ch][0]) * lowTornado_;
+      tornadoLow_[ch][1] += (tornadoLow_[ch][0] - tornadoLow_[ch][1]) * lowTornado_;
+    }
+    // The chewing: the slots' envelopes weighted for this chain. Only the stereo pair keeps its
+    // noise running while nothing chews (its generator must advance as it always did).
+    float chew = 0;
+    if (chewing)
+      for (int i = 0; i < 4; ++i)
+        if (crunchEnv[i] > 0) chew += weight(kCrunch0 + i, ch) * crunchEnv[i];
     float crunchOut = 0;
-    if (ch < 2) {
+    if (ch < 2 || chewing) {
       const float nc = noise(r) * noiseScale_;
       crunchLow_[ch][0] += (nc - crunchLow_[ch][0]) * lowCrunch_;
       crunchLow_[ch][1] += (crunchLow_[ch][0] - crunchLow_[ch][1]) * lowCrunch_;
       // the grinding is the noise below ~500 Hz, with a little more of the bite's grit above it
-      crunchOut = (crunchLow_[ch][1] * 7.0f + (nc - crunchLow_[ch][0]) * 0.25f) * crunchEnv;
+      crunchOut = (crunchLow_[ch][1] * 7.0f + (nc - crunchLow_[ch][0]) * 0.25f) * chew;
     }
-    const float n4 = noise(r) * noiseScale_;
-    deepLow_[ch][0] += (n4 - deepLow_[ch][0]) * lowDeep_;
-    deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
-    if (ch < 2) {
-      out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
-                tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl +
-                chirps * (ch ? 0.9f : 1.0f) + roarOut + grumble * 0.03f + crunchOut;
-    } else {
-      out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
-                tornadoLow_[ch][1] * 8.0f * roar + deepLow_[ch][1] * 20.0f * growl;
+    if (ch < 2 || growl > 0) {
+      const float n4 = noise(r) * noiseScale_;
+      deepLow_[ch][0] += (n4 - deepLow_[ch][0]) * lowDeep_;
+      deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
     }
+    float placed = crunchOut;
+    if (roar > 0) placed += weight(kTornado, ch) * tornadoLow_[ch][1] * 8.0f * roar;
+    if (growl > 0) placed += weight(kWorm, ch) * deepLow_[ch][1] * 20.0f * growl;
+    voiceOut_[ch] += placed * mixDesert;
+    out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
+              (ch < 2 ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);
   }
+  flushRoom(voiceOut_, mixDesert);
 }
 
 void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -947,7 +989,7 @@ float Ambience::coeff(float seconds) const {
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
-    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = false;
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = false;
     return;
   }
   if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
@@ -976,15 +1018,10 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
         out[ch] = (menaceLow_[ch][1] * 3.2f + (n - menaceHigh_[ch]) * 0.06f + menaceHigh_[ch] * 0.28f) * 0.55f * level * swell;
         break;
       }
-      case AmbientKind::Desert: {  // a helicopter: the chop of the rotor, over a whine
+      case AmbientKind::Desert: {  // a helicopter: the chop of the rotor, placed at the helicopter
         menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowChop_;
-        float whine = 0;
-        if (ch < 2) {  // (advanced once per stereo channel, as it always was)
-          menacePhase_[1] += kTwoPi * 390.0 * dt * 0.5;
-          whine = 0.012f * static_cast<float>(std::sin(menacePhase_[1]));
-        }
-        out[ch] = (menaceHigh_[ch] * static_cast<float>(chop) * 1.9f + menaceLow_[ch][1] * 1.5f * static_cast<float>(chop) +
-                   whine) * 0.7f * level;
+        menaceBus_[ch] += weight(kChopper, ch) * (menaceHigh_[ch] * static_cast<float>(chop) * 1.9f +
+                                                  menaceLow_[ch][1] * 1.5f * static_cast<float>(chop)) * 0.7f * level;
         break;
       }
       case AmbientKind::Moon: {  // the big meteor: a rumble in the ground that swells as it nears
@@ -993,6 +1030,10 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
       }
       default: break;
     }
+  }
+  if (p.kind == AmbientKind::Desert) {  // the whine over the chop: one voice from the helicopter
+    menacePhase_[1] += kTwoPi * 390.0 * dt;
+    if (place_[kChopper].on) place_[kChopper].v.add(0.012f * static_cast<float>(std::sin(menacePhase_[1])) * 0.7f * level * kStereoRef, room_, nch);
   }
   if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
     bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level);
@@ -1073,6 +1114,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
 
   if (p.kind == AmbientKind::City) aimCity(p);  // the placed sounds follow their emitters, once per block
   if (p.kind == AmbientKind::Mountains) aimMountains(p);
+  if (p.kind == AmbientKind::Desert) aimDesert(p);
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
@@ -1177,6 +1219,10 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                                         [](const Crunch& a, const Crunch& b) { return a.start < b.start; });
           c.start = t_ + n * rng_.range(0.05, 0.2);
           c.gain = static_cast<float>(rng_.range(0.8, 1.0));
+          Place& pl = place_[kCrunch0 + static_cast<int>(&c - crunches_)];  // the chewing is where the thing was crushed
+          pl.src = crushAt_;
+          pl.v.setTarget(layout_, forLayout(pl.src), true);
+          pl.on = true;
           c.bites = rng_.rangeInt(6, Crunch::kBites);
           float at = static_cast<float>(rng_.range(0.0, 0.05));
           for (int b = 0; b < c.bites; ++b) {  // irregular chewing that eases off
@@ -1232,6 +1278,11 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                                     [](const Shot& a, const Shot& b) { return a.start < b.start; });
         s.start = t_ + rng_.range(0.0, 0.06);
         s.pan = static_cast<float>(rng_.range(0.25, 0.75));
+        Place& pl = place_[kShot0 + static_cast<int>(&s - shotVoices_)];  // from the muzzle (a headless caller without events: the random pan)
+        pl.src = shotFresh_ ? shotAt_ : panSource(s.pan);
+        shotFresh_ = false;
+        pl.v.setTarget(layout_, forLayout(pl.src), true);
+        pl.on = true;
       }
       seenShots_ = p.shots;
     }
@@ -1242,15 +1293,16 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     stepPlaces();
     float menaceOut[kMaxChannels];
     menaceSample(p, menaceOut);
-    flushRoom(menaceBus_, 1.0f);
-    for (const Shot& s : shotVoices_) {  // a sharp crack that dies away at once, over a short thump
+    for (int i = 0; i < 4; ++i) {  // a sharp crack that dies away at once, over a short thump, from where the shot was fired
+      const Shot& s = shotVoices_[i];
       const double tau = t_ - s.start;
+      if (tau > 0.4) place_[kShot0 + i].on = false;
       if (tau < 0 || tau > 0.4) continue;
       const float crack = noise(rng_) * static_cast<float>(std::exp(-tau / 0.012)) * 0.34f;
       const float thump = static_cast<float>(std::sin(kTwoPi * 150.0 * tau) * std::exp(-tau / 0.05)) * 0.22f;
-      menaceOut[0] += (crack + thump) * (1.2f - s.pan);
-      menaceOut[1] += (crack + thump) * (0.2f + s.pan);
+      if (place_[kShot0 + i].on) place_[kShot0 + i].v.add((crack + thump) * 0.7f * kStereoRef, room_, layout_.channels());
     }
+    flushRoom(menaceBus_, 1.0f);
     float aq[kMaxChannels], desert[kMaxChannels], moon[kMaxChannels], mountains[kMaxChannels], city[kMaxChannels];
     std::fill(aq, aq + chains_, 0.0f);
     std::fill(desert, desert + chains_, 0.0f);

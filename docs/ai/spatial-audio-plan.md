@@ -602,6 +602,15 @@ Original plan text:
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
 
+**Desert: done 2026-11-14** (third of six; details in `architecture.md`, "Placed sounds: the desert"). Against section 4.3:
+
+- Done: the tornado at its emitter with its spin as a turn of azimuth (surround layouts only), the sandworm's growl and bellow at its emitter (bass send 1.0, spread 0.5), the chewing at the place of the `Crush` event (a place per slot, bass 0.4), the helicopter's chop and whine at its emitter (spread 0.4, height from the emitter), the rifle shots at the muzzle (`Shot` event).
+- **Not done**: Doppler pitch of the helicopter, the sandstorm's higher rear and height share, the crickets as surround voices (they go with the forest's, which are the same code).
+- **Stereo is kept** except the shots: the old linear pan law differs from the constant-power one, so the two desert golden cases were **re-baselined** (window 2 only, up to 1.1 %; every other window is within 0.02 %).
+- **Tests** (3 new): the tornado, worm and helicopter left, right, off-screen, high, and the worm's growl in the bass; the tornado's balance swings in 5.1 and not in stereo; a crush and a shot come from where their event says. Mutations: caught: the spin, the growl's, the chopper's, the tornado's and the chewing's weighting, the crush position, the shot position, the whine (by the golden values). **Survived (no test)**: the worm's bass send (the bellow is rare and its bass small beside the growl's chain-sum bass).
+- **CPU found on the way**: the first version made the desert 70 % dearer in 9.1.6 (a place that is on adds a voice every sample, and gains and filters sank into denormals). Fixed by skipping the bellow's voice between bellows, not computing silent layers past the stereo pair, and flushing near-zero gains in `SpatialVoice`. Release, i3, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6: before 4.6 / 5.7 / 7.9 / 9.4, now 4.9 / 6.4 / 9.0 / 10.8 (the bench switches the tornado and the worm on).
+- Unverified: how any of it sounds; Apple silicon.
+
 **Mountains: done 2026-11-14** (second of six; details in `architecture.md`, "Placed sounds: the mountains"). Against section 4.5:
 
 - Done: the avalanche as an emitter that moves down the slope with its head (new `EmitterKey::Avalanche`, spread 0.7, full bass send), the squeals at the buried animals (events, one place per squeal), the eagle (sky) and woodpecker (tree) placed at their old random pans, the yeti's stamps (bass 0.8), bellow and rumble at its emitter, the whistle drifting

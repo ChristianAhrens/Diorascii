@@ -5872,6 +5872,121 @@ TEST(the_avalanche_emitter_moves_down_the_slope_with_the_slide) {
   CHECK(std::fabs(firstX - lastX) > 0.02f);     // and across it, along the swath
 }
 
+// ------------------------------------------------------------ the desert in space ---
+
+namespace {
+/// Per-channel RMS of the last second of 4 s of the desert in `layout`, set up by `setup`.
+std::vector<double> desertRms(const Layout& layout, const std::function<void(AmbientParams&)>& setup) {
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::Desert;
+  setup(p);
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
+  std::vector<double> rms(static_cast<size_t>(ch));
+  for (int c = 0; c < ch; ++c) rms[static_cast<size_t>(c)] = channelRms(buf, ch, c);
+  return rms;
+}
+
+/// The placed sources of the desert: the tornado, the sandworm and the helicopter.
+std::vector<CitySource> desertSources() {
+  return {
+      {"tornado", [](AmbientParams& p, float x, float y) { p.tornado = 1; p.emitters[static_cast<int>(EmitterKey::Tornado)] = {1, x, y, 0.4f, 0}; }},
+      {"worm", [](AmbientParams& p, float x, float y) { p.worm = 1; p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Worm)] = {1, x, y, 0.4f, 0}; }},
+      {"helicopter", [](AmbientParams& p, float x, float y) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Chopper)] = {1, x, y, 0.4f, 0}; }},
+  };
+}
+}  // namespace
+
+TEST(the_tornado_the_worm_and_the_helicopter_are_heard_from_where_they_are_and_the_worm_rumbles_in_the_bass) {
+  const Layout layout = Layout::named(LayoutId::S5_1);  // L R C LFE Ls Rs
+  const auto calm = desertRms(layout, [](AmbientParams&) {});
+  auto added = [&](const std::vector<double>& with, int a, int b) {
+    return std::max(0.0, with[static_cast<size_t>(a)] * with[static_cast<size_t>(a)] - calm[static_cast<size_t>(a)] * calm[static_cast<size_t>(a)] +
+                             with[static_cast<size_t>(b)] * with[static_cast<size_t>(b)] - calm[static_cast<size_t>(b)] * calm[static_cast<size_t>(b)]);
+  };
+  for (const CitySource& src : desertSources()) {
+    const auto left = desertRms(layout, [&](AmbientParams& p) { src.set(p, -1.0f, 0.0f); });
+    const auto right = desertRms(layout, [&](AmbientParams& p) { src.set(p, 1.0f, 0.0f); });
+    CHECK(added(left, 0, 4) > 1.5 * added(left, 1, 5));
+    CHECK(added(right, 1, 5) > 1.5 * added(right, 0, 4));
+    const auto off = desertRms(layout, [&](AmbientParams& p) { src.set(p, -1.5f, 0.0f); });
+    CHECK(off[4] > off[0]);  // off-screen it comes from the side
+  }
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  for (const CitySource& src : desertSources()) {  // high in the air: the height speakers
+    auto heights = [&](float y) {
+      const auto rms = desertRms(l714, [&](AmbientParams& p) { src.set(p, 0.0f, y); });
+      double sum = 0;
+      for (int c = 0; c < l714.channels(); ++c) if (l714.speaker(c).elevation > 1.0f) sum += rms[static_cast<size_t>(c)] * rms[static_cast<size_t>(c)];
+      return sum;
+    };
+    CHECK(heights(1.0f) > 1.3 * heights(0.0f));
+  }
+  // The worm's growl is the deepest sound of the desert: the bass channel plays it.
+  CHECK(desertRms(layout, [](AmbientParams& p) { p.worm = 1; p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Worm)] = {1, 0, 0, 0.4f, 0}; })[3] > 3.0 * calm[3]);
+}
+
+TEST(the_tornados_spin_turns_round_its_place_where_there_are_speakers_to_turn_through) {
+  // The balance between the left and right front speakers over 50 ms windows: a roar that turns
+  // swings it, one that stands still does not.
+  auto swing = [](LayoutId id) {
+    const Layout layout = Layout::named(id);
+    Ambience a(48000, 5, layout);
+    AmbientParams p;
+    p.kind = AmbientKind::Desert;
+    p.tornado = 1;
+    p.emitters[static_cast<int>(EmitterKey::Tornado)] = {1, 0, 0, 0.4f, 0};
+    const int ch = layout.channels();
+    std::vector<float> buf(static_cast<size_t>(ch) * 2400);
+    for (int s = 0; s < 40; ++s) a.render(p, buf.data(), 2400);  // settle
+    double lo = 1e9, hi = -1e9;
+    for (int s = 0; s < 120; ++s) {  // 6 s: 17 turns
+      a.render(p, buf.data(), 2400);
+      double l = 0, r = 0;
+      for (int f = 0; f < 2400; ++f) {
+        l += static_cast<double>(buf[static_cast<size_t>(f) * ch]) * buf[static_cast<size_t>(f) * ch];
+        r += static_cast<double>(buf[static_cast<size_t>(f) * ch + 1]) * buf[static_cast<size_t>(f) * ch + 1];
+      }
+      const double balance = std::log((l + 1e-12) / (r + 1e-12));
+      lo = std::min(lo, balance);
+      hi = std::max(hi, balance);
+    }
+    return hi - lo;
+  };
+  const double stereo = swing(LayoutId::Stereo);
+  const double surround = swing(LayoutId::S5_1);
+  CHECK(surround > 1.5 * stereo);
+  CHECK(surround > 1.0);
+}
+
+TEST(a_crushed_thing_is_chewed_where_it_was_crushed_and_a_shot_comes_from_its_muzzle) {
+  const Layout layout = Layout::named(LayoutId::S5_1);
+  for (int what = 0; what < 2; ++what) {  // 0: the worm's chewing, 1: a rifle shot
+    double leftSide[2] = {}, rightSide[2] = {};
+    for (int variant = 0; variant < 2; ++variant) {  // the event says left (-1) or right (+1)
+      Ambience a(48000, 3, layout);
+      AmbientParams p;
+      p.kind = AmbientKind::Desert;
+      std::vector<float> buf(6 * 48000);
+      a.render(p, buf.data(), 24000);
+      SoundEvent e;
+      e.kind = what ? EventKind::Shot : EventKind::Crush;
+      e.x = variant ? 1.0f : -1.0f;
+      a.event(e);
+      (what ? p.shots : p.crushes) = 1;
+      a.render(p, buf.data(), 48000);
+      for (int f = 0; f < 48000; ++f) {
+        leftSide[variant] += static_cast<double>(buf[f * 6]) * buf[f * 6] + static_cast<double>(buf[f * 6 + 4]) * buf[f * 6 + 4];
+        rightSide[variant] += static_cast<double>(buf[f * 6 + 1]) * buf[f * 6 + 1] + static_cast<double>(buf[f * 6 + 5]) * buf[f * 6 + 5];
+      }
+    }
+    CHECK(leftSide[0] > 1.3 * rightSide[0]);
+    CHECK(rightSide[1] > 1.3 * leftSide[1]);
+  }
+}
+
 int main(int argc, char** argv) {
   // Developer options: print the golden table, or dump the raw samples of the golden cases to a
   // file (to compare two builds bit for bit on one machine).

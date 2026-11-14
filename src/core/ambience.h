@@ -169,7 +169,12 @@ class Ambience {
     kSlide,                       ///< the avalanche
     kBeast,                       ///< the yeti
     kSqueal0,                     ///< the three buried animals' squeals (kSqueal0 + slot)
-    kPlaceCount = kSqueal0 + 3
+    kTornado = kSqueal0 + 3,      ///< the tornado's roar
+    kWorm,                        ///< the sandworm's growl and bellow
+    kChopper,                     ///< the helicopter's rotor and whine
+    kCrunch0,                     ///< the four chewing slots of the sandworm (kCrunch0 + slot)
+    kShot0 = kCrunch0 + 4,        ///< the four rifle shots (kShot0 + slot)
+    kPlaceCount = kShot0 + 4
   };
   /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
   /// gains towards every speaker, and whether it is sounding.
@@ -202,6 +207,8 @@ class Ambience {
   void aimCity(const AmbientParams& p);
   /// Aims the mountains' places (the avalanche, the yeti and the whistle) once per render block.
   void aimMountains(const AmbientParams& p);
+  /// Aims the placed sounds of the desert (the tornado, the sandworm, the helicopter) at their emitters.
+  void aimDesert(const AmbientParams& p);
 
   /// The random generator of bed chain `chain`: chains 0 and 1 (the stereo pair) draw from the shared
   /// generator, as the synth always has; the others have their own, so that the stereo sound and
@@ -226,6 +233,9 @@ class Ambience {
   float menaceBus_[kMaxChannels] = {};          ///< the placed sounds of the second catastrophe in this sample, by chain
   float bassExtra_ = 0;                         ///< the bass sends of the placed sounds in this sample
   Source squealAt_;                             ///< where the latest squeal event happened (the next squeal starts there)
+  Source crushAt_;                              ///< where the latest crush event happened (the next chewing starts there)
+  Source shotAt_;                               ///< where the latest shot event happened (the next shot starts there)
+  bool shotFresh_ = false;                      ///< a shot event came in that no shot has used yet (else a shot is placed by its random pan)
   SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
   int pendingCount_ = 0;                        ///< how many of them
   int chains_ = 2;                              ///< how many bed chains run: one per directional speaker, at least two
@@ -336,7 +346,7 @@ class Ambience {
     float bite[kBites] = {}, force[kBites] = {};
   };
   Crunch crunches_[4];
-  float crunchLow_[2][2] = {};        ///< two low-pass stages of the crunch, per ear
+  float crunchLow_[kMaxChannels][2] = {};  ///< two low-pass stages of the crunch, per chain
   float lowCrunch_;                   ///< filter coefficient of the crunch
   /// A muffled gulp of the kraken swallowing something: two glugs in a row.
   struct Gulp {

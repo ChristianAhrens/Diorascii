@@ -256,15 +256,6 @@ Negotiation negotiate(const LayoutChoice& choice, const DeviceReport& report) {
   return n;
 }
 
-void routeChannels(const float* in, int layoutChannels, float* out, int deviceChannels, int frames, const int route[kMaxChannels]) {
-  for (int f = 0; f < frames; ++f) {
-    for (int c = 0; c < deviceChannels; ++c) out[c] = 0.0f;
-    for (int c = 0; c < layoutChannels; ++c) out[route[c]] = in[c];
-    in += layoutChannels;
-    out += deviceChannels;
-  }
-}
-
 void padChannels(const float* in, int layoutChannels, float* out, int deviceChannels, int frames) {
   for (int f = 0; f < frames; ++f) {
     for (int c = 0; c < layoutChannels; ++c) out[c] = in[c];

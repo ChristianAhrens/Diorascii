@@ -127,9 +127,15 @@ static NSString* const kHintCountKey = @"menuHintCount";
 
 /// Opens or closes the sound device to match what the session wants.
 - (void)syncSound {
-  if (_session->soundWanted() && !_audio.running() && !_audio.start()) _session->soundUnavailable();
+  if (_session->takeLayoutChange() && _audio.running()) _audio.stop();  // reopened below with the new choice
+  bool reported = false;
+  if (_session->soundWanted() && !_audio.running()) {
+    if (_audio.start(_session->layoutChoice())) reported = true;
+    else _session->soundUnavailable();
+  }
   if (!_session->soundWanted() && _audio.running()) _audio.stop();
-  if (_audio.running()) _audio.update();  // follows a change of route (the layout follows the new route)
+  if (_audio.running() && _audio.update()) reported = true;  // follows a change of route (the layout follows the new route)
+  if (reported && _audio.running()) _session->soundLayout(_audio.layout().name(), _audio.deviceChannels(), _audio.downmixed());
 }
 
 /// True while the ASCII menu is open and takes the navigation.

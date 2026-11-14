@@ -4,9 +4,6 @@
 #include "audio/audio.h"
 
 #include "core/seqlock.h"
-#ifdef __APPLE__
-#include "audio/coreaudio_layout.h"
-#endif
 
 #include <algorithm>
 #include <atomic>
@@ -44,8 +41,6 @@ struct AudioOutput::Impl {
   Layout layout;                        ///< what the synth renders to
   int deviceChannels = 2;               ///< channels the device buffer has
   bool downmixed = false;               ///< the layout has more channels than the device
-  bool routed = false;                  ///< the layout's channels go to the device channels in `route` (see Negotiation::routed)
-  int route[kMaxChannels] = {};         ///< for routed: the device channel of each layout channel
   std::atomic<bool> routeChanged{false};  ///< the device said its route changed (set on its thread)
   /// Where the synth renders when the device has more channels than the layout (more than kMaxChannels).
   float scratch[kScratchFrames * kMaxChannels];
@@ -117,17 +112,15 @@ void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   while (impl->events.pop(e)) impl->ambience.event(e);
   const int layoutChannels = impl->layout.channels();
   auto* out = static_cast<float*>(output);
-  if (!impl->routed && impl->deviceChannels == layoutChannels) {
+  if (impl->deviceChannels == layoutChannels) {
     impl->ambience.render(impl->current, out, static_cast<int>(frames));
     return;
   }
-  // The device has more channels than the synth can write, or the layout's channels go to the device channels of
-  // their positions: the other channels stay silent.
+  // The device has more channels than the synth can write: the other channels stay silent.
   while (frames > 0) {
     const int n = static_cast<int>(std::min<ma_uint32>(frames, kScratchFrames));
     impl->ambience.render(impl->current, impl->scratch, n);
-    if (impl->routed) routeChannels(impl->scratch, layoutChannels, out, impl->deviceChannels, n, impl->route);
-    else padChannels(impl->scratch, layoutChannels, out, impl->deviceChannels, n);
+    padChannels(impl->scratch, layoutChannels, out, impl->deviceChannels, n);
     out += static_cast<size_t>(n) * static_cast<size_t>(impl->deviceChannels);
     frames -= static_cast<ma_uint32>(n);
   }
@@ -162,10 +155,6 @@ DeviceReport reportOf(const AudioOutput::Impl& impl) {
   r.channels = static_cast<int>(impl.device.playback.channels);
   r.hasMap = true;
   for (int i = 0; i < r.channels && i < kMaxChannels; ++i) r.position[i] = positionOf(impl.device.playback.channelMap[i]);
-#ifdef __APPLE__
-  // miniaudio's map on macOS is an assumption (7.1, then auxiliary channels); the device's own layout is the truth.
-  readCoreAudioOutputLayout(r);
-#endif
   return r;
 }
 }  // namespace
@@ -197,10 +186,6 @@ bool AudioOutput::start(const LayoutChoice& choice) {
       LayoutChoice step = choice;
       for (;;) {
         n = negotiate(step, native);
-        if (n.routed) {  // the device's own channels carry the layout: it stays as it opens by itself
-          ok = openDevice(impl, 0, nullptr);
-          break;
-        }
         DevicePort ports[kMaxChannels];
         portsForLayout(n.layout, ports);
         ok = openDevice(impl, n.layout.channels(), ports);
@@ -210,7 +195,7 @@ bool AudioOutput::start(const LayoutChoice& choice) {
         step.id = lower;
       }
       if (!ok) ok = openDevice(impl, 0, nullptr);  // last resort: whatever the device has
-      if (ok && !n.routed && impl.device.playback.channels != static_cast<ma_uint32>(n.layout.channels())) {
+      if (ok && impl.device.playback.channels != static_cast<ma_uint32>(n.layout.channels())) {
         n = negotiate(LayoutChoice{}, reportOf(impl));  // it did not take the map: render to what it says it has
       }
     }
@@ -218,8 +203,6 @@ bool AudioOutput::start(const LayoutChoice& choice) {
       impl.layout = n.layout;
       impl.deviceChannels = static_cast<int>(impl.device.playback.channels);
       impl.downmixed = n.downmixed;
-      impl.routed = n.routed;
-      std::copy(std::begin(n.route), std::end(n.route), std::begin(impl.route));
       impl.ambience.setLayout(impl.layout);  // (the device is not started yet: nothing renders)
       ok = ma_device_start(&impl.device) == MA_SUCCESS;
       if (!ok) ma_device_uninit(&impl.device);

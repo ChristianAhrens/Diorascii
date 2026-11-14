@@ -87,6 +87,7 @@ macOS asks for confirmation (right-click, Open).
     diorascii                       # m menu, left/right scene, f action, x rare event (X: the second one), c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
+    diorascii --audio-layout 7.1.4  # render the sound to a speaker layout (default: auto, what the device has; see Speaker layouts below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
     diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full); the default is full, but terminal on the Linux text console
     diorascii --dump 100            # headless: print the scene after 100 steps
@@ -211,6 +212,27 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 | City | a steady murmur of traffic that thins out at night, cars passing by with a sinking engine note, a horn (sometimes two honks, sometimes one long blast) from time to time, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it once the fire is out), trains that rumble and beat out the regular "klack-klack, klack-klack" of the wheels over the rail joints (slower as they slow down) and sound their horn as they arrive, then fall silent at the station apart from the squeal of the brakes on the way in and the hiss of the air as they stop, a faint jet when a plane is on its approach, and the roar and crackle of a burning skyscraper. When the monsters fight, their heavy steps shake the ground and the lizard's deep bellow alternates with the winged one's shrill screech (which is gone for good once the winged one has fallen); every stream of fire has its own roaring, crackling whoosh |
 | Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble. The big meteor is a rumble in the ground that swells as it comes down, ending in the thud of the impact |
 
+### Speaker layouts
+
+The sound is rendered for the speakers your output has. By default (`--audio-layout auto`) the app asks the sound
+device what it has: on a stereo device it plays stereo, on a device with more channels (a surround receiver, a
+multichannel interface, the tvOS audio route) it renders to them, from 5.1 up to 7.1.4 and 9.1.6 with height speakers. Sounds are
+placed where they happen: a siren moves with its vehicle, a lightning strike cracks where it struck, a
+shot comes from the helicopter, bubbles rise round you, and what is far off or off-screen comes from the sides.
+The menu's *Speakers* entry (and `--audio-layout 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6`) picks a layout
+yourself; the menu's small print always says what is playing now (`Output: 7.1 on 8 channels`, or `Output: sound off`), and the Speakers entry shows what was found (`auto: 7.1`), that a layout is `(mixed down)` if the device has fewer channels than
+it, or that it stepped down (`7.1.4 > 5.1`) if the device would not open with it. Good to know:
+
+- Plain PCM over HDMI is usually limited to eight channels (7.1), so 7.1.4 and 9.1.6 reach a receiver only through a
+  multichannel interface or an Atmos-capable path; over normal HDMI `auto` gives what the device reports, typically 7.1.
+- Choosing a layout above what the device has is allowed, and the operating system or the sound server mixes it down
+  (the menu says so). On Linux a stereo device behind PulseAudio or PipeWire accepts every layout this way.
+- On macOS the layout set for the device in Audio MIDI Setup (stereo, 5.1, 7.1.4, ...) is what `auto` finds, and a layout you choose is played on the device's channels of the same positions (the system places each channel by its label), so the height speakers of a 7.1.4 device are used. A layout the device has no speakers for steps down to the richest one it has (7.1.4 on a 5.1 device plays as 5.1; the menu shows `7.1.4 > 5.1`), except on a device with just one or two channels, where the system mixes it down. macOS, tvOS and iOS hand the sound to the system as tagged multichannel PCM (AVSampleBufferAudioRenderer, the way Apple's own players do). On AirPods the system's spatial audio ("3D audio", with head tracking and its Control Center switch) then works on it: `auto` renders 7.1.4 for them. This was checked with AirPods Pro on macOS only; on tvOS and iOS, where the system says whether the route spatializes, it is not yet tried. Sound that an action starts plays about a quarter of a second late on these platforms.
+- Plain ALSA `default` is often stereo; a surround device has to be selected in the system's sound settings.
+- The layout follows a change of output while the app runs (headphones plugged in, another output chosen) where the
+  sound system reports it. The layouts were tested with measurements, not with a surround system; how it sounds in a room is
+  yet to be heard.
+
 ### Rare events
 
 Every scene has a rare catastrophe that turns up every few minutes (the first one after
@@ -272,7 +294,7 @@ hand-made Xcode project.
 The generated project serves both the simulator and devices (pick the destination in Xcode);
 configure with `-DCMAKE_OSX_SYSROOT=appletvos -DDIORASCII_APPLE_TEAM=<team id>` to sign for a device. Siri Remote: swipe left/right
 changes the scene, swipe up the time of day, swipe down the sound, click runs the scene's action,
-Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it), Menu closes
+Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it; its *Speakers* entry picks the speaker layout), Menu closes
 the menu or leaves the app.
 
 With GCC the C++ runtime is linked statically for a single-file binary when the static library

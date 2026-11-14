@@ -13,6 +13,7 @@
 #include "core/menu.h"
 #include "core/rng.h"
 #include "core/world.h"
+#include "core/negotiate.h"
 
 namespace dio {
 
@@ -42,6 +43,8 @@ class Session {
     bool info = false;
     /// Ask for ambient sound from the start.
     bool sound = false;
+    /// The speaker layout the sound is rendered to (auto: the richest one the device reports).
+    LayoutChoice audioLayout;
     /// Offer "Quit" in the menu. Frontends that are left another way (tvOS: the Menu button) turn it off.
     bool quitEntry = true;
   };
@@ -101,6 +104,15 @@ class Session {
   /// Called by the frontend when ambient sound was requested but no device could be opened:
   /// switches the request off and, if `announce`, says so on screen.
   void soundUnavailable(bool announce = true);
+  /// The speaker layout the user asked for (the command line's, or the menu's "Speakers" entry).
+  LayoutChoice layoutChoice() const { return layout_; }
+  /// True once after the user changed the layout in the menu: the frontend then opens its sound device again
+  /// with layoutChoice() (if the sound is on).
+  bool takeLayoutChange();
+  /// The frontend tells what its sound output rendered to after it opened (or reopened): the menu shows it,
+  /// for example "auto: 7.1", "7.1.4 (mixed down)" if the device has fewer channels, or "7.1.4 > 5.1" if the
+  /// layout had to step down. Switching the sound off clears it.
+  void soundLayout(const char* name, int deviceChannels, bool downmixed);
   /// What the ambient sound should reflect now (muted while paused).
   AmbientParams ambient() const;
   /// Moves the one-off sounds (with their places on the stage) that happened since the last call to the
@@ -132,6 +144,10 @@ class Session {
   void markProgress();
   /// Ends a crossfade (drops the outgoing world).
   void endFade();
+  /// Puts the speaker layout choice (and what was found) into the menu.
+  void refreshLayoutOption();
+  /// Sets the menu's small print: the layout the sound is rendered to now, the version and the copyright.
+  void updateFooter();
   /// Applies what the user changed in the open menu.
   void applyMenuEvents();
 
@@ -180,6 +196,14 @@ class Session {
   bool info_;
   /// Sound requested.
   bool sound_ = false;
+  /// The speaker layout asked for.
+  LayoutChoice layout_;
+  /// The layout changed in the menu and the frontend has not taken it yet.
+  bool layoutChanged_ = false;
+  /// What the sound output found, as shown in the menu (empty until it reports).
+  std::string layoutDetail_;
+  /// The layout the sound is rendered to right now, as a line of the menu's small print (empty while there is no sound).
+  std::string outputLine_;
   /// Quit requested.
   bool quit_ = false;
   /// A scene switch, restart or resize wants a new world.

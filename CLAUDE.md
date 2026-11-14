@@ -21,7 +21,7 @@ is in [docs/ai/](docs/ai/README.md).
    never on a tag or release commit; keep a backup branch and verify the tree is unchanged.
 6. **The core stays headless and I/O-free**: no terminal, audio-device, clock or file access in
    `src/core`. Frontends feed it abstract `Action`s and read back a `Frame`.
-7. **The terminal build keeps zero dependencies** (miniaudio is vendored, playback only). Do not
+7. **The terminal build keeps zero dependencies** (miniaudio is vendored, playback only, on Windows and Linux; Apple platforms use the system's AVSampleBufferAudioRenderer). Do not
    add libraries to the terminal path.
 8. **All code you add must be commented (Doxygen on every declaration), and all existing
    documentation must be updated in the same change whenever code changes** (README, CHANGELOG,
@@ -39,12 +39,13 @@ is in [docs/ai/](docs/ai/README.md).
     scripts/package-macos.sh 1.2.3      # macOS DMG; signs+notarizes locally, ad-hoc on CI
     scripts/release-notes.sh Unreleased # preview the next GitHub release text
     scripts/bench-audio.sh              # CPU cost of the ambient synth per scene and speaker layout
+    build/<preset>/src/diorascii --audio-layout 7.1.4   # speaker layout of the sound (auto by default)
 
 ## Where things are
 
     src/core    simulation, frame buffer, menu, ambient-sound synth, speaker layouts and panning, lock-free thread hand-over, stage positions of sounds, placed sounds (headless, deterministic per seed)
     src/term    VT/ANSI encoder + posix/windows terminal backends
-    src/audio   miniaudio playback wrapper (opens the device with the layout the negotiation in src/core/negotiate.* chose; on macOS reads the device's own channel layout, since miniaudio assumes one)
+    src/audio   playback wrapper: AVSampleBufferAudioRenderer on macOS, tvOS and iOS (hands the system tagged multichannel PCM; it places the channels and spatializes on AirPods), miniaudio on Windows and Linux; both use the layout the negotiation in src/core/negotiate.* chose
     src/app     Session (shared interactive state, no I/O) + command line and terminal loop
     assets/     *.sprite and *.scene data, embedded into the binary at build time
     tests/      one dependency-free test file

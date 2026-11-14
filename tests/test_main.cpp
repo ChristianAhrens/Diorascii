@@ -3214,6 +3214,60 @@ TEST(session_pause_freezes_the_world_and_mutes_the_sound_and_style_changes_ask_f
   CHECK(s.style() == before);  // three styles, then back
 }
 
+TEST(session_speaker_layout_comes_from_the_command_line_and_the_menu_and_shows_what_was_found) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  CHECK(LayoutChoice::parse("5.1", config.audioLayout));
+  Session s = makeSession(pack, config);
+  CHECK(!s.layoutChoice().automatic && std::string(s.layoutChoice().name()) == "5.1");
+  CHECK(s.menu().footer().size() == 3 && s.menu().footer()[0] == "Output: sound off");  // the layout in use is in the menu's small print
+  CHECK(!s.takeLayoutChange());  // the command line's choice is where it starts, not a change
+  CHECK(s.menu().optionText("layout") == "5.1");
+  // The menu cycles through auto and the named layouts, in order, and reports each change once.
+  s.handle(Action::Menu);
+  for (int i = 0; i < 6; ++i) s.handle(Action::Down);  // scene, style, mode, time, info, sound, then speakers
+  s.handle(Action::Right);
+  CHECK(std::string(s.layoutChoice().name()) == "7.1" && s.takeLayoutChange() && !s.takeLayoutChange());
+  std::string seen;
+  Session fresh = makeSession(pack);
+  CHECK(fresh.layoutChoice().automatic && fresh.menu().optionText("layout") == "auto");
+  fresh.handle(Action::Menu);
+  for (int i = 0; i < 6; ++i) fresh.handle(Action::Down);
+  for (int i = 0; i < 10; ++i) {  // all ten, and back to auto
+    seen += std::string(fresh.layoutChoice().name()) + " ";
+    fresh.handle(Action::Right);
+    CHECK(fresh.takeLayoutChange());
+  }
+  CHECK(seen == "auto 2.0 5.1 7.1 5.1.2 5.1.4 7.1.2 7.1.4 9.1.4 9.1.6 ");
+  CHECK(fresh.layoutChoice().automatic);
+  fresh.handle(Action::Left);  // and backwards
+  CHECK(std::string(fresh.layoutChoice().name()) == "9.1.6");
+  // What the sound output found is shown in the menu text.
+  fresh.handle(Action::Menu);  // closes the menu
+  fresh.handle(Action::Audio);  // sound on
+  fresh.soundLayout("9.1.6", 16, false);
+  CHECK(fresh.menu().optionText("layout") == "9.1.6");
+  CHECK(fresh.menu().footer()[0] == "Output: 9.1.6 on 16 channels");
+  fresh.soundLayout("9.1.6", 2, true);
+  CHECK(fresh.menu().optionText("layout") == "9.1.6 (mixed down)");
+  CHECK(fresh.menu().footer()[0] == "Output: 9.1.6 on 2 channels (mixed down)");
+  fresh.soundLayout("7.1.4", 12, false);
+  CHECK(fresh.menu().optionText("layout") == "9.1.6 > 7.1.4");  // it stepped down
+  CHECK(fresh.menu().footer()[0] == "Output: 7.1.4 on 12 channels");  // and the line says what is playing
+  fresh.handle(Action::Audio);  // sound off: nothing is found any more
+  CHECK(fresh.menu().optionText("layout") == "9.1.6");
+  CHECK(fresh.menu().footer()[0] == "Output: sound off" && fresh.menu().footer().size() == 3);
+  Session automatic = makeSession(pack);
+  automatic.handle(Action::Audio);
+  automatic.soundLayout("7.1", 8, false);
+  CHECK(automatic.menu().optionText("layout") == "auto: 7.1");
+  automatic.soundLayout("custom", 3, false);
+  CHECK(automatic.menu().optionText("layout") == "auto: 3 channels");
+  CHECK(automatic.menu().footer()[0] == "Output: custom map on 3 channels");
+  automatic.soundLayout("2.0", 1, false);
+  CHECK(automatic.menu().footer()[0] == "Output: 2.0 on 1 channel");
+}
+
 TEST(session_sound_is_a_request_the_frontend_can_refuse) {
   AssetPack pack = AssetPack::embedded();
   Session s = makeSession(pack);
@@ -6790,16 +6844,6 @@ TEST(a_named_layout_on_a_device_with_an_exact_map_is_routed_to_the_channels_of_i
   assumed.exact = false;
   n = negotiate(c, assumed);
   CHECK(!n.routed && n.reopen && n.deviceChannels == 12);
-}
-
-TEST(routing_writes_each_layout_channel_to_its_device_channel_and_leaves_the_others_silent) {
-  const float in[2 * 3] = {1, 2, 3, 4, 5, 6};  // two frames of three channels
-  const int route[kMaxChannels] = {4, 0, 2};
-  float out[2 * 5];
-  std::fill(out, out + 10, 9.0f);
-  routeChannels(in, 3, out, 5, 2, route);
-  const float expect[10] = {2, 0, 3, 0, 1, 5, 0, 6, 0, 4};
-  for (int i = 0; i < 10; ++i) CHECK(out[i] == expect[i]);
 }
 
 TEST(a_device_with_more_channels_than_the_synth_has_gets_silence_in_the_rest) {

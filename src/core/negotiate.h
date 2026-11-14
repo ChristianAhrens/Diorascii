@@ -115,11 +115,6 @@ struct Negotiation {
 /// with the layout's map as for any device without an exact map and left to the system to mix down.
 Negotiation negotiate(const LayoutChoice& choice, const DeviceReport& report);
 
-/// Writes `frames` interleaved frames of `layoutChannels` channels into frames of `deviceChannels` channels:
-/// channel `c` of the layout goes to channel `route[c]` of the device and every other device channel is silent.
-/// `route` has `layoutChannels` entries, all below `deviceChannels` and none twice (what negotiate() hands out).
-void routeChannels(const float* in, int layoutChannels, float* out, int deviceChannels, int frames, const int route[kMaxChannels]);
-
 /// Copies `frames` interleaved frames of `layoutChannels` channels into frames of `deviceChannels` channels
 /// (at least as many): the extra channels of a device with more speakers than the synth has are silent.
 void padChannels(const float* in, int layoutChannels, float* out, int deviceChannels, int frames);

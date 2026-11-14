@@ -10,6 +10,14 @@ string(REGEX REPLACE "([.+])" "\\\\\\1" DIORASCII_VERSION_REGEX "${DIORASCII_VER
 set_tests_properties(diorascii_reports_version PROPERTIES
   PASS_REGULAR_EXPRESSION "^diorascii ${DIORASCII_VERSION_REGEX}")
 
+# The speaker layout option: a known layout is accepted, anything else is an error.
+add_test(NAME diorascii_accepts_an_audio_layout COMMAND diorascii --audio-layout 7.1.4 --dump 1 --scene forest)
+add_test(NAME diorascii_accepts_audio_layout_auto COMMAND diorascii --audio-layout auto --dump 1 --scene forest)
+add_test(NAME diorascii_rejects_an_unknown_audio_layout COMMAND diorascii --audio-layout 7.1.3 --dump 1 --scene forest)
+set_tests_properties(diorascii_rejects_an_unknown_audio_layout PROPERTIES WILL_FAIL TRUE)
+add_test(NAME diorascii_rejects_an_audio_layout_without_a_value COMMAND diorascii --audio-layout)
+set_tests_properties(diorascii_rejects_an_audio_layout_without_a_value PROPERTIES WILL_FAIL TRUE)
+
 # Not a test: CPU cost of the ambient synth per scene and layout (run by scripts/bench-audio.sh).
 add_executable(diorascii_bench_audio bench_audio.cpp)
 target_link_libraries(diorascii_bench_audio PRIVATE diorascii_core)

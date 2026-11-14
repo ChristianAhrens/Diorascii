@@ -30,7 +30,7 @@ for the OS renderers; this document is about the app's own objects leaving the p
                                                                    4. LFE = low-pass(sum of chains) + bass sends
                                                                    5. feed_[] / routeGain_ -> interleaved frame
                                                                       of layout.channels() (<= kMaxChannels = 16)
-                                                          miniaudio device opened with the Layout chosen by negotiate.*
+                                                          audio device (AVSampleBufferAudioRenderer on Apple, miniaudio elsewhere) opened with the Layout chosen by negotiate.*
 
 ## 2. What already helps
 
@@ -60,9 +60,9 @@ for the OS renderers; this document is about the app's own objects leaving the p
    gain and no stable object index; `PlaceId` is an internal enum and some ids are transient slots (`kBubble0 + i`).
 4. **The output side knows only a `Layout`.** One interleaved buffer of speaker positions, at most 16 channels. There is no
    output channel whose role is "object slot N"; `padChannels` only pads with silence; `negotiate.*` builds a layout from
-   the device, not a channel plan. (Since 2026-11-17 a first piece of a channel plan exists: on macOS a named layout is
-   *routed* to the device channels of the same positions, `Negotiation::routed` / `route[]` / `routeChannels()`, see F-26;
-   it is layout channel to device channel only, with no roles.)
+   the device, not a channel plan. (Since 2026-11-17 a first piece of a channel plan exists: on macOS, tvOS and iOS the
+   engine places a named layout on the device channels of the same positions (`Negotiation::routed` / `route[]` say where,
+   see F-26); it is layout channel to device channel only, with no roles.)
 5. **No sample clock in the metadata.** `Ambience::t_` counts seconds rendered, but nothing ties a metadata message to an
    audio frame position.
 

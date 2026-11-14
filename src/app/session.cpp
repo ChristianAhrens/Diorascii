@@ -15,6 +15,16 @@ namespace dio {
 
 namespace {
 
+/// The names the speaker layout choice is shown with in the menu: auto, then the layouts in LayoutId order.
+std::vector<std::string> layoutNames() {
+  std::vector<std::string> names = {"auto"};
+  for (int i = 0; i < kLayoutCount; ++i) names.push_back(Layout::nameOf(static_cast<LayoutId>(i)));
+  return names;
+}
+
+/// The menu index of a layout choice.
+size_t layoutIndex(const LayoutChoice& c) { return c.automatic ? 0 : 1 + static_cast<size_t>(c.id); }
+
 /// Menu text for a render style.
 const char* styleName(Style s) {
   return s == Style::Full ? "Full color" : s == Style::Terminal ? "Terminal colors" : "Monochrome";
@@ -58,7 +68,8 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
       carriedPhase_(config.hour >= 0 ? config.hour / 24.0 : -1),
       rng_(config.seed ^ 0x5eed5eedULL),
       menu_("DIORASCII"),
-      info_(config.info) {
+      info_(config.info),
+      layout_(config.audioLayout) {
   std::vector<std::string> titles;
   titles.reserve(scenes_.size());
   std::transform(scenes_.begin(), scenes_.end(), std::back_inserter(titles), [](const auto& sc) { return sc->title; });
@@ -71,12 +82,13 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
                   scenes_[sceneIdx_]->dayNight ? static_cast<size_t>(timeMode_) : 0);
   menu_.addChoice("info", "Info line", {"off", "on"}, info_ ? 1 : 0);
   menu_.addChoice("audio", "Sound", {"off", "on"}, 0);
+  menu_.addChoice("layout", "Speakers", layoutNames(), layoutIndex(layout_));
   menu_.addButton("action", scenes_[sceneIdx_]->action.label);
   menu_.addButton("rare", "Rare event");
   menu_.addButton("rare2", "Other rare event");
   menu_.addButton("resume", "Resume");
   if (config.quitEntry) menu_.addButton("quit", "Quit");
-  menu_.setFooter({"diorascii " DIORASCII_VERSION, "Copyright (c) 2026 Christian Ahrens"});
+  updateFooter();
   rebuild();
   toast(scenes_[sceneIdx_]->title, 2.0);
   if (config.sound) setSound(true);
@@ -123,6 +135,45 @@ void Session::switchScene(size_t idx) {
 void Session::setSound(bool on) {
   sound_ = on;
   menu_.setValue("audio", on ? 1 : 0);
+  if (!on && (!layoutDetail_.empty() || !outputLine_.empty())) {  // with the sound off nothing has been found
+    layoutDetail_.clear();
+    outputLine_.clear();
+    refreshLayoutOption();
+    updateFooter();
+  }
+}
+
+void Session::updateFooter() {
+  std::vector<std::string> lines;
+  lines.push_back(outputLine_.empty() ? "Output: sound off" : outputLine_);
+  lines.push_back("diorascii " DIORASCII_VERSION);
+  lines.push_back("Copyright (c) 2026 Christian Ahrens");
+  menu_.setFooter(std::move(lines));
+}
+
+void Session::refreshLayoutOption() {
+  std::vector<std::string> names = layoutNames();
+  const size_t at = layoutIndex(layout_);
+  if (!layoutDetail_.empty()) names[at] = layoutDetail_;
+  menu_.setOptions("layout", names, at);
+}
+
+bool Session::takeLayoutChange() {
+  const bool changed = layoutChanged_;
+  layoutChanged_ = false;
+  return changed;
+}
+
+void Session::soundLayout(const char* name, int deviceChannels, bool downmixed) {
+  const std::string found = std::string(name) == "custom" ? std::to_string(deviceChannels) + " channels" : name;
+  if (layout_.automatic) layoutDetail_ = "auto: " + found;
+  else if (found != layout_.name()) layoutDetail_ = std::string(layout_.name()) + " > " + found;  // it stepped down
+  else layoutDetail_ = found + (downmixed ? " (mixed down)" : "");
+  // The layout in use, whatever was asked for: for example "Output: 7.1 on 8 channels" or "Output: 7.1.4 on 2 channels (mixed down)".
+  outputLine_ = "Output: " + std::string(std::string(name) == "custom" ? "custom map" : name) + " on " + std::to_string(deviceChannels) +
+                (deviceChannels == 1 ? " channel" : " channels") + (downmixed ? " (mixed down)" : "");
+  refreshLayoutOption();
+  updateFooter();
 }
 
 void Session::soundUnavailable(bool announce) {
@@ -253,6 +304,13 @@ void Session::applyMenuEvents() {
     }
     else if (ev.id == "info") info_ = ev.value == 1;
     else if (ev.id == "audio") setSound(ev.value == 1);
+    else if (ev.id == "layout") {  // 0 is auto, then the named layouts
+      layout_.automatic = ev.value == 0;
+      if (ev.value > 0) layout_.id = static_cast<LayoutId>(ev.value - 1);
+      layoutDetail_.clear();
+      refreshLayoutOption();
+      layoutChanged_ = true;
+    }
     else if (ev.id == "action") { setCycle(false); flush(); runAction(); }
     else if (ev.id == "rare") { setCycle(false); flush(); world_->triggerRare(); }
     else if (ev.id == "rare2") { setCycle(false); flush(); world_->triggerRare(RarePick::Other); }

@@ -23,7 +23,7 @@ operating system spatialize it where it can.
 
 - Channel-based multichannel output: 2.0, 5.1, 7.1, 5.1.2, 5.1.4, 7.1.2, 7.1.4, 9.1.4 and 9.1.6,
   plus whatever channel map a device reports.
-- Multichannel over HDMI (terminal builds through miniaudio, tvOS through AVAudioEngine).
+- Multichannel over HDMI (terminal builds through miniaudio, macOS, tvOS and iOS through AVSampleBufferAudioRenderer).
 - Spatial audio on AirPods through the operating system's own spatializer, fed with a multichannel
   stream (tvOS first; macOS to be explored).
 - Sounds that come from where their sprites are, instead of from random pans or the centre.
@@ -709,6 +709,9 @@ converts the scene's sounds per section 4, re-baselines that scene's golden hash
 
 ### Phase 8 – Controls, docs and release notes (S)
 
+**Done 2026-11-14.** `--audio-layout` (`auto` by default, or a layout name; anything else is a usage error), the menu entry *Speakers* (10 options: auto and the nine layouts; the entry shows what the output found: `auto: 7.1`, `7.1.4 (mixed down)`, `7.1.4 > 5.1`, `auto: 3 channels` for a custom map; switching the sound off clears it), `Session::layoutChoice()`, `takeLayoutChange()` and `soundLayout()` shared by the terminal and tvOS frontends, which reopen the output on a change and report what it found. The choice is per session (the app stores no settings between runs). README (new section "Speaker layouts" with the HDMI eight-channel caveat, the downmix label, the ALSA note), `CHANGELOG.md`, `CLAUDE.md`. Tests: one `Session` test (the command line's choice, the full menu cycle both ways, the change reported once, the found text for each case, cleared with the sound) and four ctest runs of the option (`auto` and a layout accepted, an unknown one and a missing value rejected). Mutations: all eight caught (the off-by-one of the event index by a crash of the test). Not verified: the menu on the Apple TV (same core menu, the tvOS file is not compiled here). No key binding was added: the plan asks for the option and the menu only.
+
+
 - `--audio-layout`, menu entry, tvOS menu entry; `Session` tests for the key/menu, as for the `X` key.
 - `README.md` (options, sound section, the HDMI PCM channel caveat), `CHANGELOG.md`, `docs/ai/*`,
   `CLAUDE.md` if a command or rule changes, new finding(s) for the open points below.
@@ -787,6 +790,7 @@ speakers, receivers and AirPods needs ears (section 10).
 4. **macOS AirPods and Atmos path.** If the spike shows the terminal build gets only stereo on
    AirPods, is an AVAudioEngine backend for macOS (system frameworks, but a new path next to
    miniaudio) acceptable, or does the terminal build stay miniaudio-only with phase 9?
+   **Answered 2026-11-17 (F-26):** a plain CoreAudio app (miniaudio) and a tagged AVAudioEngine output both get no 3D audio on AirPods Pro; `AVSampleBufferAudioRenderer` does, so macOS, tvOS and iOS use it.
 5. **Hardware** for phase 0: which Apple TV, receiver or soundbar, display, and AirPods.
 6. **Settings persistence.** Is the audio layout remembered between runs?
 7. **Bed density (rev. 2026-11-13).** Independent chain per speaker everywhere (best immersion,

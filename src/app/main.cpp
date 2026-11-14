@@ -58,6 +58,8 @@ struct Options {
   bool audio = false;
   /// Start without ambient sound (--mute).
   bool mute = false;
+  /// Speaker layout of the sound (--audio-layout).
+  LayoutChoice audioLayout;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
@@ -81,6 +83,7 @@ void usage() {
       "  --256            force 256-color\n"
       "  --audio          ambient sound is on by default; with --audio a missing device is reported\n"
       "  --mute           start without ambient sound (a toggles it)\n"
+      "  --audio-layout L speaker layout of the sound: auto (default) | 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6\n"
       "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
@@ -129,6 +132,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--console") o.forceConsole = true;
     else if (a == "--audio") o.audio = true;
     else if (a == "--mute") o.mute = true;
+    else if (a == "--audio-layout") { const char* v = next(); if (!v || !LayoutChoice::parse(v, o.audioLayout)) return false; }
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -234,6 +238,7 @@ int main(int argc, char** argv) {
   config.realtime = opt.realtime;
   config.cycle = !opt.user;
   config.sound = !opt.mute;
+  config.audioLayout = opt.audioLayout;
   Session session(pack, scenes, config, w, h);
 
   using clock = std::chrono::steady_clock;
@@ -249,11 +254,15 @@ int main(int argc, char** argv) {
   std::vector<SoundEvent> soundEvents;  // the one-off sounds of one frame
   bool startup = true;
   auto syncSound = [&]() {
-    if (session.soundWanted() && !audio.running() && !audio.start()) {
-      session.soundUnavailable(!startup || opt.audio);
+    if (session.takeLayoutChange() && audio.running()) audio.stop();  // reopened below with the new choice
+    bool reported = false;
+    if (session.soundWanted() && !audio.running()) {
+      if (audio.start(session.layoutChoice())) reported = true;
+      else session.soundUnavailable(!startup || opt.audio);
     }
     if (!session.soundWanted() && audio.running()) audio.stop();
-    if (audio.running()) audio.update();  // follows a change of route (the layout follows the new device)
+    if (audio.running() && audio.update()) reported = true;  // follows a change of route (the layout follows the new device)
+    if (reported && audio.running()) session.soundLayout(audio.layout().name(), audio.deviceChannels(), audio.downmixed());
     startup = false;
   };
   syncSound();

@@ -44,7 +44,7 @@ is in [docs/ai/](docs/ai/README.md).
 
     src/core    simulation, frame buffer, menu, ambient-sound synth, speaker layouts and panning, lock-free thread hand-over, stage positions of sounds, placed sounds (headless, deterministic per seed)
     src/term    VT/ANSI encoder + posix/windows terminal backends
-    src/audio   miniaudio playback wrapper
+    src/audio   miniaudio playback wrapper (opens the device with the layout the negotiation in src/core/negotiate.* chose; on macOS reads the device's own channel layout, since miniaudio assumes one)
     src/app     Session (shared interactive state, no I/O) + command line and terminal loop
     assets/     *.sprite and *.scene data, embedded into the binary at build time
     tests/      one dependency-free test file

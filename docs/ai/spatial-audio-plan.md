@@ -685,6 +685,15 @@ converts the scene's sounds per section 4, re-baselines that scene's golden hash
 
 ### Phase 7 – Backends (M each, can be developed in parallel after phase 4)
 
+**7a miniaudio: done 2026-11-14** (details in `architecture.md`, "Layout negotiation and the miniaudio backend").
+
+- Done: the pure negotiation (`src/core/negotiate.*`: choice, device report, step-down, canonical ports, channel padding), the backend that uses it (`AudioOutput::start(choice)`, `layout()`, `deviceChannels()`, `downmixed()`, `update()` for route changes), the main loop calling `update()`. The default is `auto`: on a surround device the synth now renders surround without any option.
+- **Tests** (7 new): the choice parser, positions to angles, the ports (with the auxiliary channels in order and no two alike), a map to a layout (every layout with standard positions comes back as itself), a count to a layout, a named choice and the downmix label, the step-down chain, the padding. Mutations: caught: the richest-layout thresholds, the step-down of 7.1 and of 9.1.4, the downmix test, the auxiliary numbering, the order check of a map, the zero padding, the back-left angle, the reopen flags, the side port; the off-by-one of the downmix label survived the first run and now has a test (a layout with exactly as many channels as the device is not downmixed).
+- **Measured here**: `auto` gives 2.0 on this stereo PulseAudio device and each explicit layout opens and is labelled downmixed, as F-24 said it would.
+- **Not verified**: everything that needs a real surround device or another backend (see `architecture.md`); the device's own channel order for an unnamed map (the synth uses the device's angles); that `AUX` channels reach speakers.
+- **Not done**: the options and menu (phase 8), the Apple backend (7b).
+
+
 - 7a miniaudio: device query, layout negotiation with step-down, channel-map mapping, fallbacks,
   stderr silencing kept; manual open test against whatever hardware exists.
 - 7b Apple: multichannel source node and layout, session configuration, route-change handling,

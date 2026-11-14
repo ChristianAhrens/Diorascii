@@ -26,6 +26,7 @@ add_library(diorascii_core STATIC
   core/disasters.cpp
   core/ambience.cpp
   core/layout.cpp
+  core/negotiate.cpp
   core/spatializer.cpp
   "${EMBED_CPP}")
 target_include_directories(diorascii_core PUBLIC
@@ -63,6 +64,9 @@ else()
 
   add_library(diorascii_audio STATIC audio/audio.cpp)
   target_link_libraries(diorascii_audio PUBLIC diorascii_core PRIVATE diorascii_miniaudio)
+  if(APPLE)  # the channel layout of the output device, which miniaudio does not read (see audio/coreaudio_layout.h)
+    target_sources(diorascii_audio PRIVATE audio/coreaudio_layout.cpp)
+  endif()
 endif()
 diorascii_warnings(diorascii_audio)
 

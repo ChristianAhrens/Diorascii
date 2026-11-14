@@ -253,6 +253,7 @@ int main(int argc, char** argv) {
       session.soundUnavailable(!startup || opt.audio);
     }
     if (!session.soundWanted() && audio.running()) audio.stop();
+    if (audio.running()) audio.update();  // follows a change of route (the layout follows the new device)
     startup = false;
   };
   syncSound();

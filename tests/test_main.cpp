@@ -17,6 +17,7 @@
 #include "core/seqlock.h"
 #include "core/assets.h"
 #include "core/layout.h"
+#include "core/negotiate.h"
 #include "core/menu.h"
 #include "core/spatializer.h"
 #include "version.h"
@@ -6496,6 +6497,345 @@ TEST(the_meteor_emitter_comes_down_from_the_sky_with_the_falling_meteor) {
     lastY = e.y;
   }
   CHECK(firstY > 0.8f && lastY < 0.4f);  // from high in the sky to low
+}
+
+// ------------------------------------------------------------ layout negotiation ---
+
+namespace {
+/// A device report with a map.
+DeviceReport mapReport(std::initializer_list<DevicePosition> positions, int channels = -1) {
+  DeviceReport r;
+  r.hasMap = true;
+  r.channels = channels < 0 ? static_cast<int>(positions.size()) : channels;
+  int i = 0;
+  for (DevicePosition p : positions)
+    if (i < kMaxChannels) r.position[i++] = p;
+  return r;
+}
+
+/// A device report that is only a count.
+DeviceReport countReport(int channels) {
+  DeviceReport r;
+  r.channels = channels;
+  return r;
+}
+}  // namespace
+
+TEST(a_layout_choice_is_auto_or_a_layout_name) {
+  LayoutChoice c;
+  CHECK(LayoutChoice::parse("auto", c) && c.automatic && std::string(c.name()) == "auto");
+  for (const char* name : {"2.0", "5.1", "7.1", "5.1.2", "5.1.4", "7.1.2", "7.1.4", "9.1.4", "9.1.6"}) {
+    CHECK(LayoutChoice::parse(name, c) && !c.automatic && std::string(c.name()) == name);
+  }
+  c = LayoutChoice{};
+  CHECK(!LayoutChoice::parse("7.1.3", c) && !LayoutChoice::parse("", c) && !LayoutChoice::parse("stereo", c) && c.automatic);
+}
+
+TEST(device_positions_become_angles_and_the_auxiliary_ones_stay_silent) {
+  CHECK(deviceChannelFor(DevicePosition::FrontLeft).azimuth == -30.0f && deviceChannelFor(DevicePosition::FrontRight).azimuth == 30.0f);
+  CHECK(deviceChannelFor(DevicePosition::SideRight).azimuth == 90.0f && deviceChannelFor(DevicePosition::BackLeft).azimuth == -135.0f);
+  CHECK(deviceChannelFor(DevicePosition::TopFrontLeft).elevation == 45.0f && deviceChannelFor(DevicePosition::TopBackRight).azimuth == 135.0f);
+  CHECK(deviceChannelFor(DevicePosition::Lfe).lfe);
+  CHECK(!deviceChannelFor(DevicePosition::Aux).known && !deviceChannelFor(DevicePosition::None).known);
+  CHECK(deviceChannelFor(DevicePosition::BackCenter).azimuth == 180.0f && deviceChannelFor(DevicePosition::TopCenter).elevation == 90.0f);
+}
+
+TEST(a_layouts_ports_are_standard_positions_with_the_auxiliary_channels_in_order) {
+  DevicePort ports[kMaxChannels];
+  portsForLayout(Layout::named(LayoutId::S7_1_4), ports);
+  const DevicePosition expect714[12] = {DevicePosition::FrontLeft, DevicePosition::FrontRight, DevicePosition::FrontCenter, DevicePosition::Lfe,
+                                        DevicePosition::SideLeft, DevicePosition::SideRight, DevicePosition::BackLeft, DevicePosition::BackRight,
+                                        DevicePosition::TopFrontLeft, DevicePosition::TopFrontRight, DevicePosition::TopBackLeft, DevicePosition::TopBackRight};
+  for (int i = 0; i < 12; ++i) CHECK(ports[i].position == expect714[i]);
+  // The wide and top-middle pairs have no standard position: they take the auxiliary channels in order.
+  portsForLayout(Layout::named(LayoutId::S9_1_6), ports);
+  int aux = 0;
+  for (int i = 0; i < 16; ++i) {
+    if (ports[i].position != DevicePosition::Aux) continue;
+    CHECK(ports[i].aux == aux++);
+    const Channel c = Layout::named(LayoutId::S9_1_6).speaker(i).channel;
+    CHECK(c == Channel::Lw || c == Channel::Rw || c == Channel::Ltm || c == Channel::Rtm);
+  }
+  CHECK(aux == 4);
+  portsForLayout(Layout::named(LayoutId::S7_1_2), ports);
+  int found = 0;
+  for (int i = 0; i < 10; ++i) found += ports[i].position == DevicePosition::Aux ? 1 : 0;
+  CHECK(found == 2 && ports[8].aux == 0 && ports[9].aux == 1);
+  // No two channels of a layout share a port.
+  for (int id = 0; id < kLayoutCount; ++id) {
+    const Layout l = Layout::named(static_cast<LayoutId>(id));
+    portsForLayout(l, ports);
+    for (int i = 0; i < l.channels(); ++i)
+      for (int j = i + 1; j < l.channels(); ++j) CHECK(!(ports[i].position == ports[j].position && ports[i].aux == ports[j].aux));
+  }
+}
+
+TEST(a_device_that_reports_a_map_is_rendered_to_its_own_layout) {
+  // Stereo, and 5.1 and 7.1.4 in the canonical order: the named layout.
+  Negotiation n = negotiate(LayoutChoice{}, mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight}));
+  CHECK(std::string(n.layout.name()) == "2.0" && n.deviceChannels == 2 && !n.reopen && !n.downmixed);
+  n = negotiate(LayoutChoice{}, mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight, DevicePosition::FrontCenter, DevicePosition::Lfe,
+                                           DevicePosition::SideLeft, DevicePosition::SideRight}));
+  CHECK(std::string(n.layout.name()) == "5.1" && n.deviceChannels == 6 && !n.reopen);
+  // Every layout that has standard positions only comes back as itself, built from its own ports.
+  for (int id = 0; id < kLayoutCount; ++id) {
+    const Layout l = Layout::named(static_cast<LayoutId>(id));
+    DevicePort ports[kMaxChannels];
+    portsForLayout(l, ports);
+    DeviceReport r;
+    r.hasMap = true;
+    r.channels = l.channels();
+    bool standard = true;
+    for (int i = 0; i < l.channels(); ++i) {
+      r.position[i] = ports[i].position;
+      standard = standard && ports[i].position != DevicePosition::Aux;
+    }
+    if (!standard) continue;  // (the wide and top-middle channels are known only to the device)
+    const Negotiation back = negotiate(LayoutChoice{}, r);
+    CHECK(std::string(back.layout.name()) == l.name());
+  }
+  // A map in another order (the usual 5.1 of a PC: back channels, not sides) is its own layout, in the device's order.
+  n = negotiate(LayoutChoice{}, mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight, DevicePosition::FrontCenter, DevicePosition::Lfe,
+                                           DevicePosition::BackLeft, DevicePosition::BackRight}));
+  CHECK(std::string(n.layout.name()) == "custom" && n.layout.channels() == 6 && n.layout.lfeIndex() == 3);
+  CHECK(n.layout.speaker(4).azimuth == -135.0f && n.layout.speaker(5).azimuth == 135.0f && n.layout.speaker(4).channel == Channel::Lrs);
+  // One channel is one speaker.
+  n = negotiate(LayoutChoice{}, mapReport({DevicePosition::Mono}));
+  CHECK(n.layout.channels() == 1 && n.deviceChannels == 1);
+  // More channels than the synth has: the first sixteen are used, the rest stays silent.
+  DeviceReport big = mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight}, 20);
+  for (int i = 2; i < kMaxChannels; ++i) big.position[i] = DevicePosition::Aux;
+  n = negotiate(LayoutChoice{}, big);
+  CHECK(n.layout.channels() == kMaxChannels && n.deviceChannels == 20);
+  CHECK(n.layout.speaker(3).channel == Channel::None);  // an auxiliary channel of unknown place is silent
+}
+
+TEST(a_device_that_reports_only_a_count_gets_the_richest_standard_layout_that_fits) {
+  const struct { int channels; const char* name; } cases[] = {{2, "2.0"}, {3, "2.0"}, {5, "2.0"}, {6, "5.1"}, {7, "5.1"}, {8, "7.1"}, {10, "7.1"},
+                                                              {12, "7.1.4"}, {14, "7.1.4"}, {16, "9.1.6"}, {32, "9.1.6"}};
+  for (const auto& c : cases) {
+    const Negotiation n = negotiate(LayoutChoice{}, countReport(c.channels));
+    CHECK(std::string(n.layout.name()) == c.name);
+    CHECK(n.reopen && n.deviceChannels == n.layout.channels() && !n.downmixed);  // it is opened with our own count and map
+  }
+  CHECK(negotiate(LayoutChoice{}, countReport(1)).layout.channels() == 1);
+}
+
+TEST(a_named_choice_is_rendered_as_asked_and_labelled_when_the_device_cannot_play_it) {
+  LayoutChoice c;
+  CHECK(LayoutChoice::parse("7.1.4", c));
+  Negotiation n = negotiate(c, mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight}));
+  CHECK(std::string(n.layout.name()) == "7.1.4" && n.deviceChannels == 12 && n.reopen && n.downmixed);
+  DeviceReport sixteen = countReport(16);
+  n = negotiate(c, sixteen);
+  CHECK(std::string(n.layout.name()) == "7.1.4" && n.deviceChannels == 12 && !n.downmixed);
+  CHECK(LayoutChoice::parse("5.1", c));
+  n = negotiate(c, countReport(6));  // exactly as many channels as the device has: not downmixed
+  CHECK(std::string(n.layout.name()) == "5.1" && n.deviceChannels == 6 && !n.downmixed);
+  n = negotiate(c, countReport(5));
+  CHECK(n.downmixed);
+  CHECK(LayoutChoice::parse("2.0", c));
+  n = negotiate(c, countReport(8));  // stereo on a surround device: asked for, so stereo
+  CHECK(std::string(n.layout.name()) == "2.0" && n.deviceChannels == 2 && !n.downmixed);
+}
+
+namespace {
+/// What CoreAudio reports for a device set to 7.1.4 in Audio MIDI Setup (read from a 16-channel device): the labels of
+/// the first twelve channels (the four after them are "unknown"), as the exact map of a 16-channel device.
+DeviceReport atmos714Device() {
+  const uint32_t labels[16] = {1, 2, 3, 4, 5, 6, 33, 34, 13, 15, 52, 54, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu};
+  DeviceReport r;
+  r.hasMap = true;
+  r.exact = true;
+  r.channels = 16;
+  for (int i = 0; i < 16; ++i) r.position[i] = positionForCoreAudioLabel(labels[i]);
+  return r;
+}
+}  // namespace
+
+namespace {
+/// What CoreAudio reports for the same device set to 9.1.6: after the 7.1.4 channels come the wides and the top-middles.
+DeviceReport nineOneSixDevice() {
+  const uint32_t labels[16] = {1, 2, 3, 4, 5, 6, 33, 34, 13, 15, 52, 54, 35, 36, 49, 51};
+  DeviceReport r;
+  r.hasMap = true;
+  r.exact = true;
+  r.channels = 16;
+  for (int i = 0; i < 16; ++i) r.position[i] = positionForCoreAudioLabel(labels[i]);
+  return r;
+}
+}  // namespace
+
+TEST(coreaudio_labels_become_positions_and_a_device_set_to_7_1_4_is_found_as_that_layout) {
+  CHECK(positionForCoreAudioLabel(1) == DevicePosition::FrontLeft && positionForCoreAudioLabel(4) == DevicePosition::Lfe);
+  CHECK(positionForCoreAudioLabel(5) == DevicePosition::SideLeft && positionForCoreAudioLabel(34) == DevicePosition::BackRight);
+  CHECK(positionForCoreAudioLabel(13) == DevicePosition::TopFrontLeft && positionForCoreAudioLabel(15) == DevicePosition::TopFrontRight);
+  CHECK(positionForCoreAudioLabel(52) == DevicePosition::TopBackLeft && positionForCoreAudioLabel(54) == DevicePosition::TopBackRight);
+  CHECK(positionForCoreAudioLabel(35) == DevicePosition::WideLeft && positionForCoreAudioLabel(36) == DevicePosition::WideRight);
+  CHECK(positionForCoreAudioLabel(49) == DevicePosition::TopMiddleLeft && positionForCoreAudioLabel(51) == DevicePosition::TopMiddleRight);
+  CHECK(positionForCoreAudioLabel(0x10003) == DevicePosition::Aux);  // a discrete channel
+  CHECK(positionForCoreAudioLabel(0) == DevicePosition::None && positionForCoreAudioLabel(0xFFFFFFFFu) == DevicePosition::None);
+  CHECK(positionForCoreAudioLabel(9999) == DevicePosition::None);
+  // The device's own map, in its order, is the named layout: Audio MIDI Setup's 7.1.4 is found as 7.1.4 on 16 channels.
+  Negotiation n = negotiate(LayoutChoice{}, atmos714Device());
+  CHECK(std::string(n.layout.name()) == "7.1.4" && n.deviceChannels == 16 && !n.reopen && !n.routed && !n.downmixed);
+  // The device's 9.1.6 (read from the same device): the wides and top-middles come after the heights, not where the
+  // canonical order has them. It has exactly the channels of 9.1.6, so that is the layout, routed through the permutation.
+  n = negotiate(LayoutChoice{}, nineOneSixDevice());
+  CHECK(std::string(n.layout.name()) == "9.1.6" && n.deviceChannels == 16 && n.routed && !n.reopen && !n.downmixed);
+  CHECK(n.route[4] == 12 && n.route[12] == 14 && n.route[14] == 10);  // Lw, Ltm and Ltr
+  // Audio MIDI Setup's 5.1.2 on the same device has the five-one on 1 to 6, unused channels, and the two heights (top-middle)
+  // on 13 and 14: that is 5.1.2 with gaps, routed to those channels.
+  const uint32_t labels512[16] = {1, 2, 3, 4, 5, 6, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 49, 51, 0xFFFFFFFFu, 0xFFFFFFFFu};
+  DeviceReport gaps;
+  gaps.hasMap = true;
+  gaps.exact = true;
+  gaps.channels = 16;
+  for (int i = 0; i < 16; ++i) gaps.position[i] = positionForCoreAudioLabel(labels512[i]);
+  n = negotiate(LayoutChoice{}, gaps);
+  CHECK(std::string(n.layout.name()) == "5.1.2" && n.routed && !n.reopen && n.deviceChannels == 16);
+  for (int i = 0; i < 6; ++i) CHECK(n.route[i] == i);
+  CHECK(n.route[6] == 12 && n.route[7] == 13);
+  // A map from the library (not exact) is never routed: the same channels in another order stay a custom layout.
+  DeviceReport assumed = nineOneSixDevice();
+  assumed.exact = false;
+  n = negotiate(LayoutChoice{}, assumed);
+  CHECK(std::string(n.layout.name()) == "custom" && !n.routed);
+}
+
+TEST(a_two_channel_route_that_spatializes_gets_7_1_4_in_automatic_and_a_named_choice_as_asked) {
+  DeviceReport airpods;
+  airpods.channels = 2;
+  airpods.spatializes = true;
+  Negotiation n = negotiate(LayoutChoice{}, airpods);
+  CHECK(std::string(n.layout.name()) == "7.1.4" && n.deviceChannels == 2 && n.downmixed && !n.reopen);
+  LayoutChoice c;
+  CHECK(LayoutChoice::parse("2.0", c));
+  n = negotiate(c, airpods);
+  CHECK(std::string(n.layout.name()) == "2.0");  // a stereo pair is asked for: it stays one
+  airpods.spatializes = false;  // plain stereo headphones or speakers
+  n = negotiate(LayoutChoice{}, airpods);
+  CHECK(std::string(n.layout.name()) == "2.0");
+  DeviceReport receiver;  // more than two channels: the device's own layout, whatever spatializes
+  receiver.channels = 6;
+  receiver.spatializes = true;
+  n = negotiate(LayoutChoice{}, receiver);
+  CHECK(std::string(n.layout.name()) == "5.1");
+}
+
+TEST(a_named_layout_on_a_device_with_an_exact_map_is_routed_to_the_channels_of_its_positions) {
+  const DeviceReport device = atmos714Device();
+  LayoutChoice c;
+  CHECK(LayoutChoice::parse("7.1.4", c));
+  Negotiation n = negotiate(c, device);
+  CHECK(n.routed && !n.reopen && !n.downmixed && n.deviceChannels == 16 && std::string(n.layout.name()) == "7.1.4");
+  for (int i = 0; i < 12; ++i) CHECK(n.route[i] == i);
+  CHECK(LayoutChoice::parse("5.1.4", c));  // the sides are the device's sides, the heights its heights
+  n = negotiate(c, device);
+  const int expect514[10] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11};
+  CHECK(n.routed && n.deviceChannels == 16);
+  for (int i = 0; i < 10; ++i) CHECK(n.route[i] == expect514[i]);
+  CHECK(LayoutChoice::parse("2.0", c));
+  n = negotiate(c, device);
+  CHECK(n.routed && n.route[0] == 0 && n.route[1] == 1);
+  // No two layout channels share a device channel.
+  CHECK(LayoutChoice::parse("7.1", c));
+  n = negotiate(c, device);
+  bool seen[kMaxChannels] = {};
+  for (int i = 0; i < 8; ++i) { CHECK(!seen[n.route[i]]); seen[n.route[i]] = true; }
+  // A layout with a channel the device has no place for (9.1.6 has wide and top-middle channels, a 7.1.4 map does not)
+  // steps down to the richest layout the device has: 7.1.4, routed.
+  CHECK(LayoutChoice::parse("9.1.6", c));
+  n = negotiate(c, device);
+  CHECK(std::string(n.layout.name()) == "7.1.4" && n.routed && !n.reopen && !n.downmixed && n.deviceChannels == 16);
+  for (int i = 0; i < 12; ++i) CHECK(n.route[i] == i);
+  // On the device's own 9.1.6 it is routed, to where each channel is (the wides and top-middles are last, so the
+  // canonical order L R C LFE Lw Rw Ls Rs Lrs Rrs Ltf Rtf Ltm Rtm Ltr Rtr is permuted), and 9.1.4 leaves the
+  // top-middles silent.
+  const DeviceReport nine = nineOneSixDevice();
+  n = negotiate(c, nine);
+  const int expect916[16] = {0, 1, 2, 3, 12, 13, 4, 5, 6, 7, 8, 9, 14, 15, 10, 11};
+  CHECK(n.routed && !n.reopen && n.deviceChannels == 16);
+  for (int i = 0; i < 16; ++i) CHECK(n.route[i] == expect916[i]);
+  CHECK(LayoutChoice::parse("7.1.4", c));
+  n = negotiate(c, nine);
+  CHECK(n.routed);
+  for (int i = 0; i < 12; ++i) CHECK(n.route[i] == i);
+  // The same on a device that is only a 7.1: 7.1.4 has no heights to go to, so it is 7.1; on a 5.1 device it is 5.1.
+  DeviceReport seven = mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight, DevicePosition::FrontCenter, DevicePosition::Lfe,
+                                  DevicePosition::SideLeft, DevicePosition::SideRight, DevicePosition::BackLeft, DevicePosition::BackRight});
+  seven.exact = true;
+  CHECK(LayoutChoice::parse("7.1.4", c));
+  n = negotiate(c, seven);
+  CHECK(std::string(n.layout.name()) == "7.1" && n.routed && !n.reopen && !n.downmixed && n.deviceChannels == 8);
+  DeviceReport five = mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight, DevicePosition::FrontCenter, DevicePosition::Lfe,
+                                 DevicePosition::SideLeft, DevicePosition::SideRight}, 16);  // (sixteen channels, ten of them unused)
+  five.exact = true;
+  n = negotiate(c, five);
+  CHECK(std::string(n.layout.name()) == "5.1" && n.routed && n.route[5] == 5);
+  // A device with sixteen channels that is set up as stereo plays 5.1 as 2.0 on its first two channels, not on channels 3 to 8.
+  DeviceReport two = mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight}, 16);
+  two.exact = true;
+  CHECK(LayoutChoice::parse("5.1", c));
+  n = negotiate(c, two);
+  CHECK(std::string(n.layout.name()) == "2.0" && n.routed && n.route[0] == 0 && n.route[1] == 1 && n.deviceChannels == 16);
+  // A device that really has two channels is left to the system: opened with the layout's own map, mixed down.
+  DeviceReport stereo = mapReport({DevicePosition::FrontLeft, DevicePosition::FrontRight});
+  stereo.exact = true;
+  CHECK(LayoutChoice::parse("7.1.4", c));
+  n = negotiate(c, stereo);
+  CHECK(std::string(n.layout.name()) == "7.1.4" && !n.routed && n.reopen && n.downmixed && n.deviceChannels == 12);
+  // A map that the audio library only assumed is not trusted: the layout asks for its own map, as before.
+  DeviceReport assumed = device;
+  assumed.exact = false;
+  n = negotiate(c, assumed);
+  CHECK(!n.routed && n.reopen && n.deviceChannels == 12);
+}
+
+TEST(routing_writes_each_layout_channel_to_its_device_channel_and_leaves_the_others_silent) {
+  const float in[2 * 3] = {1, 2, 3, 4, 5, 6};  // two frames of three channels
+  const int route[kMaxChannels] = {4, 0, 2};
+  float out[2 * 5];
+  std::fill(out, out + 10, 9.0f);
+  routeChannels(in, 3, out, 5, 2, route);
+  const float expect[10] = {2, 0, 3, 0, 1, 5, 0, 6, 0, 4};
+  for (int i = 0; i < 10; ++i) CHECK(out[i] == expect[i]);
+}
+
+TEST(a_device_with_more_channels_than_the_synth_has_gets_silence_in_the_rest) {
+  const float in[2 * 3] = {1, 2, 3, 4, 5, 6};  // two frames of three channels
+  float out[2 * 5];
+  std::fill(out, out + 10, 9.0f);
+  padChannels(in, 3, out, 5, 2);
+  const float expect[10] = {1, 2, 3, 0, 0, 4, 5, 6, 0, 0};
+  for (int i = 0; i < 10; ++i) CHECK(out[i] == expect[i]);
+  float same[6] = {};  // as many channels as the synth has: a plain copy
+  padChannels(in, 3, same, 3, 2);
+  for (int i = 0; i < 6; ++i) CHECK(same[i] == in[i]);
+}
+
+TEST(a_layout_that_does_not_open_steps_down_to_a_smaller_one_and_ends_at_stereo) {
+  LayoutId to;
+  CHECK(lowerLayout(LayoutId::S9_1_6, to) && to == LayoutId::S7_1_4);
+  CHECK(lowerLayout(LayoutId::S9_1_4, to) && to == LayoutId::S7_1_4);
+  CHECK(lowerLayout(LayoutId::S7_1_4, to) && to == LayoutId::S7_1);
+  CHECK(lowerLayout(LayoutId::S7_1_2, to) && to == LayoutId::S7_1);
+  CHECK(lowerLayout(LayoutId::S5_1_4, to) && to == LayoutId::S5_1);
+  CHECK(lowerLayout(LayoutId::S5_1_2, to) && to == LayoutId::S5_1);
+  CHECK(lowerLayout(LayoutId::S7_1, to) && to == LayoutId::S5_1);
+  CHECK(lowerLayout(LayoutId::S5_1, to) && to == LayoutId::Stereo);
+  to = LayoutId::S5_1;
+  CHECK(!lowerLayout(LayoutId::Stereo, to) && to == LayoutId::S5_1);  // nowhere lower; `to` is left alone
+  for (int id = 0; id < kLayoutCount; ++id) {  // every layout gets to stereo, with fewer channels at every step
+    LayoutId at = static_cast<LayoutId>(id);
+    int steps = 0;
+    while (lowerLayout(at, to)) {
+      CHECK(Layout::named(to).channels() < Layout::named(at).channels());
+      at = to;
+      CHECK(++steps < 8);
+    }
+    CHECK(at == LayoutId::Stereo);
+  }
 }
 
 int main(int argc, char** argv) {

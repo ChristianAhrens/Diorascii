@@ -260,7 +260,7 @@ by this PulseAudio setup); any real surround or Atmos-capable device; whether `c
 backend; how drivers route `AUX` channels; all of the Apple side (tvOS, AirPods), which is still the gate of phase 0. **Heard by the owner (2026-11-13, same stereo device):** `identify` played left, right, left (the expected order; the 2.2 s run
 wraps the cycle) and `sweep` moved from left to right, so the stereo channel order and the map-based positions work
 there; the assistant could not hear either. Not tested: any device with more than 2 real speakers, so side, rear,
-height and LFE routing remain unheard. **Next:** run the spike on the Mac and on the Apple TV
+height and LFE routing remain unheard. **Phase 7a (2026-11-14):** `AudioOutput::start(choice)` now opens with 0 channels, negotiates and (for a named layout) reopens with our own map; on this stereo PulseAudio device `auto` gives 2.0 and every explicit layout opens and is labelled downmixed, as measured above. Still unmeasured: any real multichannel device. **Next:** run the spike on the Mac and on the Apple TV
 and receiver setups and record the native formats here.
 
 ## F-25 The forest chain runs in every scene (M)

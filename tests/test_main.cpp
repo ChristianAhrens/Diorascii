@@ -1,16 +1,20 @@
 // Dependency-free test runner: each TEST registers itself, main() runs them all.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <atomic>
 #include <set>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "app/session.h"
 #include "core/ambience.h"
+#include "core/seqlock.h"
 #include "core/assets.h"
 #include "core/layout.h"
 #include "core/menu.h"
@@ -5185,6 +5189,156 @@ TEST(a_speakers_level_follows_its_position_the_rear_quieter_the_centre_lower_the
   CHECK(std::fabs(third(0, 0, AmbientKind::Forest) / side - 0.7) < 0.01);
   CHECK(std::fabs(third(90, 45, AmbientKind::Forest) / side - 0.6) < 0.01);
   CHECK(std::fabs(third(90, 45, AmbientKind::City) / third(90, 0, AmbientKind::City) - 0.3) < 0.01);
+}
+
+// ---------------------------------------------- thread boundary: seqlock and ring ---
+
+namespace {
+/// A value big enough to tear: all words are always equal.
+struct Wide {
+  uint32_t word[24];
+  /// Sets every word to `v`.
+  void fill(uint32_t v) { for (uint32_t& w : word) w = v; }
+  /// True if all words agree; `v` receives the first one.
+  bool consistent(uint32_t& v) const {
+    v = word[0];
+    for (uint32_t w : word) if (w != v) return false;
+    return true;
+  }
+};
+}  // namespace
+
+TEST(a_seqlock_starts_with_the_default_and_hands_over_the_latest_value) {
+  Seqlock<AmbientParams> link;
+  AmbientParams p;
+  p.volume = 0.25f;  // not the default
+  CHECK(link.load(p));
+  CHECK(p.kind == AmbientKind::Silent && p.volume == 1.0f);  // the default before anything was stored
+  AmbientParams a;
+  a.kind = AmbientKind::City;
+  a.rain = 0.5f;
+  a.shots = 7;
+  link.store(a);
+  a.shots = 9;
+  link.store(a);
+  AmbientParams b;
+  CHECK(link.load(b) && b.kind == AmbientKind::City && b.rain == 0.5f && b.shots == 9);
+}
+
+TEST(every_field_of_the_ambient_parameters_survives_the_hand_over_to_the_audio_thread) {
+  // Every byte of the struct gets its own value, so a field added later is covered without this test
+  // (or the audio backends) knowing about it: the backends copy the whole struct.
+  static_assert(sizeof(AmbientParams) % 4 == 0, "the struct has no tail padding, so the byte comparison is exact");
+  unsigned char raw[sizeof(AmbientParams)];
+  for (size_t i = 0; i < sizeof raw; ++i) raw[i] = static_cast<unsigned char>(i * 7 + 1);
+  AmbientParams sent, got;
+  std::memcpy(&sent, raw, sizeof raw);
+  Seqlock<AmbientParams> link;
+  link.store(sent);
+  CHECK(link.load(got));
+  CHECK(std::memcmp(&sent, &got, sizeof sent) == 0);
+}
+
+TEST(a_seqlock_reader_never_sees_a_torn_value_while_the_writer_keeps_writing) {
+  Seqlock<Wide> link;
+  constexpr uint32_t kWrites = 400000;
+  std::atomic<bool> done{false};
+  std::atomic<uint32_t> readCount{0};  // successful reads so far, for the writer to see
+  std::thread writer([&] {
+    Wide w;
+    uint32_t seen = 0;
+    for (uint32_t i = 1; i <= kWrites; ++i) {
+      w.fill(i);
+      link.store(w);
+      if (i % 2000 != 0) continue;
+      // The writer finishes within a few milliseconds, so a reader that the machine does not schedule in that time
+      // (a loaded CI runner, a build running next to the test) would see too few values to prove anything. Every
+      // 2000 writes the writer therefore waits (at most a second) until the reader has read something new.
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+      while (readCount.load() == seen && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+      seen = readCount.load();
+    }
+    done = true;
+  });
+  uint32_t last = 0, reads = 0, torn = 0, backwards = 0;
+  Wide w;
+  while (!done.load()) {
+    if (!link.load(w)) continue;  // a write in progress: the reader keeps what it had
+    uint32_t v;
+    if (!w.consistent(v)) ++torn;
+    if (v < last) ++backwards;
+    last = v;
+    ++reads;
+    readCount.store(reads);
+  }
+  writer.join();
+  CHECK(link.load(w) && w.consistent(last) && last == kWrites);  // the final value arrives
+  CHECK(torn == 0);
+  CHECK(backwards == 0);  // the newest value never goes back to an older one
+  CHECK(reads > 100);
+}
+
+TEST(an_event_ring_hands_events_over_in_order_and_an_empty_ring_gives_nothing) {
+  EventRing<int, 8> ring;
+  int v = -1;
+  CHECK(!ring.pop(v) && v == -1);  // empty: no event, value untouched
+  for (int i = 0; i < 5; ++i) ring.push(i);
+  for (int i = 0; i < 5; ++i) CHECK(ring.pop(v) && v == i);
+  CHECK(!ring.pop(v));
+  for (int round = 0; round < 20; ++round) {  // wraps around many times
+    for (int i = 0; i < 6; ++i) ring.push(round * 10 + i);
+    for (int i = 0; i < 6; ++i) CHECK(ring.pop(v) && v == round * 10 + i);
+  }
+  CHECK(ring.dropped() == 0);
+}
+
+TEST(an_event_ring_that_overflows_drops_the_oldest_events_and_counts_them) {
+  EventRing<int, 8> ring;
+  for (int i = 0; i < 13; ++i) ring.push(i);  // 5 more than fit
+  int v = -1;
+  for (int i = 5; i < 13; ++i) CHECK(ring.pop(v) && v == i);  // the newest eight
+  CHECK(!ring.pop(v));
+  CHECK(ring.dropped() == 5);
+  for (int i = 0; i < 8; ++i) ring.push(100 + i);  // exactly full: nothing lost
+  for (int i = 0; i < 8; ++i) CHECK(ring.pop(v) && v == 100 + i);
+  CHECK(ring.dropped() == 5);
+}
+
+TEST(an_event_ring_under_concurrent_use_loses_only_old_events_and_never_tears_one) {
+  struct Event { uint32_t id, check, pad[6]; };
+  EventRing<Event, 16> ring;  // small, so that the writer laps the reader often
+  constexpr uint32_t kEvents = 300000;
+  std::atomic<bool> done{false};
+  std::thread writer([&] {
+    Event e{};
+    for (uint32_t i = 0; i < kEvents; ++i) {
+      e.id = i;
+      e.check = i * 2654435761u;
+      for (uint32_t& p : e.pad) p = i;
+      ring.push(e);
+    }
+    done = true;
+  });
+  uint64_t received = 0, bad = 0;
+  int64_t last = -1;
+  Event e;
+  auto take = [&] {
+    while (ring.pop(e)) {
+      bool ok = e.check == e.id * 2654435761u;
+      for (uint32_t p : e.pad) ok = ok && p == e.id;
+      if (!ok) ++bad;
+      if (static_cast<int64_t>(e.id) <= last) ++bad;  // strictly increasing: no repeats, no going back
+      last = e.id;
+      ++received;
+    }
+  };
+  while (!done.load()) take();
+  writer.join();
+  take();  // the rest
+  CHECK(bad == 0);
+  CHECK(last == static_cast<int64_t>(kEvents) - 1);  // the newest event always arrives
+  CHECK(received + ring.dropped() == kEvents);       // every event was either read or counted as lost
+  CHECK(received > 1000);
 }
 
 int main(int argc, char** argv) {

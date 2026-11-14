@@ -91,8 +91,8 @@ levels were only measured. Accumulated preferences from the forest iterations:
 - Second catastrophes (2026-11-10, measured only): `menace` sets the level of the hiss, rush, rotor and roars; keep it
   below about 0.3 RMS (the storms), and the calm-to-menace ratio at least 1.5 at 48 kHz (the hiss does not exist at
   8 kHz). Event cracks (shots) are noise bursts of 12 ms over a 150 Hz thump, no sharper than the thunder snap.
-- A new `AmbientParams` field must also be copied in the audio backends (`audio.cpp`,
-  `audio_apple.mm`). Forgetting it passes every test and is silent in the real program.
+- A new `AmbientParams` field needs nothing in the audio backends: they copy the whole struct through a `Seqlock`
+  (since 2026-11-14, finding F-19). Keep `AmbientParams` trivially copyable (no pointers, strings or containers).
 
 ## Changelog and commit messages
 

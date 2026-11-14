@@ -2,7 +2,6 @@
 /// @brief Plays the synthesized ambience on the default sound device.
 
 #pragma once
-#include <atomic>
 #include <memory>
 
 #include "core/ambience.h"
@@ -11,7 +10,8 @@ namespace dio {
 
 /// Opens the default playback device and feeds it from an Ambience. Platform differences are
 /// handled by miniaudio. The device runs on its own thread; setParams() is safe to call from
-/// the main loop at any time.
+/// the main loop at any time (one writer thread): the parameters reach the audio thread as one
+/// consistent copy through a Seqlock, so a new field of AmbientParams needs no change here.
 class AudioOutput {
  public:
   AudioOutput();

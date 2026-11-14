@@ -110,9 +110,9 @@ in-house xoshiro `Rng`, so a seed reproduces a world exactly.
 ## Sound (src/core/ambience.*, src/audio)
 
 `ambientFor(World)` reduces world state to `AmbientParams` (kind, night, rain, flashes, storm
-proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, siren (ambulance, quick two-tone), wail (fire engine, slow sweep; the engine drops its tag when it leaves, so it drives off silent), train/plane nearness and fire level for the city, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) copy `AmbientParams` field by field into atomics, so a new field must be added there too (a missing one is silent in the real program while the synthesis tests pass). `Ambience::render`
+proximity, nibbles, whale/tornado nearness, impacts, avalanche level, sandworm nearness, crush count (desert: chewing, aquarium: gulping), avalanche squeal count, siren (ambulance, quick two-tone), wail (fire engine, slow sweep; the engine drops its tag when it leaves, so it drives off silent), train/plane nearness and fire level for the city, volume). The audio backends (`audio.cpp`, `audio_apple.mm`) hand the whole struct to the audio thread through a `Seqlock<AmbientParams>` (`core/seqlock.h`), so a new field needs no change in them (it must stay trivially copyable). `Ambience::render`
 fills an interleaved float buffer of `layout().channels()` channels per frame (stereo unless an `Ambience` is built with, or `setLayout` is given, another `Layout`; the backends still use stereo); everything is smoothed and scenes crossfade, so nothing clicks. The
-audio thread reads parameters through atomics. Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
+audio thread reads one consistent copy of the parameters (a seqlock: the writer never waits, the reader retries a few times and otherwise keeps its last copy), never a mix of two updates; `EventRing<T, N>` in the same header is the lock-free, drop-oldest queue for the events of phase 5 (tested, not yet used). Playback is miniaudio 0.11.21 (Unlicense/MIT-0),
 playback only, decoding and engine compiled out, stderr silenced while the device opens (ALSA
 noise). On by default (owner, 2026-11-08); `--mute`, key `a` or the menu switch it; silent when no device exists (announced only for `--audio` or the `a` key).
 

@@ -564,7 +564,18 @@ Original plan text:
   profile (voices vs. chains), then cheapen the chains (shared noise source with per-speaker
   filtering), and only then fall back to shared groups for the rear and height speakers.
 
-### Phase 4 – Thread boundary: snapshot and event ring (M)
+### Phase 4 – Thread boundary: snapshot and event ring (M) — **done 2026-11-14 (the event ring is built and tested but not wired until phase 5)**
+
+- `core/seqlock.h` (header-only, `std::atomic` only): `Seqlock<T>` (the parameters; the data lives in relaxed atomic words so that a racing read is not a data race; the reader retries 4 times and otherwise keeps its last copy, so the audio
+  thread never waits and never sees a torn value) and `EventRing<T, N>` (single producer, single consumer; per-slot sequence numbers; a full ring drops the oldest events and the reader counts them with `dropped()`).
+- Both backends now hold `Seqlock<AmbientParams>` and a `current` copy; the per-field atomics and the two hand-written field lists are gone (F-19 resolved). `audio_apple.mm` was **not compiled**.
+- **Deviation:** `SoundEvent` does not exist yet (it comes with the emitters in phase 5), and the counters (`flashes`, `nibbles`, ...) still carry the events through `AmbientParams`. So the ring is not connected to anything yet; wiring
+  it is part of phase 5. Dropping a counter increment in the seqlock is impossible (the value is always the newest), so nothing is lost meanwhile.
+- **Tests** (6): default and latest value; every byte of `AmbientParams` survives (covers fields added later); concurrent writer/reader with no torn or backwards value over 400 000 writes; ring order, empty ring, wrap-around;
+  overflow drops the oldest and counts them; concurrent ring with 300 000 events through 16 slots (no torn event, strictly increasing, the newest always arrives, received + dropped = pushed). Mutations (reader ignores the odd marker,
+  reader skips the validation, writer without the odd marker, ring without validation, no drop count) each fail a test; a sixth (the ring's separate "lapped" skip) changed nothing, so that code was removed as redundant.
+- **ThreadSanitizer**: the concurrent tests were also compiled into a standalone program with `-fsanitize=thread` and ran clean. TSan does not model `atomic_thread_fence`, which both structures rely on, so this shows the absence of
+  data races, not that the fence ordering is right; that rests on the standard pattern and on x86 stress runs only. Not run: ARM (Apple silicon, where a weaker memory order would show), or the project binary under TSan.
 
 - Seqlock snapshot of `AmbientParams`; SPSC ring buffer for `SoundEvent`s; both backends use them;
   the per-field atomics and hand copies are removed (F-19 closed).

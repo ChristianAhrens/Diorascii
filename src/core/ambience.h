@@ -17,9 +17,8 @@ enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains, City
 inline constexpr int kAmbientKinds = 7;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
-/// Every field must also be handed on by the audio backends (src/audio/audio.cpp and
-/// audio_apple.mm copy them one by one); a field missing there is silent in the real program
-/// although the synthesis tests pass.
+/// The audio backends hand the whole struct to the audio thread as one copy (core/seqlock.h), so a
+/// new field needs no change in them. It must stay trivially copyable (plain numbers and enums only).
 struct AmbientParams {
   AmbientKind kind = AmbientKind::Silent;
   float night = 0;   ///< how dark it is

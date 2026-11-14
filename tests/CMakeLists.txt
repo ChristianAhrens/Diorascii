@@ -1,5 +1,6 @@
 add_executable(diorascii_tests test_main.cpp)
-target_link_libraries(diorascii_tests PRIVATE diorascii_app diorascii_core diorascii_term)
+find_package(Threads REQUIRED)
+target_link_libraries(diorascii_tests PRIVATE diorascii_app diorascii_core diorascii_term Threads::Threads)
 diorascii_warnings(diorascii_tests)
 add_test(NAME diorascii_tests COMMAND diorascii_tests)
 

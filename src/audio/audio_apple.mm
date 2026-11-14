@@ -3,6 +3,8 @@
 
 #include "audio/audio.h"
 
+#include "core/seqlock.h"
+
 #import <AVFoundation/AVFoundation.h>
 
 #include <vector>
@@ -17,45 +19,10 @@ struct AudioOutput::Impl {
   Ambience ambience{48000};
   /// Interleaved samples from the synth, split into the engine's two channel buffers.
   std::vector<float> scratch = std::vector<float>(2 * 4096);
-  /// Parameters, written by the main thread and read by the audio thread.
-  std::atomic<int> kind{0};
-  std::atomic<float> night{0}, rain{0}, volume{1};
-  std::atomic<unsigned> flashes{0};
-  std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
-  std::atomic<float> worm{0}, siren{0}, wail{0}, train{0}, trainMotion{1}, trainBrake{0}, trainHiss{0}, plane{0}, fire{0}, menace{0}, flames{0}, winged{0};
-  std::atomic<unsigned> nibbles{0}, impacts{0}, crushes{0}, squeals{0}, shots{0};
-
-  /// Reads the shared parameters into one AmbientParams.
-  AmbientParams params() const {
-    AmbientParams p;
-    p.kind = static_cast<AmbientKind>(kind.load());
-    p.night = night.load();
-    p.rain = rain.load();
-    p.volume = volume.load();
-    p.flashes = flashes.load();
-    p.storm = storm.load();
-    p.whale = whale.load();
-    p.tornado = tornado.load();
-    p.avalanche = avalanche.load();
-    p.nibbles = nibbles.load();
-    p.impacts = impacts.load();
-    p.worm = worm.load();
-    p.siren = siren.load();
-    p.wail = wail.load();
-    p.train = train.load();
-    p.trainMotion = trainMotion.load();
-    p.trainBrake = trainBrake.load();
-    p.trainHiss = trainHiss.load();
-    p.plane = plane.load();
-    p.fire = fire.load();
-    p.crushes = crushes.load();
-    p.squeals = squeals.load();
-    p.menace = menace.load();
-    p.flames = flames.load();
-    p.winged = winged.load();
-    p.shots = shots.load();
-    return p;
-  }
+  /// Parameters, written by the main thread and read by the audio thread, as one consistent copy.
+  Seqlock<AmbientParams> shared;
+  /// The parameters the audio thread uses: the last copy it read (kept if a read does not succeed).
+  AmbientParams current;
 };
 
 AudioOutput::AudioOutput() : impl_(std::make_unique<Impl>()) {}
@@ -81,7 +48,8 @@ bool AudioOutput::start() {
            renderBlock:^OSStatus(BOOL*, const AudioTimeStamp*, AVAudioFrameCount frames,
                                  AudioBufferList* out) {
              if (impl->scratch.size() < 2 * static_cast<size_t>(frames)) impl->scratch.resize(2 * frames);
-             impl->ambience.render(impl->params(), impl->scratch.data(), static_cast<int>(frames));
+             impl->shared.load(impl->current);
+             impl->ambience.render(impl->current, impl->scratch.data(), static_cast<int>(frames));
              float* left = static_cast<float*>(out->mBuffers[0].mData);
              float* right = static_cast<float*>(out->mBuffers[1].mData);
              for (AVAudioFrameCount i = 0; i < frames; ++i) {
@@ -113,33 +81,6 @@ void AudioOutput::stop() {
 
 bool AudioOutput::running() const { return impl_->open; }
 
-void AudioOutput::setParams(const AmbientParams& p) {
-  impl_->kind = static_cast<int>(p.kind);
-  impl_->night = p.night;
-  impl_->rain = p.rain;
-  impl_->volume = p.volume;
-  impl_->flashes = p.flashes;
-  impl_->storm = p.storm;
-  impl_->whale = p.whale;
-  impl_->tornado = p.tornado;
-  impl_->avalanche = p.avalanche;
-  impl_->nibbles = p.nibbles;
-  impl_->impacts = p.impacts;
-  impl_->worm = p.worm;
-  impl_->siren = p.siren;
-  impl_->wail = p.wail;
-  impl_->train = p.train;
-  impl_->trainMotion = p.trainMotion;
-  impl_->trainBrake = p.trainBrake;
-  impl_->trainHiss = p.trainHiss;
-  impl_->plane = p.plane;
-  impl_->fire = p.fire;
-  impl_->crushes = p.crushes;
-  impl_->squeals = p.squeals;
-  impl_->menace = p.menace;
-  impl_->flames = p.flames;
-  impl_->winged = p.winged;
-  impl_->shots = p.shots;
-}
+void AudioOutput::setParams(const AmbientParams& p) { impl_->shared.store(p); }
 
 }  // namespace dio

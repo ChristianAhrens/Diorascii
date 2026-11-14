@@ -23,7 +23,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-15 | L | No sanitizer, lint or `build.ps1` evidence in CI | todo |
 | F-16 | L | Documentation drift risks | todo |
 | F-18 | M | Unverified art and sound of the 2026-11-09 work | open |
-| F-19 | M | Audio parameters are copied by hand in two backends | open |
+| F-19 | M | Audio parameters are copied by hand in two backends | resolved 2026-11-14: one seqlock copy of the whole struct (plan phase 4) |
 | F-20 | L | Real-time mode: time zones, DST, tvOS | open |
 | F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
 | F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
@@ -196,6 +196,8 @@ sun and moon in each scene; the larger clouds. Tunables are single values: `stri
 `strike-lashes`, `lash-color`, `mouth-row` in the sprites; gains and filters in `src/core/ambience.cpp`.
 
 ## F-19 Audio parameters are copied by hand in two backends (M)
+**Resolved 2026-11-14** (phase 4 of the spatial-audio plan): both backends now hold a `Seqlock<AmbientParams>` and copy the whole struct; the per-field atomics and both field lists are gone, and a test fills every byte of the struct with its own value
+and checks it arrives. The `audio_apple.mm` change was **not compiled** (no Apple toolchain here). Original finding:
 `src/audio/audio.cpp` and `audio_apple.mm` each copy every `AmbientParams` field into atomics and back.
 A new field that is forgotten in either backend is silent in the real program while the synthesis tests
 pass; this happened on 2026-11-09 (sandworm, crush and squeal sounds). Noted in `ambience.h` and

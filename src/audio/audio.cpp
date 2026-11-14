@@ -3,6 +3,8 @@
 
 #include "audio/audio.h"
 
+#include "core/seqlock.h"
+
 #include <cstring>
 
 #define MA_NO_DECODING
@@ -24,46 +26,17 @@ struct AudioOutput::Impl {
   ma_device device;
   bool open = false;
   Ambience ambience{48000};
-  /// Parameters, written by the main loop and read by the audio thread.
-  std::atomic<int> kind{0};
-  std::atomic<float> night{0}, rain{0}, volume{1};
-  std::atomic<unsigned> flashes{0};
-  std::atomic<float> storm{0}, whale{0}, tornado{0}, avalanche{0};
-  std::atomic<float> worm{0}, siren{0}, wail{0}, train{0}, trainMotion{1}, trainBrake{0}, trainHiss{0}, plane{0}, fire{0}, menace{0}, flames{0}, winged{0};
-  std::atomic<unsigned> nibbles{0}, impacts{0}, crushes{0}, squeals{0}, shots{0};
+  /// Parameters, written by the main loop and read by the audio thread, as one consistent copy.
+  Seqlock<AmbientParams> shared;
+  /// The parameters the audio thread uses: the last copy it read (kept if a read does not succeed).
+  AmbientParams current;
 };
 
 namespace {
 void onAudio(ma_device* device, void* output, const void*, ma_uint32 frames) {
   auto* impl = static_cast<AudioOutput::Impl*>(device->pUserData);
-  AmbientParams p;
-  p.kind = static_cast<AmbientKind>(impl->kind.load());
-  p.night = impl->night.load();
-  p.rain = impl->rain.load();
-  p.volume = impl->volume.load();
-  p.flashes = impl->flashes.load();
-  p.storm = impl->storm.load();
-  p.whale = impl->whale.load();
-  p.tornado = impl->tornado.load();
-  p.avalanche = impl->avalanche.load();
-  p.nibbles = impl->nibbles.load();
-  p.impacts = impl->impacts.load();
-  p.worm = impl->worm.load();
-  p.siren = impl->siren.load();
-  p.wail = impl->wail.load();
-  p.train = impl->train.load();
-  p.trainMotion = impl->trainMotion.load();
-  p.trainBrake = impl->trainBrake.load();
-  p.trainHiss = impl->trainHiss.load();
-  p.plane = impl->plane.load();
-  p.fire = impl->fire.load();
-  p.crushes = impl->crushes.load();
-  p.squeals = impl->squeals.load();
-  p.menace = impl->menace.load();
-  p.flames = impl->flames.load();
-  p.winged = impl->winged.load();
-  p.shots = impl->shots.load();
-  impl->ambience.render(p, static_cast<float*>(output), static_cast<int>(frames));
+  impl->shared.load(impl->current);
+  impl->ambience.render(impl->current, static_cast<float*>(output), static_cast<int>(frames));
 }
 }  // namespace
 
@@ -107,33 +80,6 @@ void AudioOutput::stop() {
 
 bool AudioOutput::running() const { return impl_->open; }
 
-void AudioOutput::setParams(const AmbientParams& p) {
-  impl_->kind = static_cast<int>(p.kind);
-  impl_->night = p.night;
-  impl_->rain = p.rain;
-  impl_->volume = p.volume;
-  impl_->flashes = p.flashes;
-  impl_->storm = p.storm;
-  impl_->whale = p.whale;
-  impl_->tornado = p.tornado;
-  impl_->avalanche = p.avalanche;
-  impl_->nibbles = p.nibbles;
-  impl_->impacts = p.impacts;
-  impl_->worm = p.worm;
-  impl_->siren = p.siren;
-  impl_->wail = p.wail;
-  impl_->train = p.train;
-  impl_->trainMotion = p.trainMotion;
-  impl_->trainBrake = p.trainBrake;
-  impl_->trainHiss = p.trainHiss;
-  impl_->plane = p.plane;
-  impl_->fire = p.fire;
-  impl_->crushes = p.crushes;
-  impl_->squeals = p.squeals;
-  impl_->menace = p.menace;
-  impl_->flames = p.flames;
-  impl_->winged = p.winged;
-  impl_->shots = p.shots;
-}
+void AudioOutput::setParams(const AmbientParams& p) { impl_->shared.store(p); }
 
 }  // namespace dio

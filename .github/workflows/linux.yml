@@ -25,6 +25,12 @@ jobs:
         run: cmake --build build/release -j
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
+      # The headless pictures of the manual are generated output; a change that alters the
+      # scenes must refresh them (scripts/manual-dumps.sh). Only on x64: the pictures are
+      # compared byte for byte, and the same on arm64 is not guaranteed.
+      - name: Check the manual's generated pictures
+        if: matrix.arch == 'x64'
+        run: scripts/manual-dumps.sh --check
       - name: Check binary dependencies
         run: ldd build/release/src/diorascii
       - name: Package

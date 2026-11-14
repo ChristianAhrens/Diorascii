@@ -9,7 +9,7 @@ river, a desert with an oasis, a mountain range from the meadow up to the snow, 
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
-**[Download the latest release](https://github.com/ChristianAhrens/Diorascii/releases/latest)**
+**[Download the latest release](https://github.com/ChristianAhrens/Diorascii/releases/latest)** | **[User manual](https://christianahrens.github.io/Diorascii/manual/)** ([sources](docs/manual/index.md))
 &middot; [Project page](https://christianahrens.github.io/Diorascii/)
 &middot; [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html)
 
@@ -475,7 +475,16 @@ reported as an error instead of being silently ignored.
 
 ## Documentation
 
-The [project page](https://christianahrens.github.io/Diorascii/) links the latest
+The [user manual](https://christianahrens.github.io/Diorascii/manual/) (overview, installation
+with direct download links for every platform, usage and the scenes) is written in markdown in
+[docs/manual](docs/manual/index.md), which reads fine on GitHub, and is turned into the website's pages by
+`scripts/build-manual.sh` (needs [pandoc](https://pandoc.org); `DIORASCII_VERSION` sets the release the links point
+to). In it, `x.y.z` stands for the version (and a link whose text is a release asset name becomes a direct
+download link), and the plain-text pictures between `<!-- dump: ... -->` and `<!-- /dump -->` are generated
+with the program itself: edit the arguments, then run `scripts/manual-dumps.sh` (`--check` fails when they are out
+of date, which the Linux workflow tests). The Usage section below stays the quick reference; the manual is the long form.
+
+The [project page](https://christianahrens.github.io/Diorascii/) links the manual, the latest
 release, this repository and the generated
 [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html). To
 build the documentation yourself, install [Doxygen](https://www.doxygen.nl) and
@@ -506,7 +515,9 @@ the text of the release.
 
 The release is created as a draft and only published once all three platforms built
 and passed their tests. The binaries report the tag as their version. Every push to
-`main` also redeploys the project page and the API documentation to GitHub Pages.
+`main` also redeploys the project page, the manual and the API documentation to GitHub Pages, and
+the last job of the release workflow starts that deployment again once the release is published, so that the
+manual's download links point at files that exist.
 
 The tvOS app goes to App Store Connect (TestFlight) with one script, which generates the project
 with CMake, archives it, signs it with automatic signing, exports the `.ipa`, validates it and

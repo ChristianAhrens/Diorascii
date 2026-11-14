@@ -31,6 +31,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-24 | M | Spatial audio phase-0 spike: first miniaudio facts; hardware still unmeasured | open |
 | F-25 | M | The forest's sound chain ran in every scene; per-speaker beds would multiply it | resolved 2026-11-13: gated (owner said yes) |
 | F-26 | H | Multichannel sound: everything measured, nothing heard in a room; the Apple backend only on macOS and in the tvOS simulator | open |
+| F-27 | M | The user manual and the Linux arm64 packages are unverified in CI and in a browser | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -297,3 +298,19 @@ forest cases differ by at most 1.3e-6, only in the first 10 ms of the fade-in (t
 and re-entered 15 s later, the largest difference to the old synth is 4.5e-4 (-67 dBFS) at the moment the gate closes (about 4 s after the scene change, when the presence falls
 below 0.001; the same kind of step the other scenes have at their own gates), then it decays; a recorded golden case from the old synth pins the scene-change scenario. CPU on the
 development machine (release preset, % of one core, 2.0, before / after): aquarium 3.65 / 2.43, desert 4.96 / 3.87, moon 4.20 / 3.05, mountains 6.75 / 5.61, city 8.85 / 7.64, forest 2.43 / 2.51 (unchanged).
+
+## F-27 User manual and Linux arm64 (2026-11-14)
+
+Added on `feature/UserManual`. **Not verified:** (1) the `ubuntu-24.04-arm` runner and the arm64 builds, `.deb`/`.rpm` and
+tests have never run (the first push of the workflow is the proof; the manual's dump check deliberately runs on x64
+only). (2) The generated pages were built locally with pandoc 3.9 and, after the rebase onto `develop` (2026-11-17), with
+pandoc 3.14 on macOS (5 pages, no broken link; `manual-dumps.sh --check` passes there with the dev binary, so the dump
+output is the same on macOS arm64 and the Linux box), but never opened in a browser, so the layout (sidebar, light/dark,
+phone width) is unseen. (3) `docs.yml` was not run; it installs pandoc from apt (the
+version of the runner image). (4) The release workflow's last step (`gh workflow run docs.yml --ref main`) needs the
+`actions: write` permission and a `workflow_dispatch` trigger, which `docs.yml` has; never run. (5) The manual's claims about
+the menu keys, the sound modes and the per-platform sound table (written from the README and the source; only macOS with AirPods and a loopback device was checked), `--fps`, the Windows/macOS terminals and the troubleshooting advice were written from
+the README and the source, not tried on each platform. (6) The "pictures" are plain-text `--dump` output, no screenshots
+of the menu, the info line, the styles or the Linux console; the owner may replace them. (7) Until a release with the
+new asset names is tagged, the manual's Linux links for 1.3.0 point at `...-Linux-x64.*` files that only exist from the
+next release. (8) The README Usage section and the manual overlap on purpose; they can drift (adds to F-16).

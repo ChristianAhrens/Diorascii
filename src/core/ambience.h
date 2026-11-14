@@ -191,7 +191,11 @@ class Ambience {
     kFlood,                       ///< the rush of the flood
     kCricket0,                    ///< the forest's three crickets (kCricket0 + i), in a room
     kDesertCricket0 = kCricket0 + 3,  ///< the desert's two crickets, in a room
-    kPlaceCount = kDesertCricket0 + 2
+    kThud = kDesertCricket0 + 2,  ///< a meteorite's thud
+    kDebris,                      ///< the debris that patters down round it
+    kZap,                         ///< the alien's warble
+    kMeteor,                      ///< the big meteor's rumble as it falls
+    kPlaceCount = kMeteor + 1
   };
   /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
   /// gains towards every speaker, and whether it is sounding.
@@ -228,6 +232,8 @@ class Ambience {
   void aimDesert(const AmbientParams& p);
   /// Aims the placed sounds of the forest (the storm's rumble and the flood) at their emitters.
   void aimForest(const AmbientParams& p);
+  /// Aims the placed sounds of the moon (the alien's warble while it sounds, the big meteor) at their emitters.
+  void aimMoon(const AmbientParams& p);
   /// Aims the placed sounds of the aquarium (the kraken's growl, the submarine, the whale while it sings) at their emitters.
   void aimAquarium(const AmbientParams& p);
 
@@ -257,6 +263,7 @@ class Ambience {
   Source crushAt_;                              ///< where the latest crush event happened (the next chewing starts there)
   Source shotAt_;                               ///< where the latest shot event happened (the next shot starts there)
   float stereoRef_ = 1.41421356f;               ///< what a placed mono sound is scaled by to keep the level of the old dual-mono sound (1 for a single speaker)
+  Source impactAt_;                             ///< where the latest meteorite struck (the next thud and its debris come from there)
   Source flashAt_;                              ///< where the latest lightning flash struck (the next strike's crack comes from there)
   Source stormAt_;                              ///< where the thundercloud is (the far claps come from there)
   float rainShape_[kMaxChannels];               ///< how much of the forest's rain each chain plays: the rain is overhead

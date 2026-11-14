@@ -6362,6 +6362,142 @@ TEST(a_single_speaker_plays_the_placed_sounds_as_loud_as_the_old_mean_of_the_ste
   CHECK(monoAdded > 0.85 * stereoAdded && monoAdded < 1.15 * stereoAdded);  // (it was 1.41 times as loud)
 }
 
+// ------------------------------------------------------------ the moon in space ---
+
+namespace {
+/// Per-channel RMS of the last second of 4 s of the moon in `layout`, set up by `setup`.
+std::vector<double> moonRms(const Layout& layout, const std::function<void(AmbientParams&)>& setup) {
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::Moon;
+  setup(p);
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
+  std::vector<double> rms(static_cast<size_t>(ch));
+  for (int c = 0; c < ch; ++c) rms[static_cast<size_t>(c)] = channelRms(buf, ch, c);
+  return rms;
+}
+
+/// Energy of channel `c` of an interleaved render.
+double channelEnergy(const std::vector<float>& v, int ch, int c) {
+  double e = 0;
+  for (size_t i = 0; i < v.size() / static_cast<size_t>(ch); ++i) e += static_cast<double>(v[i * static_cast<size_t>(ch) + static_cast<size_t>(c)]) * v[i * static_cast<size_t>(ch) + static_cast<size_t>(c)];
+  return e;
+}
+
+/// Renders the moon in 5.1 for 0.5 s, then `seconds` more after `setup` (and the events it sends) has run, and returns what the second part played.
+std::vector<float> moonAfter(const std::function<void(Ambience&, AmbientParams&)>& setup, double seconds) {
+  const Layout l51 = Layout::named(LayoutId::S5_1);
+  Ambience a(48000, 3, l51);
+  AmbientParams p;
+  p.kind = AmbientKind::Moon;
+  std::vector<float> buf(6 * 24000);
+  a.render(p, buf.data(), 24000);
+  setup(a, p);
+  std::vector<float> out(6 * static_cast<size_t>(seconds * 48000));
+  a.render(p, out.data(), static_cast<int>(seconds * 48000));
+  return out;
+}
+}  // namespace
+
+TEST(the_big_meteor_is_heard_from_where_it_falls_high_up_and_wide_as_it_lands) {
+  const Layout layout = Layout::named(LayoutId::S5_1);  // L R C LFE Ls Rs
+  auto meteor = [](float x, float y, float level) {
+    return [=](AmbientParams& p) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Meteor)] = {level, x, y, 0.1f, 0}; };
+  };
+  const auto calm = moonRms(layout, [](AmbientParams&) {});
+  auto added = [&](const std::vector<double>& with, int a, int b) {
+    return std::max(0.0, with[static_cast<size_t>(a)] * with[static_cast<size_t>(a)] - calm[static_cast<size_t>(a)] * calm[static_cast<size_t>(a)] +
+                             with[static_cast<size_t>(b)] * with[static_cast<size_t>(b)] - calm[static_cast<size_t>(b)] * calm[static_cast<size_t>(b)]);
+  };
+  const auto left = moonRms(layout, meteor(-1.0f, 0.0f, 0.3f));
+  const auto right = moonRms(layout, meteor(1.0f, 0.0f, 0.3f));
+  CHECK(added(left, 0, 4) > 1.5 * added(left, 1, 5));
+  CHECK(added(right, 1, 5) > 1.5 * added(right, 0, 4));
+  const auto off = moonRms(layout, meteor(-1.5f, 0.0f, 0.3f));
+  CHECK(off[4] > off[0]);  // off-screen it comes from the side
+  // When it lands it fills the room: the same level in every speaker, wherever it hit.
+  const auto landing = moonRms(layout, meteor(-1.0f, 0.0f, 1.0f));
+  CHECK(landing[0] < 1.3 * landing[1] && landing[1] < 1.3 * landing[0]);
+  CHECK(landing[3] > 2.0 * calm[3]);  // and the bass channel rumbles
+  // High up (far) it is heard overhead.
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  const auto calmHigh = moonRms(l714, [](AmbientParams&) {});
+  auto heights = [&](float y) {
+    const auto rms = moonRms(l714, meteor(0.0f, y, 0.3f));
+    double sum = 0;
+    for (int c = 0; c < l714.channels(); ++c)
+      if (l714.speaker(c).elevation > 1.0f) sum += rms[static_cast<size_t>(c)] * rms[static_cast<size_t>(c)] - calmHigh[static_cast<size_t>(c)] * calmHigh[static_cast<size_t>(c)];
+    return sum;
+  };
+  CHECK(heights(1.0f) > 1.3 * heights(0.0f));
+}
+
+TEST(a_meteorite_thuds_where_it_struck_and_the_big_one_fills_the_whole_width) {
+  auto sides = [](float x, float strength) {
+    const std::vector<float> out = moonAfter([&](Ambience& a, AmbientParams& p) {
+      SoundEvent e;
+      e.kind = EventKind::Impact;
+      e.x = x;
+      e.strength = strength;
+      a.event(e);
+      ++p.impacts;
+    }, 0.5);
+    return std::make_pair(channelEnergy(out, 6, 0) + channelEnergy(out, 6, 4), channelEnergy(out, 6, 1) + channelEnergy(out, 6, 5));
+  };
+  const auto left = sides(-1.0f, 1.0f), right = sides(1.0f, 1.0f);
+  CHECK(left.first > 1.5 * left.second);
+  CHECK(right.second > 1.5 * right.first);
+  const auto big = sides(-1.0f, 2.0f);  // the big one is wide: it is not on one side
+  CHECK(big.first < 1.3 * big.second && big.second < 1.3 * big.first);
+  // The debris that patters down lands round the impact, not only where it struck: a strike straight ahead
+  // is heard in the front left and right speakers too, not only in the centre one.
+  const std::vector<float> centre = moonAfter([](Ambience& a, AmbientParams& p) {
+    SoundEvent e;
+    e.kind = EventKind::Impact;
+    a.event(e);
+    ++p.impacts;
+  }, 5.0);
+  const double lr = roughEnergy(centre, 6, 0) + roughEnergy(centre, 6, 1), c = roughEnergy(centre, 6, 2);
+  CHECK(lr > 0.5 * c);
+}
+
+TEST(the_aliens_warble_comes_from_the_alien) {
+  double energy[2][2] = {};
+  for (int variant = 0; variant < 2; ++variant) {
+    const std::vector<float> out = moonAfter([&](Ambience&, AmbientParams& p) {
+      ++p.flashes;
+      p.emitters[static_cast<int>(EmitterKey::Alien)] = {1, variant ? 1.0f : -1.0f, 0, 0.4f, 0};
+    }, 1.0);
+    energy[variant][0] = channelEnergy(out, 6, 0) + channelEnergy(out, 6, 4);
+    energy[variant][1] = channelEnergy(out, 6, 1) + channelEnergy(out, 6, 5);
+  }
+  CHECK(energy[0][0] > 1.5 * energy[0][1]);
+  CHECK(energy[1][1] > 1.5 * energy[1][0]);
+}
+
+TEST(the_meteor_emitter_comes_down_from_the_sky_with_the_falling_meteor) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("moon"), 160, 36, 3);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.emitter(EmitterKey::Meteor).level == 0.0f);
+  world.triggerRare(RarePick::Other);
+  float firstY = -1, lastY = -1, previous = 0;
+  for (int i = 0; i < 260; ++i) {
+    world.step(0.05);
+    const Emitter e = world.emitter(EmitterKey::Meteor);
+    CHECK(e.level == static_cast<float>(world.asteroidLevel()));
+    if (e.level <= 0) continue;
+    CHECK(e.level >= previous);  // it falls nearer
+    previous = e.level;
+    CHECK(std::fabs(e.x) <= kStageReach && e.y >= 0 && e.y <= 1);
+    if (firstY < 0) firstY = e.y;
+    lastY = e.y;
+  }
+  CHECK(firstY > 0.8f && lastY < 0.4f);  // from high in the sky to low
+}
+
 int main(int argc, char** argv) {
   // Developer options: print the golden table, or dump the raw samples of the golden cases to a
   // file (to compare two builds bit for bit on one machine).

@@ -604,6 +604,17 @@ Original plan text:
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
 
+**Moon: done 2026-11-14** (sixth and last of six; details in `architecture.md`, "Placed sounds: the moon"). Against section 4.4:
+
+- Done: the meteorite's thud at the impact (bass 1.0; the big meteor's impact over the full width, spread 1.0), the debris scattered round it in a room, the alien's warble at the alien (new `EmitterKey::Alien`), the big meteor approaching (new `EmitterKey::Meteor`, the asteroid sprite's place: high at first, lower and wider as it falls, bass through the chain sum).
+- **Not done**: the meteor brightening as it nears, a place per meteorite, the drone's height share of 0.3 (0.4 since phase 3).
+- **Stereo is kept without re-baselining**: the golden values hold.
+- **Tests** (4 new): the meteor left, right, off-screen, high, wide when it lands, with the bass; a meteorite thuds where it struck, the big one fills the whole width, the debris lands round a strike straight ahead; the alien's warble from the alien; the meteor emitter comes down from the sky with the asteroid. Mutations: caught: the thud's place and event, the big impact's width, the debris scatter, the warble's place, the meteor's weighting, width and height. **Survived (no test)**: the warble following the alien while it sounds, the thud's bass send (its bass comes mostly through the rumble's chain sum).
+- **CPU** (release, 2013 i3, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6): before 3.5 / 5.4 / 7.2 / 8.3, now 4.0 / 6.2 / 8.0 / 9.9.
+- Unverified: how any of it sounds, above all the meteor's approach; Apple silicon.
+
+**Phase 6 is complete: all six scenes are converted** (city, mountains, desert, aquarium, forest, moon).
+
 **Forest: done 2026-11-14** (fifth of six; details in `architecture.md`, "Placed sounds: the forest"). Against section 4.1:
 
 - Done: the strike's crack and snap at the bolt's column and high in the sky (`Flash` event), the far claps and the storm's rumble at the thundercloud, the rain overhead (height share raised), the crickets as fixed voices in the surrounds (also the desert's), the flood's roar at the front of the water (new `EmitterKey::Flood`, spread 0.8, bass 0.6).

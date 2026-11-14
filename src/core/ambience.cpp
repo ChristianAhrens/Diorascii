@@ -382,7 +382,17 @@ void Ambience::aimForest(const AmbientParams& p) {
   if (p.menace > 0 && (flood.level > 0 || !place_[kFlood].on)) aim(kFlood, stageSource(flood.x, flood.y, 0.8f, 0.6f));
 }
 
+void Ambience::aimMoon(const AmbientParams& p) {
+  const Emitter& alien = p.emitters[static_cast<int>(EmitterKey::Alien)];  // the warble follows the alien while it sounds
+  if (place_[kZap].on && alien.level > 0) aim(kZap, stageSource(alien.x, alien.y, 0.2f, 0.0f));
+  // The big meteor comes in from afar, high up, and gets lower and wider (it fills the room as it lands).
+  const Emitter& meteor = p.emitters[static_cast<int>(EmitterKey::Meteor)];
+  if (p.menace > 0 && (meteor.level > 0 || !place_[kMeteor].on))
+    aim(kMeteor, stageSource(meteor.x, meteor.y, 0.2f + 0.8f * meteor.level * meteor.level, 1.0f));
+}
+
 void Ambience::event(const SoundEvent& e) {
+  if (e.kind == EventKind::Impact) impactAt_ = stageSource(e.x, e.y, e.strength > 1.5f ? 1.0f : 0.2f, 1.0f);  // the big one fills the whole width
   if (e.kind == EventKind::Flash) flashAt_ = stageSource(e.x, e.y, 0.3f, 0.0f);
   if (e.kind == EventKind::Squeal) squealAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
   if (e.kind == EventKind::Crush) crushAt_ = stageSource(e.x, e.y, 0.0f, 0.4f);
@@ -423,6 +433,9 @@ void Ambience::bubble(double delay, float f0, float dur, float amp, const Source
 void Ambience::moonSample(const AmbientParams& p, float out[kMaxChannels]) {
   (void)p;
   const double dt = 1.0 / rate_;
+  const int nch = layout_.channels();
+  const bool room3d = nch > 2;
+  const float mixMoon = mix_[static_cast<int>(AmbientKind::Moon)];
   // No air, so nothing to hear but what could be felt through the ground: a faint, deep drone of
   // stacked fifths that drifts slowly, with a hint of shimmer above it.
   const double drift = 0.7 + 0.3 * std::sin(kTwoPi * 0.043 * t_);
@@ -456,8 +469,10 @@ void Ambience::moonSample(const AmbientParams& p, float out[kMaxChannels]) {
   // A meteorite strike: a thud that thumps up out of the ground and falls away, a dull rumble,
   // and then debris pattering down slowly in the low gravity.
   float thud = 0, rumble = 0, patter = 0, click = 0;
+  bool striking = false;  // a meteorite's sound is pending or still ringing
   for (const Impact& im : impacts_) {
     const double tau = t_ - im.start;
+    if (im.gain > 0 && tau >= -0.2 && tau <= 9) striking = true;
     if (im.gain <= 0 || tau < 0 || tau > 9) continue;
     const double sweep = 34.0 * tau + 70.0 * (1.0 - std::exp(-9.0 * tau)) / 9.0;  // 104 Hz sinking to 34 Hz
     thud += static_cast<float>(std::sin(kTwoPi * sweep) * (1.0 - std::exp(-tau * 400.0)) * std::exp(-tau * 3.2)) * im.gain;
@@ -468,35 +483,44 @@ void Ambience::moonSample(const AmbientParams& p, float out[kMaxChannels]) {
     }
   }
   patter = click;
+  if (!striking) place_[kThud].on = place_[kDebris].on = false;
+  if (click != 0 && room3d && place_[kDebris].on) {  // in a room each piece of debris lands somewhere round the impact
+    Source s = impactAt_;
+    s.azimuth += static_cast<float>(fxRng_.range(-35.0, 35.0));
+    s.elevation = static_cast<float>(fxRng_.range(0.0, 25.0));
+    s.spread = 0.0f;
+    place_[kDebris].v.setTarget(layout_, forLayout(s), true);
+  }
+  if (place_[kThud].on) place_[kThud].v.add(thud * 0.55f * stereoRef_, room_, nch);  // thumps up out of the ground where it struck
 
   // The alien: an eerie rising warble.
   float zap = 0;
   const double zt = t_ - zapStart_;
+  if (zt >= 0.9) place_[kZap].on = false;
   if (zapStart_ > 0 && zt >= 0 && zt < 0.9) {
     const double f = 350.0 + 1000.0 * (zt / 0.9) + 120.0 * std::sin(kTwoPi * 17.0 * zt);
     zapPhase_ += kTwoPi * f * dt;
     const double env = std::pow(std::sin(3.14159265 * zt / 0.9), 1.5);
     zap = static_cast<float>((std::sin(zapPhase_) + 0.3 * std::sin(1.5 * zapPhase_)) * env) * 0.12f;
+    if (place_[kZap].on) place_[kZap].v.add(zap * stereoRef_, room_, nch);  // from the alien
   }
 
   const float debrisF = 2.0f * std::sin(3.14159265f * std::min(900.0f, static_cast<float>(rate_) / 7.0f) / static_cast<float>(rate_));
   // The drone and the impacts' rumble are the bed, one chain per speaker; the thud, the debris
   // and the warble are voices, which only the stereo pair carries until they are placed.
+  // Debris: each click rings a short, dull resonance (one sound: it was the same in both ears).
+  debrisLow_[0] += debrisF * debrisBand_[0];
+  const float high = patter * 6.0f - debrisLow_[0] - 0.6f * debrisBand_[0];
+  debrisBand_[0] += debrisF * high;
+  if (place_[kDebris].on) place_[kDebris].v.add(debrisBand_[0] * 0.3f * stereoRef_, room_, nch);
   for (int ch = 0; ch < chains_; ++ch) {
     if (!live(AmbientKind::Moon, ch)) continue;
     const float n = noise(chainRng(ch)) * noiseScale_;
     moonLow_[ch][0] += (n - moonLow_[ch][0]) * lowMoon_;
     moonLow_[ch][1] += (moonLow_[ch][0] - moonLow_[ch][1]) * lowMoon_;
-    if (ch < 2) {
-      // Debris: each click rings a short, dull resonance.
-      debrisLow_[ch] += debrisF * debrisBand_[ch];
-      const float high = patter * 6.0f - debrisLow_[ch] - 0.6f * debrisBand_[ch];
-      debrisBand_[ch] += debrisF * high;
-      out[ch] = pad[ch] + thud * 0.55f + moonLow_[ch][1] * 14.0f * rumble * 0.35f + debrisBand_[ch] * 0.3f + zap;
-    } else {
-      out[ch] = pad[ch] + moonLow_[ch][1] * 14.0f * rumble * 0.35f;
-    }
+    out[ch] = pad[ch] + moonLow_[ch][1] * 14.0f * rumble * 0.35f;  // the rumble rolls all round (a bed)
   }
+  flushRoom(voiceOut_, mixMoon);
 }
 
 void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -1093,7 +1117,7 @@ float Ambience::coeff(float seconds) const {
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
-    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = place_[kSub].on = place_[kFlood].on = false;
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = place_[kSub].on = place_[kFlood].on = place_[kMeteor].on = false;
     return;
   }
   if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
@@ -1131,7 +1155,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
         break;
       }
       case AmbientKind::Moon: {  // the big meteor: a rumble in the ground that swells as it nears
-        out[ch] = menaceLow_[ch][1] * 4.5f * level * level;
+        menaceBus_[ch] += weight(kMeteor, ch) * menaceLow_[ch][1] * 4.5f * level * level;  // from where the meteor is
         break;
       }
       default: break;
@@ -1226,6 +1250,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   if (p.kind == AmbientKind::Desert) aimDesert(p);
   if (p.kind == AmbientKind::Aquarium) aimAquarium(p);
   if (p.kind == AmbientKind::Forest) aimForest(p);
+  if (p.kind == AmbientKind::Moon) aimMoon(p);
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
@@ -1236,7 +1261,13 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       place_[kThunder].v.setTarget(layout_, forLayout(place_[kThunder].src), true);
       place_[kThunder].on = true;
     }
-    if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Moon) zapStart_ = t_;  // the alien's flash
+    if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Moon) {  // the alien's flash and warble, from where the alien is
+      zapStart_ = t_;
+      const Emitter& alien = p.emitters[static_cast<int>(EmitterKey::Alien)];
+      place_[kZap].src = stageSource(alien.x, alien.y, 0.2f, 0.0f);
+      place_[kZap].v.setTarget(layout_, forLayout(place_[kZap].src), true);
+      place_[kZap].on = true;
+    }
     seenFlashes_ = p.flashes;
   }
 
@@ -1391,6 +1422,11 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                                        [](const Impact& a, const Impact& b) { return a.start < b.start; });
         im.start = t_ + rng_.range(0.0, 0.05);
         im.gain = 1.0f;
+        for (int id : {kThud, kDebris}) {  // the thud and the debris come from where it struck
+          place_[id].src = impactAt_;
+          place_[id].v.setTarget(layout_, forLayout(place_[id].src), true);
+          place_[id].on = true;
+        }
       }
       seenImpacts_ = p.impacts;
     }

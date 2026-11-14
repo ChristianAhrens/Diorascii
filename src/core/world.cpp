@@ -1392,6 +1392,18 @@ Emitter World::emitter(EmitterKey key) const {
     }
     return out;
   }
+  if (key == EmitterKey::Meteor) {  // the big meteor: its level is how far it has fallen, its place the asteroid's sprite
+    Emitter out;
+    out.level = static_cast<float>(asteroidLevel_);
+    if (asteroidLevel_ > 0) {
+      for (const auto& e : entities_) {
+        if (e->dead || e->sprite->name() != "asteroid") continue;
+        stagePoint(e->x + e->width() / 2.0, e->y + e->height() / 2.0, e->z, out.x, out.y, out.depth);
+        break;
+      }
+    }
+    return out;
+  }
   if (key == EmitterKey::Fire) {  // the building that burns hardest
     Emitter out;
     out.level = static_cast<float>(fireLevel_);

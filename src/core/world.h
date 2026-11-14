@@ -812,6 +812,8 @@ class World {
   } clash_;
   /// How muddy each column is (1 right after the water has been over it, fading in time).
   std::vector<float> mud_;
+  /// The column the front of the flood has reached (from the side it comes from).
+  double floodFront() const;
   /// Depth of the flood water at column x, in rows from the bottom of the screen.
   double floodDepth(int x) const;
   /// Advances the flood, tears off what it reaches and lets the mud dry.

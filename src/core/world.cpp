@@ -1384,6 +1384,14 @@ Emitter World::emitter(EmitterKey key) const {
     if (slideLevel_ > 0) stagePoint(slideX_, slideY_, 12, out.x, out.y, out.depth);
     return out;
   }
+  if (key == EmitterKey::Flood) {  // the front of the wall of water, which runs in from one side
+    Emitter out;
+    out.level = static_cast<float>(floodLevel_);
+    if (floodLevel_ > 0) {  // (the level lingers for the last step after the water is gone)
+      stagePoint(floodFront(), std::max(seabedY_, 1), 8, out.x, out.y, out.depth);  // on the ground
+    }
+    return out;
+  }
   if (key == EmitterKey::Fire) {  // the building that burns hardest
     Emitter out;
     out.level = static_cast<float>(fireLevel_);

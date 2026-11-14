@@ -604,6 +604,16 @@ Original plan text:
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
 
+**Forest: done 2026-11-14** (fifth of six; details in `architecture.md`, "Placed sounds: the forest"). Against section 4.1:
+
+- Done: the strike's crack and snap at the bolt's column and high in the sky (`Flash` event), the far claps and the storm's rumble at the thundercloud, the rain overhead (height share raised), the crickets as fixed voices in the surrounds (also the desert's), the flood's roar at the front of the water (new `EmitterKey::Flood`, spread 0.8, bass 0.6).
+- **Not done**: a place per strike (the latest has it), the roar widening with the water, a wind-gust azimuth sweep beyond the bed's drift.
+- **Stereo is kept without re-baselining**: the golden values hold (all emitters at the centre; the crickets stay in both ears of a stereo pair).
+- **Found on the way**: placed sounds were 1.41 times as loud as before in a single-speaker layout (fixed: `stereoRef_` is 1 there, test added), and the flood emitter jumped to the centre on its last step (fixed). Three old tests that used the forest as the unconverted scene now use a placed-free forest.
+- **Tests** (5 new, 3 narrowed): the storm and the flood left, right, off-screen and in the bass; a strike cracks where it struck and high in the sky; the rain's height share and the crickets behind the listener (forest and desert); the flood emitter crosses the stage along the ground; a single speaker's level. Mutations: caught: the strike's place and event, the far storm's weighting and position, the rain's shape, the crickets' places (forest and desert), the flood's weighting, the mono level. **Survived (no test)**: the flood's roar following the front while the water runs (the tests place it statically).
+- **CPU** (release, 2013 i3, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6): before 2.9 / 4.3 / 6.9 / 8.7, now 3.5 / 5.8 / 8.8 / 10.4 (the bench switches the placed sources on).
+- Unverified: how any of it sounds, above all the strike's crack from a place and the rain overhead; Apple silicon.
+
 **Aquarium: done 2026-11-14** (fourth of six; details in `architecture.md`, "Placed sounds: the aquarium"). Against section 4.2, plus the owner's wish that the underwater and bubble sound be **fully immersive**:
 
 - Done: the whale's phrase at its emitter (follows it while singing), the kraken's growl (bass 1.0) and gulps (at the crush event, bass 0.3), the submarine's hiss and gas bubbles at its emitter (new `EmitterKey::Submarine`), the nibbles at the fish's mouth, every bubble placed.

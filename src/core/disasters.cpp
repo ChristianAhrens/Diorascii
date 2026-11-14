@@ -175,6 +175,11 @@ void World::floodStep(Entity& e, double dt) {
   (void)dt;
 }
 
+double World::floodFront() const {
+  const double front = std::clamp(flood_.age * kFloodSpeed, 0.0, static_cast<double>(w_ - 1));
+  return flood_.dir > 0 ? front : w_ - 1 - front;
+}
+
 double World::floodDepth(int x) const {
   if (!flood_.active) return 0;
   const double dist = flood_.dir > 0 ? x : w_ - 1 - x;

@@ -59,19 +59,22 @@ void Ambience::clap(double delay, double gain, bool strike) {
   th.swellGain[2] = rng_.range(0.2, 0.5);
 }
 
-void Ambience::thunderLevels(float& crack, float& rumble, float& snap) const {
-  crack = rumble = snap = 0;
+void Ambience::thunderLevels(float crack[2], float rumble[2], float& snap, bool& strikeLive) const {
+  crack[0] = crack[1] = rumble[0] = rumble[1] = snap = 0;
+  strikeLive = false;
   for (const Thunder& th : thunder_) {
     const double t = t_ - th.start;
+    if (th.strike && th.gain > 0 && t >= -1.0 && t <= 9.0) strikeLive = true;
     if (th.gain <= 0 || t < 0 || t > 9) continue;
-    crack += static_cast<float>(th.gain * std::exp(-t * 22.0));  // the sharp first crack
+    const int part = th.strike ? 0 : 1;  // a strike is heard where it struck, a far clap where the storm is
+    crack[part] += static_cast<float>(th.gain * std::exp(-t * 22.0));  // the sharp first crack
     if (th.strike) {  // two snaps, matching the two quick flashes of the lightning
       snap += static_cast<float>(th.gain * std::exp(-t * 17.0));
       if (t > 0.22) snap += static_cast<float>(0.6 * th.gain * std::exp(-(t - 0.22) * 20.0));
     }
     for (int i = 0; i < 3; ++i) {  // rolling swells, each slowly fading
       const double s = t - th.swellAt[i];
-      if (s > 0) rumble += static_cast<float>(th.swellGain[i] * th.gain * (1 - std::exp(-s * 12.0)) * std::exp(-s * 0.7));
+      if (s > 0) rumble[part] += static_cast<float>(th.swellGain[i] * th.gain * (1 - std::exp(-s * 12.0)) * std::exp(-s * 0.7));
     }
   }
 }
@@ -129,6 +132,13 @@ Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
   std::fill(feed_, feed_ + kMaxChannels, static_cast<int8_t>(kSilent));
   std::fill(speakerOf_, speakerOf_ + kMaxChannels, -1);
   fxRng_ = Rng(seed ^ 0xA24BAED4963EE407ull);
+  stormAt_.spread = 0.7f;  // the far storm is wide
+  // The crickets stand at fixed places on the ground in the surrounds (rooms only; a stereo pair keeps them in both ears).
+  const float cricketAt[3] = {-112.0f, 105.0f, 158.0f};
+  for (int i = 0; i < 3; ++i) place_[kCricket0 + i].src.azimuth = cricketAt[i];
+  place_[kDesertCricket0].src.azimuth = -125.0f;
+  place_[kDesertCricket0 + 1].src.azimuth = 100.0f;
+  std::fill(rainShape_, rainShape_ + kMaxChannels, 1.0f);
   for (Place& pl : place_) pl.v = SpatialVoice(rate_);
   // How far the chains of each scene wander in level, slowly, so that wind and storms drift around the room.
   driftDepth_[static_cast<int>(AmbientKind::Forest)] = 0.3f;
@@ -221,9 +231,14 @@ void Ambience::route() {
         else t = 1.0f;
       }
       trim_[k][ch] = t;
+      if (k == static_cast<int>(AmbientKind::Forest) && ch >= 2 && ch < chains_) {  // the rain falls from above: overhead most, in front least
+        const Speaker& rs = layout_.speaker(speakerOf[ch]);
+        rainShape_[ch] = rs.elevation > 1.0f ? 1.5f : std::fabs(rs.azimuth) < 50.0f ? 0.8f : 1.0f;
+      }
       if (t > 0) liveMask_[k] |= 1u << ch;
     }
   }
+  stereoRef_ = layout_.channels() == 1 ? 1.0f : kStereoRef;  // a single speaker plays the mean of the old stereo pair, so a placed sound is not doubled there
   updateDrift();
   for (Place& pl : place_) pl.v.setTarget(layout_, forLayout(pl.src), false);  // placed sounds glide to their place in the new layout
 
@@ -273,7 +288,7 @@ void Ambience::stepPlaces() {
 float Ambience::weight(int id, int chain) const {
   const Place& pl = place_[id];
   if (!pl.on || speakerOf_[chain] < 0) return 0.0f;
-  return pl.v.gain(speakerOf_[chain]) * kStereoRef;
+  return pl.v.gain(speakerOf_[chain]) * stereoRef_;
 }
 
 void Ambience::flushRoom(float bus[kMaxChannels], float scale) {
@@ -357,7 +372,18 @@ void Ambience::aimAquarium(const AmbientParams& p) {
   if (place_[kWhale].on && whale.level > 0) aim(kWhale, stageSource(whale.x, whale.y, 0.6f, 0.4f));
 }
 
+void Ambience::aimForest(const AmbientParams& p) {
+  const Emitter& cloud = p.emitters[static_cast<int>(EmitterKey::Gloom)];  // the storm's far claps and rumble come from the thundercloud
+  if (cloud.level > 0) {
+    stormAt_ = stageSource(cloud.x, cloud.y, 0.7f, 0.0f);
+    if (place_[kCloud].on) aim(kCloud, stormAt_);
+  }
+  const Emitter& flood = p.emitters[static_cast<int>(EmitterKey::Flood)];  // the flood's roar follows the front of the water
+  if (p.menace > 0 && (flood.level > 0 || !place_[kFlood].on)) aim(kFlood, stageSource(flood.x, flood.y, 0.8f, 0.6f));
+}
+
 void Ambience::event(const SoundEvent& e) {
+  if (e.kind == EventKind::Flash) flashAt_ = stageSource(e.x, e.y, 0.3f, 0.0f);
   if (e.kind == EventKind::Squeal) squealAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
   if (e.kind == EventKind::Crush) crushAt_ = stageSource(e.x, e.y, 0.0f, 0.4f);
   if (e.kind == EventKind::Nibble) {
@@ -485,7 +511,7 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
   whistlePhase_ += kTwoPi * (620.0 + 340.0 * gust_ + 60.0 * std::sin(0.4 * t_)) * dt;
   const float whistle = rain_ * rain_ * gust_ * 0.02f * static_cast<float>(std::sin(whistlePhase_));
   if (rain_ < 1e-3f && !(p.rain > 0)) place_[kWhistle].on = false;
-  if (place_[kWhistle].on) place_[kWhistle].v.add(whistle * kStereoRef, room_, nch);  // drifting round the room
+  if (place_[kWhistle].on) place_[kWhistle].v.add(whistle * stereoRef_, room_, nch);  // drifting round the room
   const float hiss = rain_ * (0.1f + 0.2f * gust_);
   // The stream: noise between two low-passes, quietly, that bubbles and gurgles: it is broken up by
   // a few unrelated fast ripples so that it does not sound like steady brushing.
@@ -577,14 +603,14 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
     }
     squealLow_[i][0] += (squeal - squealLow_[i][0]) * lowSqueal_;
     squealLow_[i][1] += (squealLow_[i][0] - squealLow_[i][1]) * lowSqueal_;
-    if (squeal != 0 || std::fabs(squealLow_[i][1]) > 1e-7f) place_[kSqueal0 + i].v.add(squealLow_[i][1] * 0.6f * kStereoRef, room_, nch);
+    if (squeal != 0 || std::fabs(squealLow_[i][1]) > 1e-7f) place_[kSqueal0 + i].v.add(squealLow_[i][1] * 0.6f * stereoRef_, room_, nch);
   }
   // The avalanche's crackle and thump are voices at the slide (a place with a full bass send); its rumble
   // and roar are noise, one chain per speaker, weighted by how near each speaker is to the slide.
   if (avalanche_ < 1e-3f && !(p.avalanche > 0)) place_[kSlide].on = false;
   crackLowAv_[0] += crackF * crackBandAv_[0];
   crackBandAv_[0] += crackF * (click * 8.0f - crackLowAv_[0] - 0.5f * crackBandAv_[0]);
-  if (place_[kSlide].on) place_[kSlide].v.add((crackBandAv_[0] * 0.35f + thump) * kStereoRef, room_, nch);
+  if (place_[kSlide].on) place_[kSlide].v.add((crackBandAv_[0] * 0.35f + thump) * stereoRef_, room_, nch);
   const float mixMountains = mix_[static_cast<int>(AmbientKind::Mountains)];
 
   // Wind, ice and the stream are the bed, one chain per speaker (the stream runs on the ground, so
@@ -645,7 +671,17 @@ void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
   const float spin = 0.65f + 0.35f * static_cast<float>(std::sin(tornadoPhase_));
   const float roar = tornado_ * std::sqrt(tornado_) * spin * 2.0f;
   // Crickets at night, fewer than in the forest.
-  const float chirps = night_ * 0.014f * (cricket(t_, 2.1, 33, 4300) + 0.7f * cricket(t_ + 0.5, 1.7, 28, 4800));
+  const float cricketA = cricket(t_, 2.1, 33, 4300), cricketB = 0.7f * cricket(t_ + 0.5, 1.7, 28, 4800);
+  const float chirps = night_ * 0.014f * (cricketA + cricketB);
+  const bool singing = nch > 2 && night_ > 1e-3f;  // in a room each cricket is a voice at its own place
+  for (int i = 0; i < 2; ++i) {
+    Place& pl = place_[kDesertCricket0 + i];
+    if (pl.on != singing) {
+      pl.on = singing;
+      if (singing) pl.v.setTarget(layout_, forLayout(pl.src), true);
+    }
+    if (singing) pl.v.add(night_ * 0.014f * (i ? cricketB : cricketA) * stereoRef_, room_, nch);
+  }
   // The sandworm below, as it nears: a growl in the ground.
   const float growl = storm_ * storm_ * 0.5f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
   // The worm bellows now and then while it crosses: a very deep, trumpeting roar. The pitch
@@ -674,7 +710,7 @@ void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
   roarLow_[0] += (bellow - roarLow_[0]) * lowRoar_;
   roarLow_[1] += (roarLow_[0] - roarLow_[1]) * lowRoar_;
   const float roarOut = roarLow_[1] * 0.45f * wormNear_;
-  if (place_[kWorm].on && std::fabs(roarOut) > 1e-9f) place_[kWorm].v.add(roarOut * kStereoRef, room_, nch);  // the bellow comes from the worm (nothing to add between bellows)
+  if (place_[kWorm].on && std::fabs(roarOut) > 1e-9f) place_[kWorm].v.add(roarOut * stereoRef_, room_, nch);  // the bellow comes from the worm (nothing to add between bellows)
   // Crushing: chewing. Each thing it swallows is ground between a few soft bites, every one a
   // short swell of low-passed noise (no sharp start, so it never sounds like a shot), over a faint
   // low grumble.
@@ -691,7 +727,7 @@ void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
       crunchEnv[i] += static_cast<float>(c.gain * c.force[b] * swell * swell);
     }
     const float g = static_cast<float>(c.gain * std::sin(kTwoPi * 62.0 * tau) * std::min(1.0, tau / 0.12) * std::exp(-tau / 0.7));
-    if (place_[kCrunch0 + i].on) place_[kCrunch0 + i].v.add(g * 0.03f * kStereoRef, room_, nch);
+    if (place_[kCrunch0 + i].on) place_[kCrunch0 + i].v.add(g * 0.03f * stereoRef_, room_, nch);
   }
   const bool chewing = crunchEnv[0] > 0 || crunchEnv[1] > 0 || crunchEnv[2] > 0 || crunchEnv[3] > 0;
 
@@ -739,7 +775,7 @@ void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
     if (growl > 0) placed += weight(kWorm, ch) * deepLow_[ch][1] * 20.0f * growl;
     voiceOut_[ch] += placed * mixDesert;
     out[ch] = desertLow_[ch][1] * 9.0f * windGain + (sandLow_[ch][1] - sandLow_[ch][0]) * 0.5f * sandLevel +
-              (ch < 2 ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);
+              (ch < 2 && nch <= 2 ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);
   }
   flushRoom(voiceOut_, mixDesert);
 }
@@ -865,10 +901,10 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
   if (trainNear_ < 1e-3f && !(p.train > 0)) place_[kTrain].on = false;
   if (planeNear_ < 1e-3f && !(p.plane > 0)) place_[kPlane].on = false;
   if (fireNear_ < 1e-3f && !(p.fire > 0)) place_[kFire].on = false;
-  if (place_[kSiren].on) place_[kSiren].v.add(siren * 0.15f * kStereoRef, room_, nch);
-  if (place_[kWail].on) place_[kWail].v.add(wail * 0.13f * kStereoRef, room_, nch);
-  if (place_[kTrain].on) place_[kTrain].v.add((thunk * 0.12f * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ + squeal * 0.08f) * kStereoRef, room_, nch);
-  if (place_[kFire].on) place_[kFire].v.add(fireCrack_ * 0.3f * fireNear_ * kStereoRef, room_, nch);
+  if (place_[kSiren].on) place_[kSiren].v.add(siren * 0.15f * stereoRef_, room_, nch);
+  if (place_[kWail].on) place_[kWail].v.add(wail * 0.13f * stereoRef_, room_, nch);
+  if (place_[kTrain].on) place_[kTrain].v.add((thunk * 0.12f * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ + squeal * 0.08f) * stereoRef_, room_, nch);
+  if (place_[kFire].on) place_[kFire].v.add(fireCrack_ * 0.3f * fireNear_ * stereoRef_, room_, nch);
 
   const float mixCity = mix_[static_cast<int>(AmbientKind::City)];
   // Traffic is the bed, one chain per speaker. The train's rumble and clatter, the fire's roar and the
@@ -1009,7 +1045,7 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
   gulpLow_[0] += (gulp - gulpLow_[0]) * lowGulp_;
   gulpLow_[1] += (gulpLow_[0] - gulpLow_[1]) * lowGulp_;
   if (place_[kGulp].on) {
-    place_[kGulp].v.add(gulpLow_[1] * 0.45f * kStereoRef, room_, nch);  // from the kraken's mouth
+    place_[kGulp].v.add(gulpLow_[1] * 0.45f * stereoRef_, room_, nch);  // from the kraken's mouth
     if (!gulping && std::fabs(gulpLow_[1]) < 1e-6f && std::fabs(gulpLow_[0]) < 1e-6f) place_[kGulp].on = false;
   }
 
@@ -1057,7 +1093,7 @@ float Ambience::coeff(float seconds) const {
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
-    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = place_[kSub].on = false;
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = place_[kSub].on = place_[kFlood].on = false;
     return;
   }
   if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
@@ -1084,7 +1120,8 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
       case AmbientKind::Forest: {  // a flood: the deep roar of rushing water and the hiss of its surface
         menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowFloodTop_;
         const float swell = 0.75f + 0.25f * static_cast<float>(std::sin(kTwoPi * 0.31 * t_ + 1.7 * ch));
-        out[ch] = (menaceLow_[ch][1] * 3.2f + (n - menaceHigh_[ch]) * 0.06f + menaceHigh_[ch] * 0.28f) * 0.55f * level * swell;
+        menaceBus_[ch] += weight(kFlood, ch) * (menaceLow_[ch][1] * 3.2f + (n - menaceHigh_[ch]) * 0.06f + menaceHigh_[ch] * 0.28f) *
+                          0.55f * level * swell;  // the roar follows the front of the water
         break;
       }
       case AmbientKind::Desert: {  // a helicopter: the chop of the rotor, placed at the helicopter
@@ -1102,7 +1139,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   }
   if (p.kind == AmbientKind::Desert) {  // the whine over the chop: one voice from the helicopter
     menacePhase_[1] += kTwoPi * 390.0 * dt;
-    if (place_[kChopper].on) place_[kChopper].v.add(0.012f * static_cast<float>(std::sin(menacePhase_[1])) * 0.7f * level * kStereoRef, room_, nch);
+    if (place_[kChopper].on) place_[kChopper].v.add(0.012f * static_cast<float>(std::sin(menacePhase_[1])) * 0.7f * level * stereoRef_, room_, nch);
   }
   if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
     const Emitter& sub = p.emitters[static_cast<int>(EmitterKey::Submarine)];
@@ -1141,7 +1178,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   // The stamps are placed at the creature (the lizard, the yeti): the thump is one mono sound with a
   // bass send, the rumble under it noise per chain, weighted by how near each speaker is.
   const int body = big ? kTitan : kBeast;
-  if (place_[body].on) place_[body].v.add(thump * (big ? 0.36f : 0.38f) * level * kStereoRef, room_, nch);
+  if (place_[body].on) place_[body].v.add(thump * (big ? 0.36f : 0.38f) * level * stereoRef_, room_, nch);
   for (int ch = 0; ch < chains_; ++ch) {
     const float w = weight(body, ch);
     if (w >= 1e-3f && live(p.kind, ch)) menaceBus_[ch] += w * menaceLow_[ch][1] * stampRumble;
@@ -1164,7 +1201,7 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f * wingedNear_ : 0.14f);
     // The lizard and the yeti bellow from where they stand, the winged monster screeches from where it flies.
     const int id = big ? (menaceRoarVoice_ == 1 ? kWinged : kTitan) : kBeast;
-    if (place_[id].on) place_[id].v.add(roar * kStereoRef, room_, nch);
+    if (place_[id].on) place_[id].v.add(roar * stereoRef_, room_, nch);
   }
 }
 
@@ -1188,12 +1225,16 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   if (p.kind == AmbientKind::Mountains) aimMountains(p);
   if (p.kind == AmbientKind::Desert) aimDesert(p);
   if (p.kind == AmbientKind::Aquarium) aimAquarium(p);
+  if (p.kind == AmbientKind::Forest) aimForest(p);
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
     // (The counter drops when the world is rebuilt; that is no lightning.)
     if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Forest) {
       clap(rng_.range(0.03, 0.10), 1.0, true);  // the strike is overhead: sound follows at once
+      place_[kThunder].src = flashAt_;  // its crack comes from where it struck
+      place_[kThunder].v.setTarget(layout_, forLayout(place_[kThunder].src), true);
+      place_[kThunder].on = true;
     }
     if (p.flashes > seenFlashes_ && p.kind == AmbientKind::Moon) zapStart_ = t_;  // the alien's flash
     seenFlashes_ = p.flashes;
@@ -1246,8 +1287,9 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
       windGain = (0.3f + 0.9f * gust * gust) * (1.0f + 2.0f * rain_) * 0.10f;
     }
-    float crackEnv, rumbleEnv, snapEnv;
-    thunderLevels(crackEnv, rumbleEnv, snapEnv);
+    float crackParts[2], rumbleParts[2], snapEnv;
+    bool strikeLive;
+    thunderLevels(crackParts, rumbleParts, snapEnv, strikeLive);
     // A storm on its way: a soft rolling rumble that grows as it nears, and far-off claps now
     // and then, well before the first strike.
     // The crack: lightning snaps as a quick series of sharp clicks (the same for both ears, so
@@ -1259,7 +1301,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     }
     approach(roll_, noise(rng_) * rollScale, lowRoll);
     if (storm_ > 0.04f && p.kind == AmbientKind::Forest) {
-      rumbleEnv += storm_ * storm_ * 0.16f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
+      rumbleParts[1] += storm_ * storm_ * 0.16f * std::clamp(0.55f + 0.45f * roll_, 0.1f, 1.0f);
       if (nextFarClap_ == 0) nextFarClap_ = t_ + rng_.range(2.0, 5.0);
       if (t_ >= nextFarClap_) {
         clap(0.0, 0.2 + 0.4 * storm_);
@@ -1268,9 +1310,12 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     } else {
       nextFarClap_ = 0;
     }
-    const float chirps = !forestOn ? 0.0f : night_ * 0.035f *
-                         (cricket(t_, 2.3, 34, 4200) + 0.8f * cricket(t_ + 0.4, 1.9, 29, 4650) +
-                          0.6f * cricket(t_ + 0.9, 2.9, 31, 3900));
+    const float crackEnv = crackParts[0] + crackParts[1], rumbleEnv = rumbleParts[0] + rumbleParts[1];
+    // Crickets: three of them. A stereo pair hears them in both ears; in a room each is a voice at its own place.
+    const bool room3d = layout_.channels() > 2;
+    const float crickets[3] = {forestOn ? cricket(t_, 2.3, 34, 4200) : 0.0f, forestOn ? 0.8f * cricket(t_ + 0.4, 1.9, 29, 4650) : 0.0f,
+                               forestOn ? 0.6f * cricket(t_ + 0.9, 2.9, 31, 3900) : 0.0f};
+    const float chirps = !forestOn ? 0.0f : night_ * 0.035f * (crickets[0] + crickets[1] + crickets[2]);
 
     // Nibbles at food: each one a little blip (the very first value seen is the starting point).
     if (!nibblesSynced_) { seenNibbles_ = p.nibbles; nibblesSynced_ = true; }
@@ -1379,7 +1424,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       if (tau < 0 || tau > 0.4) continue;
       const float crack = noise(rng_) * static_cast<float>(std::exp(-tau / 0.012)) * 0.34f;
       const float thump = static_cast<float>(std::sin(kTwoPi * 150.0 * tau) * std::exp(-tau / 0.05)) * 0.22f;
-      if (place_[kShot0 + i].on) place_[kShot0 + i].v.add((crack + thump) * 0.7f * kStereoRef, room_, layout_.channels());
+      if (place_[kShot0 + i].on) place_[kShot0 + i].v.add((crack + thump) * 0.7f * stereoRef_, room_, layout_.channels());
     }
     flushRoom(menaceBus_, 1.0f);
     float aq[kMaxChannels], desert[kMaxChannels], moon[kMaxChannels], mountains[kMaxChannels], city[kMaxChannels];
@@ -1393,6 +1438,37 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     if (mix_[static_cast<int>(AmbientKind::Moon)] > 1e-3f) moonSample(p, moon);
     if (mix_[static_cast<int>(AmbientKind::Mountains)] > 1e-3f) mountainSample(p, mountains);
     if (mix_[static_cast<int>(AmbientKind::City)] > 1e-3f) citySample(p, city);
+
+    // The forest's voices: the lightning's snap (a single sound, which is the same in both ears of a stereo
+    // pair) from where it struck, and the crickets, each at its own place in a room.
+    if (forestOn) {
+      const int nch = layout_.channels();
+      if (!strikeLive && snapEnv < 1e-3f) place_[kThunder].on = false;
+      const bool farLive = crackParts[1] > 1e-4f || rumbleParts[1] > 1e-4f;
+      if (farLive && !place_[kCloud].on) {  // the far storm takes its place the first time it is heard
+        place_[kCloud].src = stormAt_;
+        place_[kCloud].v.setTarget(layout_, forLayout(place_[kCloud].src), true);
+        place_[kCloud].on = true;
+      } else if (!farLive) {
+        place_[kCloud].on = false;
+      }
+      if (snapEnv > 1e-3f) {
+        snapLow_[0] += snapF * snapBand_[0];
+        const float high = click * 9.0f - snapLow_[0] - kSnapDamp * snapBand_[0];
+        snapBand_[0] += snapF * high;
+        if (place_[kThunder].on) place_[kThunder].v.add(snapBand_[0] * snapEnv * stereoRef_, room_, nch);
+      }
+      const bool singing = room3d && night_ > 1e-3f;
+      for (int i = 0; i < 3; ++i) {
+        Place& pl = place_[kCricket0 + i];
+        if (pl.on != singing) {
+          pl.on = singing;
+          if (singing) pl.v.setTarget(layout_, forLayout(pl.src), true);
+        }
+        if (singing) pl.v.add(night_ * 0.035f * crickets[i] * stereoRef_, room_, nch);
+      }
+      flushRoom(voiceOut_, mix_[static_cast<int>(AmbientKind::Forest)]);
+    }
 
     const int kind = static_cast<int>(p.kind);
     float chain[kMaxChannels];  // what each bed chain plays; chains 0 and 1 are the stereo pair
@@ -1410,24 +1486,22 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
         // Rain: the hiss is noise with its low end removed, plus a quiet rumble beneath it.
         const float n = noise(r) * noiseScale_;
         rainLow_[ch] += (n - rainLow_[ch]) * lowRain;
-        const float rain = ((n - rainLow_[ch]) * 0.30f + rainLow_[ch] * 0.9f) * rain_;
+        const float rain = ((n - rainLow_[ch]) * 0.30f + rainLow_[ch] * 0.9f) * rain_ * rainShape_[ch];
 
         // Thunder: a brief crack of mid-high noise, then deep rumbling noise.
         float thunder = 0;
-        if (snapEnv > 1e-3f && ch < 2) {  // the lightning's snap is a voice of the stereo pair
-          snapLow_[ch] += snapF * snapBand_[ch];
-          const float high = click * 9.0f - snapLow_[ch] - kSnapDamp * snapBand_[ch];
-          snapBand_[ch] += snapF * high;
-          thunder += snapBand_[ch] * snapEnv;
-        }
         if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) {
           const float tn = noise(r) * noiseScale_;
           crackLow_[ch] += (tn - crackLow_[ch]) * lowCrack;
           rumbleLow_[ch][0] += (tn - rumbleLow_[ch][0]) * lowRumble;
           rumbleLow_[ch][1] += (rumbleLow_[ch][0] - rumbleLow_[ch][1]) * lowRumble;
-          thunder += crackLow_[ch] * crackEnv * 0.85f + rumbleLow_[ch][1] * rumbleEnv * 17.0f;
+          // A strike's crack is heard where it struck and the far claps where the storm is; the strikes' rumble
+          // rolls all round (it is a bed).
+          const float wStorm = weight(kCloud, ch);
+          thunder += crackLow_[ch] * (weight(kThunder, ch) * crackParts[0] + wStorm * crackParts[1]) * 0.85f +
+                     rumbleLow_[ch][1] * (rumbleParts[0] + wStorm * rumbleParts[1]) * 17.0f;
         }
-        forest = wind + rain + thunder + (ch < 2 ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);  // crickets are voices too
+        forest = wind + rain + thunder + (ch < 2 && !room3d ? chirps * (ch ? 0.9f : 1.0f) : 0.0f);  // (in a room the crickets are placed)
       } else if (ch < 2) {
         // Silent, but the generator advances as if the chain had run: one draw each for the wind
         // and the rain, and one for the thunder's noise while a clap is still ringing.

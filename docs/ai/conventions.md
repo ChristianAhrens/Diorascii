@@ -95,6 +95,7 @@ levels were only measured. Accumulated preferences from the forest iterations:
   re-derive them from cells in the audio code. Every new counter that triggers a sound gets an event with the causing entity's position, and a test that checks the position against that entity.
 - A converted scene's sounds come in two kinds: bed (per chain, trimmed, drifting) and placed (a `Place`: mono voice or weighted noise, from the world's emitter or event). A placed mono sound is scaled by `kStereoRef`; send bass only through a place's `lfeSend`
   (the synth drops it in layouts without LFE). Prove a conversion keeps the stereo sound: with every emitter at the centre the golden values must hold (within the tolerance); a deliberate difference is re-baselined and said in the commit message.
+- A placed sound leaves the front pair of a room by design, so a test that compares a layout's front left and right, or a single speaker, with the stereo synth must use parameters with nothing placed (`placedFreeParams()`: the forest's wind and rain by day). The scale of a placed mono sound is `stereoRef_` (sqrt(2), but 1 for a single speaker).
 - Events before parameters: a frontend pushes the frame's sound events into the output **before** it stores the frame's parameters, because a sound that a counter starts takes its place from the latest event.
 - A new `AmbientParams` field needs nothing in the audio backends: they copy the whole struct through a `Seqlock`
   (since 2026-11-14, finding F-19). Keep `AmbientParams` trivially copyable (no pointers, strings or containers).

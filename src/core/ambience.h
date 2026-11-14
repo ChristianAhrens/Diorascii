@@ -154,8 +154,10 @@ class Ambience {
   void mountainSample(const AmbientParams& p, float out[kMaxChannels]);
   /// One sample of the second catastrophe of the current scene, per bed chain (silent without one).
   void menaceSample(const AmbientParams& p, float out[kMaxChannels]);
-  /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
-  void thunderLevels(float& crack, float& rumble, float& snap) const;
+  /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble, `[0]` of the
+  /// lightning strikes and `[1]` of the far claps, and the strikes' snap. `strikeLive` is true while a strike is
+  /// pending or still ringing.
+  void thunderLevels(float crack[2], float rumble[2], float& snap, bool& strikeLive) const;
 
   /// Chooses which bed chain each output channel plays, derives the per-chain levels of every
   /// scene, and glides to the new choice.
@@ -184,7 +186,12 @@ class Ambience {
     kGulp,                        ///< the kraken's gulps
     kSub,                         ///< the submarine's hiss
     kBubble0,                     ///< the ten bubble blips (kBubble0 + slot)
-    kPlaceCount = kBubble0 + 10
+    kThunder = kBubble0 + 10,     ///< the strike's crack and snap
+    kCloud,                       ///< the far claps and the rumble of the storm on its way (at the thundercloud)
+    kFlood,                       ///< the rush of the flood
+    kCricket0,                    ///< the forest's three crickets (kCricket0 + i), in a room
+    kDesertCricket0 = kCricket0 + 3,  ///< the desert's two crickets, in a room
+    kPlaceCount = kDesertCricket0 + 2
   };
   /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
   /// gains towards every speaker, and whether it is sounding.
@@ -219,6 +226,8 @@ class Ambience {
   void aimMountains(const AmbientParams& p);
   /// Aims the placed sounds of the desert (the tornado, the sandworm, the helicopter) at their emitters.
   void aimDesert(const AmbientParams& p);
+  /// Aims the placed sounds of the forest (the storm's rumble and the flood) at their emitters.
+  void aimForest(const AmbientParams& p);
   /// Aims the placed sounds of the aquarium (the kraken's growl, the submarine, the whale while it sings) at their emitters.
   void aimAquarium(const AmbientParams& p);
 
@@ -247,6 +256,10 @@ class Ambience {
   Source squealAt_;                             ///< where the latest squeal event happened (the next squeal starts there)
   Source crushAt_;                              ///< where the latest crush event happened (the next chewing starts there)
   Source shotAt_;                               ///< where the latest shot event happened (the next shot starts there)
+  float stereoRef_ = 1.41421356f;               ///< what a placed mono sound is scaled by to keep the level of the old dual-mono sound (1 for a single speaker)
+  Source flashAt_;                              ///< where the latest lightning flash struck (the next strike's crack comes from there)
+  Source stormAt_;                              ///< where the thundercloud is (the far claps come from there)
+  float rainShape_[kMaxChannels];               ///< how much of the forest's rain each chain plays: the rain is overhead
   Source nibbleAt_;                             ///< where the latest nibble event happened (the next blip starts there)
   bool nibbleFresh_ = false;                    ///< a nibble event came in that no blip has used yet (else a blip rises at a random place)
   Rng fxRng_;                                   ///< the dice of the surround effects (where bubbles rise in a room): never the stereo sound's

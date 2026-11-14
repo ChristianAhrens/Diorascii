@@ -4771,13 +4771,31 @@ AmbientParams goldenParams(int n) {
 
 /// Renders `seconds` of golden case `n` with the synth `a`, in blocks of 0.1 s (the counters step up
 /// once, after 0.4 s, as in every golden case), appending interleaved samples of `channels` per frame.
-void goldenAppend(Ambience& a, AmbientParams& p, int channels, int firstBlock, int blocks, std::vector<float>& out) {
+void goldenAppend(Ambience& a, AmbientParams& p, int channels, int firstBlock, int blocks, std::vector<float>& out, bool stepCounters = true) {
   std::vector<float> buf(static_cast<size_t>(channels) * kGoldenBlock);
   for (int block = firstBlock; block < firstBlock + blocks; ++block) {
-    if (block == 4) { ++p.flashes; ++p.nibbles; ++p.impacts; ++p.crushes; ++p.squeals; ++p.shots; }
+    if (stepCounters && block == 4) { ++p.flashes; ++p.nibbles; ++p.impacts; ++p.crushes; ++p.squeals; ++p.shots; }
     a.render(p, buf.data(), kGoldenBlock);
     out.insert(out.end(), buf.begin(), buf.end());
   }
+}
+
+/// The forest's wind and rain by day with nothing placed (no storm, no strike, no crickets): what a stereo pair and the
+/// front speakers of a room must play alike, bit for bit.
+AmbientParams placedFreeParams() {
+  AmbientParams p = goldenParams(0);
+  p.storm = 0;
+  p.night = 0;
+  return p;
+}
+
+/// Renders `placedFreeParams` as interleaved stereo for two seconds.
+std::vector<float> placedFreeRender() {
+  Ambience a(48000, 5);
+  AmbientParams p = placedFreeParams();
+  std::vector<float> out;
+  goldenAppend(a, p, 2, 0, 2 * 48000 / kGoldenBlock, out, false);
+  return out;
 }
 
 /// Renders golden case `n` as interleaved stereo.
@@ -4902,16 +4920,27 @@ TEST(ambience_in_every_layout_is_finite_bounded_deterministic_and_stays_in_its_b
 }
 
 TEST(ambience_in_a_layout_plays_the_stereo_pair_on_the_front_speakers_exactly_as_in_stereo) {
-  // However many speakers there are, the front left and right play the stereo synth bit for bit
-  // (they carry the voices, and their bed draws from the same generator as ever).
-  std::vector<float> stereo = goldenRender(0);  // the forest, everything active
+  // However many speakers there are, the front left and right play the stereo synth bit for bit while
+  // nothing is placed (a placed sound is spread over the speakers, so it leaves the front pair): the
+  // forest's wind and rain, by day, with no storm and no strike. Their bed draws from the same generator as ever.
+  auto render = [](const Layout& layout) {
+    Ambience a(48000, 5, layout);
+    AmbientParams p = goldenParams(0);
+    p.storm = 0;
+    p.night = 0;
+    const int ch = layout.channels();
+    std::vector<float> buf(static_cast<size_t>(ch) * kGoldenBlock), out;
+    for (int block = 0; block < 2 * 48000 / kGoldenBlock; ++block) {
+      a.render(p, buf.data(), kGoldenBlock);
+      out.insert(out.end(), buf.begin(), buf.end());
+    }
+    return out;
+  };
+  const std::vector<float> stereo = render(Layout::named(LayoutId::Stereo));
   for (int i = 0; i < kLayoutCount; ++i) {
     const Layout layout = Layout::named(static_cast<LayoutId>(i));
     const int ch = layout.channels();
-    Ambience a(48000, 5, layout);
-    AmbientParams p = goldenParams(0);
-    std::vector<float> out;
-    goldenAppend(a, p, ch, 0, 2 * 48000 / kGoldenBlock, out);
+    const std::vector<float> out = render(layout);
     for (size_t f = 0; f < stereo.size() / 2; ++f)
       for (int c = 0; c < 2; ++c) CHECK(out[f * ch + c] == stereo[f * 2 + c]);
   }
@@ -4936,26 +4965,26 @@ TEST(ambience_in_a_layout_is_silent_when_the_scene_is_silent_or_muted) {
 TEST(a_single_speaker_plays_the_mean_of_the_stereo_pair) {
   DeviceChannel one[1] = {{0, 0, false, true}};
   Ambience a(48000, 5, Layout::fromDevice(one, 1));
-  AmbientParams p = goldenParams(0);
+  AmbientParams p = placedFreeParams();
   std::vector<float> mono;
-  goldenAppend(a, p, 1, 0, 10, mono);
-  const std::vector<float> stereo = goldenRender(0);
+  goldenAppend(a, p, 1, 0, 10, mono, false);
+  const std::vector<float> stereo = placedFreeRender();
   for (size_t f = 0; f < mono.size(); ++f) CHECK(std::fabs(mono[f] - 0.5f * (stereo[2 * f] + stereo[2 * f + 1])) < 1e-6f);
 }
 
 TEST(changing_the_layout_while_rendering_keeps_the_sound_going_and_does_not_click) {
   // One second in stereo, then 5.1 for a second, then 7.1.4: L and R must continue exactly as if
   // nothing had happened (no reset), and the new channels must come in without a jump.
-  const std::vector<float> reference = goldenRender(0);
+  const std::vector<float> reference = placedFreeRender();
   Ambience a(48000, 5);
-  AmbientParams p = goldenParams(0);
+  AmbientParams p = placedFreeParams();
   std::vector<float> stereoPart, part51, part714;
-  goldenAppend(a, p, 2, 0, 5, stereoPart);
+  goldenAppend(a, p, 2, 0, 5, stereoPart, false);
   a.setLayout(Layout::named(LayoutId::S5_1));
   CHECK(a.layout().channels() == 6);
-  goldenAppend(a, p, 6, 5, 5, part51);
+  goldenAppend(a, p, 6, 5, 5, part51, false);
   a.setLayout(Layout::named(LayoutId::S7_1_4));
-  goldenAppend(a, p, 12, 10, 10, part714);
+  goldenAppend(a, p, 12, 10, 10, part714, false);
   for (size_t f = 0; f < reference.size() / 2; ++f) {
     float l, r;
     if (f < stereoPart.size() / 2) { l = stereoPart[2 * f]; r = stereoPart[2 * f + 1]; }
@@ -4968,12 +4997,12 @@ TEST(changing_the_layout_while_rendering_keeps_the_sound_going_and_does_not_clic
   // two speakers. The signal itself is noise, so the test compares with the continuing stereo signal
   // times the gain 1 - (1 - k)^(n + 1) of a one-pole fade with k = 1 - exp(-1 / (20 ms * rate)).
   Ambience b(48000, 5);
-  AmbientParams q = goldenParams(0);
+  AmbientParams q = placedFreeParams();
   std::vector<float> before, after;
-  goldenAppend(b, q, 2, 0, 10, before);
+  goldenAppend(b, q, 2, 0, 10, before, false);
   DeviceChannel swapped[2] = {{100, 0, false, true}, {-100, 0, false, true}};
   b.setLayout(Layout::fromDevice(swapped, 2));
-  goldenAppend(b, q, 2, 10, 1, after);
+  goldenAppend(b, q, 2, 10, 1, after, false);
   const double k = 1.0 - std::exp(-1.0 / (0.02 * 48000.0));
   float level = 0;
   for (size_t f = 0; f < kGoldenBlock; ++f) {
@@ -6174,6 +6203,163 @@ TEST(tiny_bubbles_glint_in_the_speakers_of_a_room_and_stereo_is_left_as_it_was) 
   a.render(p, x.data(), 21600);
   b.render(p, y.data(), 21600);
   CHECK(x == y);
+}
+
+// ------------------------------------------------------------ the forest in space ---
+
+namespace {
+/// Per-channel RMS of the last second of 4 s of the forest in `layout`, set up by `setup`.
+std::vector<double> forestRms(const Layout& layout, const std::function<void(AmbientParams&)>& setup, int seconds = 4) {
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  setup(p);
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < seconds; ++s) a.render(p, buf.data(), 48000);
+  std::vector<double> rms(static_cast<size_t>(ch));
+  for (int c = 0; c < ch; ++c) rms[static_cast<size_t>(c)] = channelRms(buf, ch, c);
+  return rms;
+}
+
+/// The placed sources of the forest: the storm on its way and the flood.
+std::vector<CitySource> forestSources() {
+  return {
+      {"storm", [](AmbientParams& p, float x, float y) { p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Gloom)] = {1, x, y, 0.4f, 0}; }},
+      {"flood", [](AmbientParams& p, float x, float y) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Flood)] = {1, x, y, 0.4f, 0}; }},
+  };
+}
+}  // namespace
+
+TEST(the_storm_and_the_flood_are_heard_from_where_they_are_and_rumble_in_the_bass) {
+  const Layout layout = Layout::named(LayoutId::S5_1);  // L R C LFE Ls Rs
+  const auto calm = forestRms(layout, [](AmbientParams&) {});
+  auto added = [&](const std::vector<double>& with, int a, int b) {
+    return std::max(0.0, with[static_cast<size_t>(a)] * with[static_cast<size_t>(a)] - calm[static_cast<size_t>(a)] * calm[static_cast<size_t>(a)] +
+                             with[static_cast<size_t>(b)] * with[static_cast<size_t>(b)] - calm[static_cast<size_t>(b)] * calm[static_cast<size_t>(b)]);
+  };
+  for (const CitySource& src : forestSources()) {
+    const auto left = forestRms(layout, [&](AmbientParams& p) { src.set(p, -1.0f, 0.0f); });
+    const auto right = forestRms(layout, [&](AmbientParams& p) { src.set(p, 1.0f, 0.0f); });
+    const double need = std::string(src.name) == "flood" ? 1.15 : 1.3;  // the flood is wide (spread 0.8) and a gentle roar beside the bed
+    CHECK(added(left, 0, 4) > need * added(left, 1, 5));
+    CHECK(added(right, 1, 5) > need * added(right, 0, 4));
+    const auto off = forestRms(layout, [&](AmbientParams& p) { src.set(p, -1.5f, 0.0f); });
+    CHECK(off[4] > off[0]);  // off-screen it comes from the side
+  }
+  CHECK(forestRms(layout, [](AmbientParams& p) { p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Gloom)] = {1, 0, 0, 0.4f, 0}; })[3] > 2.0 * calm[3]);
+  CHECK(forestRms(layout, [](AmbientParams& p) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Flood)] = {1, 0, 0, 0.4f, 0}; })[3] > 1.4 * calm[3]);
+}
+
+TEST(a_lightning_strike_cracks_where_it_struck_and_high_in_the_sky) {
+  const Layout l51 = Layout::named(LayoutId::S5_1);
+  double side[2][2] = {};  // [struck left/right][left speakers/right speakers]
+  for (int variant = 0; variant < 2; ++variant) {
+    Ambience a(48000, 3, l51);
+    AmbientParams p;
+    p.kind = AmbientKind::Forest;
+    std::vector<float> buf(6 * 24000);
+    a.render(p, buf.data(), 24000);
+    SoundEvent e;
+    e.kind = EventKind::Flash;
+    e.x = variant ? 1.0f : -1.0f;
+    e.y = 0.5f;
+    a.event(e);
+    ++p.flashes;
+    a.render(p, buf.data(), 12000);  // 0.25 s: the crack and the snap, before the rumble
+    side[variant][0] = roughEnergy(buf, 6, 0) + roughEnergy(buf, 6, 4);
+    side[variant][1] = roughEnergy(buf, 6, 1) + roughEnergy(buf, 6, 5);
+  }
+  CHECK(side[0][0] > 1.5 * side[0][1]);
+  CHECK(side[1][1] > 1.5 * side[1][0]);
+  // High in the sky the height speakers play it.
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  auto overhead = [&](float y) {
+    Ambience a(48000, 3, l714);
+    AmbientParams p;
+    p.kind = AmbientKind::Forest;
+    const int ch = l714.channels();
+    std::vector<float> buf(static_cast<size_t>(ch) * 24000);
+    a.render(p, buf.data(), 24000);
+    SoundEvent e;
+    e.kind = EventKind::Flash;
+    e.y = y;
+    a.event(e);
+    ++p.flashes;
+    a.render(p, buf.data(), 12000);
+    double high = 0, ground = 0;
+    for (int c = 0; c < ch; ++c) (l714.speaker(c).elevation > 1.0f ? high : ground) += l714.speaker(c).isLfe() ? 0.0 : roughEnergy(buf, ch, c);
+    return high / (ground + 1e-30);
+  };
+  CHECK(overhead(1.0f) > 1.5 * overhead(0.0f));
+}
+
+TEST(the_rain_falls_from_above_and_the_crickets_sing_in_the_surrounds) {
+  // The rain: the height speakers play a larger part of it than of the calm wind.
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  auto heightShare = [&](float rain) {
+    const std::vector<float> out = bedRender(AmbientKind::Forest, l714, rain);
+    double high = 0, ground = 0;
+    int nh = 0, ng = 0;
+    for (int c = 2; c < l714.channels(); ++c) {
+      if (l714.speaker(c).isLfe()) continue;
+      if (l714.speaker(c).elevation > 1.0f) { high += channelRms(out, l714.channels(), c); ++nh; }
+      else { ground += channelRms(out, l714.channels(), c); ++ng; }
+    }
+    return (high / nh) / (ground / ng);
+  };
+  CHECK(heightShare(1.0f) > 1.3 * heightShare(0.0f));
+  // The crickets at night: in a room they are behind and beside the listener, not in front.
+  const Layout l51 = Layout::named(LayoutId::S5_1);
+  for (AmbientKind kind : {AmbientKind::Forest, AmbientKind::Desert}) {
+    Ambience a(48000, 5, l51);
+    AmbientParams p;
+    p.kind = kind;
+    p.night = 1;
+    std::vector<float> buf(6 * 48000 * 3);
+    a.render(p, buf.data(), 48000 * 3);
+    const double front = roughEnergy(buf, 6, 0) + roughEnergy(buf, 6, 1) + roughEnergy(buf, 6, 2);
+    const double rear = roughEnergy(buf, 6, 4) + roughEnergy(buf, 6, 5);
+    CHECK(rear > 2.0 * front);  // (forest 3.6, desert 2.9 as measured)
+  }
+}
+
+TEST(the_flood_emitter_runs_in_with_the_front_of_the_water_along_the_ground) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("forest"), 160, 36, 3);
+  CHECK(world.emitter(EmitterKey::Flood).level == 0.0f);
+  world.triggerRare(RarePick::Other);
+  float firstX = 9, lastX = 9, peak = 0;
+  for (int i = 0; i < 700; ++i) {
+    world.step(0.05);
+    const Emitter e = world.emitter(EmitterKey::Flood);
+    CHECK(e.level == static_cast<float>(world.floodLevel()));
+    if (e.level <= 0) continue;
+    CHECK(std::fabs(e.x) <= kStageReach && e.y == 0.0f);  // along the ground
+    if (firstX == 9) firstX = e.x;
+    lastX = e.x;
+    peak = std::max(peak, e.level);
+  }
+  CHECK(peak > 0.5f);
+  CHECK(std::fabs(lastX - firstX) > 1.0f);  // the front crosses most of the stage
+}
+
+TEST(a_single_speaker_plays_the_placed_sounds_as_loud_as_the_old_mean_of_the_stereo_pair) {
+  DeviceChannel one[1] = {{0, 0, false, true}};
+  const Layout mono = Layout::fromDevice(one, 1), stereo = Layout::named(LayoutId::Stereo);
+  auto sirenRms = [&](const Layout& layout, bool siren) {
+    Ambience a(48000, 5, layout);
+    AmbientParams p;
+    p.kind = AmbientKind::City;
+    if (siren) { p.siren = 1; p.emitters[static_cast<int>(EmitterKey::Siren)] = {1, 0, 0, 0.3f, 0}; }
+    const int ch = layout.channels();
+    std::vector<float> buf(static_cast<size_t>(ch) * 48000 * 3);
+    a.render(p, buf.data(), 48000 * 3);
+    return channelRms(buf, ch, 0);
+  };
+  const double monoAdded = std::sqrt(std::pow(sirenRms(mono, true), 2) - std::pow(sirenRms(mono, false), 2));
+  const double stereoAdded = std::sqrt(std::pow(sirenRms(stereo, true), 2) - std::pow(sirenRms(stereo, false), 2));
+  CHECK(monoAdded > 0.85 * stereoAdded && monoAdded < 1.15 * stereoAdded);  // (it was 1.41 times as loud)
 }
 
 int main(int argc, char** argv) {

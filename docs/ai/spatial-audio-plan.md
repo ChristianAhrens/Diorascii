@@ -602,6 +602,18 @@ Original plan text:
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
 
+**Mountains: done 2026-11-14** (second of six; details in `architecture.md`, "Placed sounds: the mountains"). Against section 4.5:
+
+- Done: the avalanche as an emitter that moves down the slope with its head (new `EmitterKey::Avalanche`, spread 0.7, full bass send), the squeals at the buried animals (events, one place per squeal), the eagle (sky) and woodpecker (tree) placed at their old random pans, the yeti's stamps (bass 0.8), bellow and rumble at its emitter, the whistle drifting
+  slowly round the room, the stream on the ground chains only.
+- **Not done**: the yeti coming over the ridge from behind and high (the world has no such state), the stream as a fixed emitter at its x, the eagle following its sprite (the cry is the synth's own random event), the woodpecker at a real tree.
+- **Stereo is kept without re-baselining**: windowed RMS of the two mountain golden cases is within 0.02 % (the whistle's drift is tiny). A level slip was caught by the golden values: the squeals were 3 dB quieter without the sqrt(2) reference.
+- **Convention that came with it**: the frontends now push the frame's sound events **before** the parameters, so that a sound started by a counter finds its place (`main.cpp`, the tvOS view controller: the latter not compiled).
+- **Tests** (4 new): the avalanche and the yeti left, right, off-screen and high; a squeal comes from where its event says; the eagle's notes reach the height speakers; the avalanche emitter moves down and across the slope and equals `avalancheLevel`; plus the yeti's bass send is measurable.
+  Mutations: caught: squeal level, squeal position, avalanche weighting, the slope position, the yeti's bass send, the eagle's elevation. **Survived (no test)**: the avalanche's bass send (its bass comes mostly through the rumble's chain-sum path; the send adds 1 %), the stream on the height chains, the whistle's drift, the woodpecker's elevation.
+- CPU is unchanged (release, i3, 2.0 / 5.1 / 7.1.4 / 9.1.6: 5.0 / 6.7 / 9.5 / 11.2); the benchmark does not switch the placed sources on.
+- Unverified: how any of it sounds.
+
 **City: done 2026-11-14** (first of six; details in `architecture.md`, "Placed sounds"). Result against section 4.6:
 
 - Done: the sirens, the train (rumble and clatter as placed noise, knocks and horn as placed voices), the plane (overhead through its height), the fire (at the building that burns hardest, spread by its level, crackle as placed sparks), the streams of fire (at the fight),

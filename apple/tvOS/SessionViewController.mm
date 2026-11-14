@@ -117,8 +117,8 @@ static NSString* const kHintCountKey = @"menuHintCount";
   std::vector<dio::SoundEvent> soundEvents;
   _session->takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
   if (_audio.running()) {
+    for (const dio::SoundEvent& e : soundEvents) _audio.pushEvent(e);  // first, so that a sound that the counters start finds its place
     _audio.setParams(_session->ambient());
-    for (const dio::SoundEvent& e : soundEvents) _audio.pushEvent(e);
   }
   _session->render(_frame);
   _session->takeRepaint();  // the view redraws every cell each frame anyway

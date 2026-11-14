@@ -160,6 +160,12 @@ own random events, with the old random pan turned into an azimuth (so the stereo
 the whole sound (the spatializer's fold-in would double it). The monsters' stamps and the lizard's roar have a full send, the train 0.5. Two more emitter keys came with it: `Fire` (the burning building with the strongest fire) and `Flames` (the middle of the streams).
 The city's overhead share of the bed is now 0. **Not done in the city**: Doppler pitch, distance darkening, and emitters per real vehicle sprite (the plan's "point following the real vehicle").
 
+**Placed sounds: the mountains** (2026-11-14, phase 6, second scene; same mechanism as the city). Placed: the avalanche (`EmitterKey::Avalanche`, new: the slab that is about to let go, then its head, so it **moves down the slope**; its rumble and roar are noise weighted per chain, its
+crackle and thump one mono voice with a full bass send and spread 0.7), the yeti (`Beast`: stamps with bass send 0.8, bellow, rumble weighted per chain), each buried animal's squeal (a place per squeal voice, started where the latest `Squeal` event said: **the frontend must push events before it sets the parameters**,
+so that a sound the counters start finds its place), the eagle (the old random pan as a direction, 35 degrees up) and the woodpecker (5 degrees), and the whistle (a place that drifts slowly round the room, +-70 degrees, 0.03 Hz). The stream is a bed on the ground chains only. Stereo
+is unchanged (the golden values hold without re-baselining; the whistle's drift is far below the tolerance). **Not done in the mountains**: the yeti coming over the ridge from behind and high (the world has no such state), the stream's own x (it is a bed on the ground, not a point), the eagle following its sprite
+(the cry is the synth's own random event, only placed).
+
 **The forest chain is gated** (2026-11-13, finding F-25). The forest's own sounds (wind, rain, thunder, crickets) are made only while `mix_[Forest]` is above 0.001, as the other scenes are
 (`forestOn` in `render`). The gust and wander state, `thunderLevels` and `roll_` keep running because other scenes and the draw order depend on them, and a silent forest still takes the same
 draws from `rng_` that it took when it ran (`noise(rng_)` twice per channel and sample, once more while a clap rings): without them every other scene's noise and events would change. A new

@@ -5739,6 +5739,139 @@ TEST(the_fire_emitter_stands_at_the_burning_building_and_the_flame_emitter_at_th
   CHECK(checked);
 }
 
+// ------------------------------------------------------------ the mountains in space ---
+
+namespace {
+/// Per-channel RMS of the last second of 4 s of the mountains in `layout`, set up by `setup`.
+std::vector<double> mountainRms(const Layout& layout, const std::function<void(AmbientParams&)>& setup) {
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::Mountains;
+  setup(p);
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
+  std::vector<double> rms(static_cast<size_t>(ch));
+  for (int c = 0; c < ch; ++c) rms[static_cast<size_t>(c)] = channelRms(buf, ch, c);
+  return rms;
+}
+
+/// The placed sources of the mountains: the avalanche and the yeti.
+std::vector<CitySource> mountainSources() {
+  return {
+      {"avalanche", [](AmbientParams& p, float x, float y) { p.avalanche = 1; p.emitters[static_cast<int>(EmitterKey::Avalanche)] = {1, x, y, 0.4f, 0}; }},
+      {"yeti", [](AmbientParams& p, float x, float y) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Beast)] = {1, x, y, 0.3f, 0}; }},
+  };
+}
+}  // namespace
+
+TEST(the_avalanche_and_the_yeti_are_heard_from_where_they_are_and_the_avalanche_rumbles_in_the_bass) {
+  const Layout layout = Layout::named(LayoutId::S5_1);  // L R C LFE Ls Rs
+  const auto calm = mountainRms(layout, [](AmbientParams&) {});
+  auto added = [&](const std::vector<double>& with, int a, int b) {
+    return std::max(0.0, with[static_cast<size_t>(a)] * with[static_cast<size_t>(a)] - calm[static_cast<size_t>(a)] * calm[static_cast<size_t>(a)] +
+                             with[static_cast<size_t>(b)] * with[static_cast<size_t>(b)] - calm[static_cast<size_t>(b)] * calm[static_cast<size_t>(b)]);
+  };
+  for (const CitySource& src : mountainSources()) {
+    const auto left = mountainRms(layout, [&](AmbientParams& p) { src.set(p, -1.0f, 0.0f); });
+    const auto right = mountainRms(layout, [&](AmbientParams& p) { src.set(p, 1.0f, 0.0f); });
+    CHECK(added(left, 0, 4) > 1.5 * added(left, 1, 5));
+    CHECK(added(right, 1, 5) > 1.5 * added(right, 0, 4));
+    const auto off = mountainRms(layout, [&](AmbientParams& p) { src.set(p, -1.5f, 0.0f); });
+    CHECK(off[4] > off[0]);  // off-screen it comes from the side
+  }
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  for (const CitySource& src : mountainSources()) {  // high on the mountain: the height speakers
+    auto heights = [&](float y) {
+      const auto rms = mountainRms(l714, [&](AmbientParams& p) { src.set(p, 0.0f, y); });
+      double sum = 0;
+      for (int c = 0; c < l714.channels(); ++c) if (l714.speaker(c).elevation > 1.0f) sum += rms[static_cast<size_t>(c)] * rms[static_cast<size_t>(c)];
+      return sum;
+    };
+    CHECK(heights(1.0f) > 1.3 * heights(0.0f));
+  }
+  const double lfeCalm = calm[3];
+  CHECK(mountainRms(layout, [](AmbientParams& p) { p.avalanche = 1; p.emitters[static_cast<int>(EmitterKey::Avalanche)] = {1, 0, 0.5f, 0.4f, 0}; })[3] > 2.0 * lfeCalm);
+  // The yeti's stamps have a bass send of their own (0.8): without it the bass channel plays only 2.9 times the calm level, with it 5.6 times.
+  CHECK(mountainRms(layout, [](AmbientParams& p) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Beast)] = {1, 0, 0, 0.3f, 0}; })[3] > 4.0 * lfeCalm);
+}
+
+TEST(a_buried_animal_squeals_from_where_it_was_buried) {
+  const Layout layout = Layout::named(LayoutId::S5_1);
+  double leftSide[2] = {}, rightSide[2] = {};
+  for (int variant = 0; variant < 2; ++variant) {  // the event says left (-1) or right (+1)
+    Ambience a(48000, 3, layout);
+    AmbientParams p;
+    p.kind = AmbientKind::Mountains;
+    std::vector<float> buf(6 * 48000);
+    a.render(p, buf.data(), 24000);
+    SoundEvent e;
+    e.kind = EventKind::Squeal;
+    e.x = variant ? 1.0f : -1.0f;
+    a.event(e);
+    p.squeals = 1;
+    a.render(p, buf.data(), 36000);  // 0.75 s: the squeal lasts 0.6 s
+    for (int f = 0; f < 36000; ++f) {
+      leftSide[variant] += static_cast<double>(buf[f * 6]) * buf[f * 6] + static_cast<double>(buf[f * 6 + 4]) * buf[f * 6 + 4];
+      rightSide[variant] += static_cast<double>(buf[f * 6 + 1]) * buf[f * 6 + 1] + static_cast<double>(buf[f * 6 + 5]) * buf[f * 6 + 5];
+    }
+  }
+  CHECK(leftSide[0] > 1.3 * rightSide[0]);  // buried on the left: the left speakers play more
+  CHECK(rightSide[1] > 1.3 * leftSide[1]);  // and on the right: the right ones
+}
+
+TEST(the_eagle_cries_from_the_sky_so_the_height_speakers_play_its_shrill_notes) {
+  // By day the calm mountains have almost nothing high-pitched but the eagle's cry (and the woodpecker's
+  // knocks, which come from a tree). The roughness of a signal (the RMS of its first difference) tells the
+  // cry from the wind: the height speakers get a share of it only because the eagle is high up.
+  const Layout layout = Layout::named(LayoutId::S7_1_4);
+  const int ch = layout.channels();
+  for (uint64_t seed : {5ull, 7ull}) {
+    Ambience a(48000, seed, layout);
+    AmbientParams p;
+    p.kind = AmbientKind::Mountains;
+    std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+    std::vector<double> rough(static_cast<size_t>(ch), 0.0);
+    for (int sec = 0; sec < 20; ++sec) {  // the first cry comes within 15 s
+      a.render(p, buf.data(), 48000);
+      for (int c = 0; c < ch; ++c)
+        for (int i = 1; i < 48000; ++i) {
+          const double d = static_cast<double>(buf[static_cast<size_t>(i) * ch + c]) - buf[static_cast<size_t>(i - 1) * ch + c];
+          rough[static_cast<size_t>(c)] += d * d;
+        }
+    }
+    double high = 0, ground = 0;
+    for (int c = 0; c < ch; ++c) {
+      if (layout.speaker(c).isLfe()) continue;
+      (layout.speaker(c).elevation > 1.0f ? high : ground) += rough[static_cast<size_t>(c)];
+    }
+    CHECK(high > 0.25 * ground);
+  }
+}
+
+TEST(the_avalanche_emitter_moves_down_the_slope_with_the_slide) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, quietMountains(pack), 140, 40, 7);
+  world.setTimeMode(World::TimeMode::Day);
+  CHECK(world.emitter(EmitterKey::Avalanche).level == 0.0f);
+  world.triggerRare(RarePick::Common);
+  float firstY = -1, lastY = -1, firstX = 0, lastX = 0;
+  for (int i = 0; i < 1200; ++i) {
+    world.step(0.05);
+    const Emitter e = world.emitter(EmitterKey::Avalanche);
+    CHECK(e.level == static_cast<float>(world.avalancheLevel()));
+    CHECK(ambientFor(world).emitters[static_cast<int>(EmitterKey::Avalanche)].level == e.level);
+    if (e.level <= 0) continue;
+    CHECK(std::fabs(e.x) <= kStageReach && e.y >= 0 && e.y <= 1);
+    if (firstY < 0) { firstY = e.y; firstX = e.x; }
+    lastY = e.y;
+    lastX = e.x;
+  }
+  CHECK(firstY > 0 && lastY >= 0);
+  CHECK(firstY > lastY + 0.1f);                 // it comes down the slope: from high to low
+  CHECK(std::fabs(firstX - lastX) > 0.02f);     // and across it, along the swath
+}
+
 int main(int argc, char** argv) {
   // Developer options: print the golden table, or dump the raw samples of the golden cases to a
   // file (to compare two builds bit for bit on one machine).

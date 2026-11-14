@@ -22,16 +22,17 @@ enum class EmitterKey : uint8_t {
   Beast,    ///< the yeti ("beast")
   Titan,    ///< the city's monsters ("titan")
   Fire,     ///< the burning building with the strongest fire (not a creature: found in the city)
-  Flames    ///< the monsters' streams of fire (not a creature: the middle of the streams)
+  Flames,   ///< the monsters' streams of fire (not a creature: the middle of the streams)
+  Avalanche ///< the head of the avalanche as it comes down the slope (not a creature)
 };
 /// Number of EmitterKey values.
-inline constexpr int kEmitterKeys = 14;
+inline constexpr int kEmitterKeys = 15;
 
 /// The tag or sprite name behind an emitter key, as `World::nearness` takes it; null for the keys that
-/// are not creatures (Fire and Flames).
+/// are not creatures (Fire, Flames and Avalanche).
 inline const char* emitterTag(EmitterKey key) {
   static constexpr const char* kTags[kEmitterKeys] = {"gloom", "whale", "tornado", "sandworm", "siren", "wail", "train",
-                                                      "plane", "winged_titan", "chopper", "beast", "titan", nullptr, nullptr};
+                                                      "plane", "winged_titan", "chopper", "beast", "titan", nullptr, nullptr, nullptr};
   return kTags[static_cast<int>(key)];
 }
 

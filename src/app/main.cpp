@@ -281,8 +281,8 @@ int main(int argc, char** argv) {
     soundEvents.clear();
     session.takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
     if (audio.running()) {
+      for (const SoundEvent& e : soundEvents) audio.pushEvent(e);  // first, so that a sound that the counters start finds its place
       audio.setParams(session.ambient());
-      for (const SoundEvent& e : soundEvents) audio.pushEvent(e);
     }
     session.render(cur);
     if (session.takeRepaint()) havePrev = false;

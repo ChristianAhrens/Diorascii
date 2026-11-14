@@ -706,6 +706,7 @@ class World {
   /// Puts barriers at both ends of the cordoned site, and takes them away again.
   void raiseBarriers();
   void liftBarriers();
+  double slideX_ = 0, slideY_ = 0;  ///< where the avalanche is (the slab that is about to let go, then its head), in cells
   double fireLevel_ = 0;
   double fireX_ = 0, fireY_ = 0;  ///< centre of the building whose fire is strongest, in cells (for the sound)
   int fireZ_ = 0;                  ///< its layer

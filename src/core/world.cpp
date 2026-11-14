@@ -1378,6 +1378,12 @@ void World::stagePoint(double cx, double cy, int z, float& x, float& y, float& d
 }
 
 Emitter World::emitter(EmitterKey key) const {
+  if (key == EmitterKey::Avalanche) {  // the head of the avalanche, which moves down the slope
+    Emitter out;
+    out.level = static_cast<float>(slideLevel_);
+    if (slideLevel_ > 0) stagePoint(slideX_, slideY_, 12, out.x, out.y, out.depth);
+    return out;
+  }
   if (key == EmitterKey::Fire) {  // the building that burns hardest
     Emitter out;
     out.level = static_cast<float>(fireLevel_);
@@ -1744,6 +1750,8 @@ void World::slideStep(Entity& e, double dt) {
     slideLevel_ = 0.15 + 0.35 * e.age / kWarn;
     e.x = slide_.x0 - e.width() / 2.0;
     e.y = slide_.y0 - e.height() / 2.0;
+    slideX_ = slide_.x0;
+    slideY_ = slide_.y0;
     slide_.puffs += 6 * dt;
     for (; slide_.puffs >= 1; slide_.puffs -= 1) {
       spawnEffect("snowpuff", slide_.x0 + rng_.range(-3, 3), slide_.y0 + rng_.range(0, 2), 1,
@@ -1755,6 +1763,8 @@ void World::slideStep(Entity& e, double dt) {
     const double speed = std::min(3.5 + 2.5 * (e.age - kWarn), 11.0);
     slide_.head = std::min(bottom, slide_.head + speed * dt);
     const double cx = middle(slide_.head), hw = halfWidth(slide_.head);
+    slideX_ = cx;
+    slideY_ = slide_.head;
     // The swath: every row the head has passed is covered with snow and rubble.
     for (int row = static_cast<int>(std::floor(slide_.lastHead)); row <= static_cast<int>(std::floor(slide_.head)); ++row) {
       if (row < 0 || row >= h_) continue;

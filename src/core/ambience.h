@@ -164,7 +164,12 @@ class Ambience {
     kSiren, kWail, kTrain,        ///< the ambulance, the fire engine, the train
     kPlane, kFire, kFlames,       ///< the jet, the burning building, the streams of fire
     kTitan, kWinged,              ///< the monsters' bodies and the winged one's screech
-    kPlaceCount
+    kEagle, kPecker,              ///< the eagle's cry and the woodpecker's knocks
+    kWhistle,                     ///< the icy wind's whistle, which drifts round the room
+    kSlide,                       ///< the avalanche
+    kBeast,                       ///< the yeti
+    kSqueal0,                     ///< the three buried animals' squeals (kSqueal0 + slot)
+    kPlaceCount = kSqueal0 + 3
   };
   /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
   /// gains towards every speaker, and whether it is sounding.
@@ -188,13 +193,15 @@ class Ambience {
   /// that a source straight ahead in stereo is 1, the level the synth has always had for mono sounds
   /// (the sum of the squares of the weights over all chains is 2 in any layout). 0 if it is off.
   float weight(int id, int chain) const;
-  /// Adds the sounds placed into `room_` to the chain bus `bus` and their bass send, times `bassScale`, to
-  /// `bassExtra_`; then clears the room.
-  void flushRoom(float bus[kMaxChannels], float bassScale);
+  /// Adds the sounds placed into `room_`, times `scale`, to the chain bus `bus` and their bass send, times
+  /// `scale`, to `bassExtra_`; then clears the room.
+  void flushRoom(float bus[kMaxChannels], float scale);
   /// The direction of a stage position: the screen edges are +-45 degrees, +-1.5 is 110 degrees, 0 to 1 high is 0 to 60 degrees up.
   static Source stageSource(float x, float y, float spread, float lfeSend);
   /// Aims the city's places at the emitters of `p` (called once per render block).
   void aimCity(const AmbientParams& p);
+  /// Aims the mountains' places (the avalanche, the yeti and the whistle) once per render block.
+  void aimMountains(const AmbientParams& p);
 
   /// The random generator of bed chain `chain`: chains 0 and 1 (the stereo pair) draw from the shared
   /// generator, as the synth always has; the others have their own, so that the stereo sound and
@@ -218,6 +225,7 @@ class Ambience {
   float voiceOut_[kMaxChannels] = {};           ///< the placed sounds of the scenes in this sample, by chain (scaled by the scene's presence)
   float menaceBus_[kMaxChannels] = {};          ///< the placed sounds of the second catastrophe in this sample, by chain
   float bassExtra_ = 0;                         ///< the bass sends of the placed sounds in this sample
+  Source squealAt_;                             ///< where the latest squeal event happened (the next squeal starts there)
   SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
   int pendingCount_ = 0;                        ///< how many of them
   int chains_ = 2;                              ///< how many bed chains run: one per directional speaker, at least two
@@ -349,7 +357,7 @@ class Ambience {
     bool used = false;
   };
   Squeal squealVoices_[3];
-  float squealLow_[2] = {};           ///< two low-pass stages that muffle the squeal
+  float squealLow_[3][2] = {};        ///< two low-pass stages that muffle each squeal
   float lowSqueal_;                   ///< filter coefficient of the squeal
   unsigned seenSqueals_ = 0;
   bool squealsSynced_ = false;

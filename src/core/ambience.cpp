@@ -274,10 +274,10 @@ float Ambience::weight(int id, int chain) const {
   return pl.v.gain(speakerOf_[chain]) * kStereoRef;
 }
 
-void Ambience::flushRoom(float bus[kMaxChannels], float bassScale) {
+void Ambience::flushRoom(float bus[kMaxChannels], float scale) {
   for (int k = 0; k < chains_; ++k)
-    if (speakerOf_[k] >= 0) bus[k] += room_[speakerOf_[k]];
-  if (layout_.lfeIndex() >= 0) bassExtra_ += room_[layout_.lfeIndex()] * bassScale;
+    if (speakerOf_[k] >= 0) bus[k] += room_[speakerOf_[k]] * scale;
+  if (layout_.lfeIndex() >= 0) bassExtra_ += room_[layout_.lfeIndex()] * scale;
   std::fill(room_, room_ + layout_.channels(), 0.0f);
 }
 
@@ -298,7 +298,24 @@ void Ambience::aimCity(const AmbientParams& p) {
   emitter(kWinged, EmitterKey::Winged, p.menace > 0 && p.winged > 0, 0.4f, 0.0f);
 }
 
+void Ambience::aimMountains(const AmbientParams& p) {
+  auto emitter = [&](int id, EmitterKey key, bool wanted, float spread, float lfe) {
+    const Emitter& e = p.emitters[static_cast<int>(key)];
+    if (wanted && (e.level > 0 || !place_[id].on)) aim(id, stageSource(e.x, e.y, spread, lfe));
+  };
+  emitter(kSlide, EmitterKey::Avalanche, p.avalanche > 0, 0.7f, 1.0f);  // moves down the slope with the slide
+  emitter(kBeast, EmitterKey::Beast, p.menace > 0, 0.1f, 0.8f);
+  if (p.rain > 0 || place_[kWhistle].on) {  // the whistle drifts slowly round the room
+    Source s;
+    s.azimuth = 70.0f * static_cast<float>(std::sin(kTwoPi * 0.03 * t_ + 1.0));
+    s.elevation = 20.0f;
+    s.spread = 0.2f;
+    aim(kWhistle, s);
+  }
+}
+
 void Ambience::event(const SoundEvent& e) {
+  if (e.kind == EventKind::Squeal) squealAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
   if (pendingCount_ == kMaxPendingEvents) {  // keep the newest
     std::copy(pending_ + 1, pending_ + kMaxPendingEvents, pending_);
     --pendingCount_;
@@ -408,8 +425,11 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
   const float cutoffHz = (300.0f + 360.0f * gust_) * (1.0f + 1.3f * rain_);
   const float lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
   const float windGain = (0.35f + 0.8f * gust_) * (1.0f + 5.0f * rain_) * 0.075f;
+  const int nch = layout_.channels();
   whistlePhase_ += kTwoPi * (620.0 + 340.0 * gust_ + 60.0 * std::sin(0.4 * t_)) * dt;
   const float whistle = rain_ * rain_ * gust_ * 0.02f * static_cast<float>(std::sin(whistlePhase_));
+  if (rain_ < 1e-3f && !(p.rain > 0)) place_[kWhistle].on = false;
+  if (place_[kWhistle].on) place_[kWhistle].v.add(whistle * kStereoRef, room_, nch);  // drifting round the room
   const float hiss = rain_ * (0.1f + 0.2f * gust_);
   // The stream: noise between two low-passes, quietly, that bubbles and gurgles: it is broken up by
   // a few unrelated fast ripples so that it does not sound like steady brushing.
@@ -424,6 +444,9 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
     cryPan_ = static_cast<float>(rng_.range(0.2, 0.8));
     cryPitch_ = static_cast<float>(rng_.range(0.9, 1.12));
     nextCry_ = t_ + rng_.range(15.0, 35.0);
+    place_[kEagle].src = panSource(cryPan_);  // the eagle is in the sky
+    place_[kEagle].src.elevation = 35.0f;
+    place_[kEagle].v.setTarget(layout_, forLayout(place_[kEagle].src), true);
   }
   float cry = 0;
   const double ct = t_ - cryStart_;
@@ -437,6 +460,7 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
       cry = static_cast<float>((std::sin(cryPhase_) + 0.5 * std::sin(2 * cryPhase_ + 0.4) + 0.3 * noise(rng_)) * env) * 0.09f * day;
     }
   }
+  if (cry != 0) place_[kEagle].v.add(cry * 1.4f, room_, nch);
   // A woodpecker drums on a tree now and then, as often as the eagle cries: a quick run of dry,
   // woody knocks that dies away a little. Same rules: by day, not in a snowstorm.
   if (nextPeck_ == 0) nextPeck_ = t_ + rng_.range(8.0, 20.0);
@@ -446,6 +470,9 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
     peckPan_ = static_cast<float>(rng_.range(0.15, 0.85));
     peckPitch_ = static_cast<float>(rng_.range(0.85, 1.2));
     nextPeck_ = t_ + rng_.range(15.0, 35.0);
+    place_[kPecker].src = panSource(peckPan_);  // on a tree, low
+    place_[kPecker].src.elevation = 5.0f;
+    place_[kPecker].v.setTarget(layout_, forLayout(place_[kPecker].src), true);
   }
   float peck = 0;
   const double pt = t_ - peckStart_;
@@ -458,6 +485,7 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
                                0.5 * std::sin(kTwoPi * 2300.0 * peckPitch_ * lt) * std::exp(-lt * 260.0) +
                                0.3 * noise(rng_) * std::exp(-lt * 500.0)) * amp) * 0.12f * day;
   }
+  if (peck != 0) place_[kPecker].v.add(peck * 1.4f, room_, nch);
   // An avalanche: when the slab breaks and while it tumbles, snow, rock and trees knock against
   // each other: a burst of crackling at the start, then clicks and now and then a dull thump with
   // a crack when something big goes down.
@@ -481,53 +509,64 @@ void Ambience::mountainSample(const AmbientParams& p, float out[kMaxChannels]) {
   const float roll = std::clamp(0.7f + 0.3f * roll_, 0.2f, 1.0f);
   // An animal buried by the snow: a short squeal that sinks in pitch, heard through the snow
   // (low-passed hard, so it is muted).
-  float squeal = 0;
-  for (Squeal& s : squealVoices_) {
+  for (int i = 0; i < 3; ++i) {  // each animal's squeal is low-passed on its own and placed where it was buried
+    Squeal& s = squealVoices_[i];
+    float squeal = 0;
     const double tau = t_ - s.start;
-    if (!s.used || tau < 0 || tau > 0.6) continue;
-    const double hz = s.pitch * (1150.0 - 450.0 * tau / 0.6) * (1.0 + 0.03 * std::sin(kTwoPi * 11.0 * tau));
-    s.phase += kTwoPi * hz * dt;
-    const double env = std::min(1.0, tau / 0.03) * std::exp(-tau / 0.25);
-    squeal += static_cast<float>(env * (std::sin(s.phase) + 0.5 * std::sin(2 * s.phase) + 0.3 * std::sin(3 * s.phase)));
+    if (!(!s.used || tau < 0 || tau > 0.6)) {
+      const double hz = s.pitch * (1150.0 - 450.0 * tau / 0.6) * (1.0 + 0.03 * std::sin(kTwoPi * 11.0 * tau));
+      s.phase += kTwoPi * hz * dt;
+      const double env = std::min(1.0, tau / 0.03) * std::exp(-tau / 0.25);
+      squeal = static_cast<float>(env * (std::sin(s.phase) + 0.5 * std::sin(2 * s.phase) + 0.3 * std::sin(3 * s.phase)));
+    }
+    squealLow_[i][0] += (squeal - squealLow_[i][0]) * lowSqueal_;
+    squealLow_[i][1] += (squealLow_[i][0] - squealLow_[i][1]) * lowSqueal_;
+    if (squeal != 0 || std::fabs(squealLow_[i][1]) > 1e-7f) place_[kSqueal0 + i].v.add(squealLow_[i][1] * 0.6f * kStereoRef, room_, nch);
   }
-  squealLow_[0] += (squeal - squealLow_[0]) * lowSqueal_;
-  squealLow_[1] += (squealLow_[0] - squealLow_[1]) * lowSqueal_;
+  // The avalanche's crackle and thump are voices at the slide (a place with a full bass send); its rumble
+  // and roar are noise, one chain per speaker, weighted by how near each speaker is to the slide.
+  if (avalanche_ < 1e-3f && !(p.avalanche > 0)) place_[kSlide].on = false;
+  crackLowAv_[0] += crackF * crackBandAv_[0];
+  crackBandAv_[0] += crackF * (click * 8.0f - crackLowAv_[0] - 0.5f * crackBandAv_[0]);
+  if (place_[kSlide].on) place_[kSlide].v.add((crackBandAv_[0] * 0.35f + thump) * kStereoRef, room_, nch);
+  const float mixMountains = mix_[static_cast<int>(AmbientKind::Mountains)];
 
-  // Wind, ice, stream and the avalanche's rumble and roar are the bed, one chain per speaker; the
-  // whistle, the cries, the knocks, the clicks, the thump and the squeals are voices, which only
-  // the stereo pair carries until they are placed.
+  // Wind, ice and the stream are the bed, one chain per speaker (the stream runs on the ground, so
+  // the overhead speakers do not play it). The avalanche's rumble and roar are noise placed at the slide.
+  // The first two chains always run, so that the draws of the shared generator do not depend on where
+  // anything is.
   for (int ch = 0; ch < chains_; ++ch) {
-    if (!live(AmbientKind::Mountains, ch)) continue;
+    const bool bed = live(AmbientKind::Mountains, ch);
+    const float wSlide = weight(kSlide, ch);
+    const bool slideOn = ch < 2 || wSlide >= 1e-3f;
+    if (!bed && !slideOn) continue;
+    const bool ground = speakerOf_[ch] < 0 || layout_.speaker(speakerOf_[ch]).elevation <= 1.0f;
     Rng& r = chainRng(ch);
-    const float n = noise(r) * noiseScale_;
-    mountLow_[ch][0] += (n - mountLow_[ch][0]) * lowWind;
-    mountLow_[ch][1] += (mountLow_[ch][0] - mountLow_[ch][1]) * lowWind;
-    const float n2 = noise(r) * noiseScale_;
-    iceLow_[ch] += (n2 - iceLow_[ch]) * lowIce_;
-    const float n3 = noise(r) * noiseScale_;
-    streamLow_[ch][0] += (n3 - streamLow_[ch][0]) * lowStreamTop_;
-    streamLow_[ch][1] += (n3 - streamLow_[ch][1]) * lowStreamBottom_;
-    const float n4 = noise(r) * noiseScale_;
-    slideLow_[ch][0] += (n4 - slideLow_[ch][0]) * lowSlide_;
-    slideLow_[ch][1] += (slideLow_[ch][0] - slideLow_[ch][1]) * lowSlide_;
-    const float n5 = noise(r) * noiseScale_;
-    slideMid_[ch] += (n5 - slideMid_[ch]) * lowSlideMid_;
-    if (ch < 2) {
-      crackLowAv_[ch] += crackF * crackBandAv_[ch];
-      const float highClick = click * 8.0f - crackLowAv_[ch] - 0.5f * crackBandAv_[ch];
-      crackBandAv_[ch] += crackF * highClick;
-      const float panCry = ch ? std::sin(cryPan_ * 1.5708f) : std::cos(cryPan_ * 1.5708f);
-      out[ch] = mountLow_[ch][1] * 9.0f * windGain + whistle * (ch ? 0.9f : 1.0f) + (n2 - iceLow_[ch]) * 0.6f * hiss +
-                (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
-                cry * panCry * 1.4f +
-                peck * (ch ? std::sin(peckPan_ * 1.5708f) : std::cos(peckPan_ * 1.5708f)) * 1.4f + crackBandAv_[ch] * 0.35f + thump + slideLow_[ch][1] * 14.0f * slide * slide * roll +
-                slideMid_[ch] * 0.7f * slide * slide * slide * roll + squealLow_[1] * 0.6f;
-    } else {
-      out[ch] = mountLow_[ch][1] * 9.0f * windGain + (n2 - iceLow_[ch]) * 0.6f * hiss +
-                (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_) +
-                slideLow_[ch][1] * 14.0f * slide * slide * roll + slideMid_[ch] * 0.7f * slide * slide * slide * roll;
+    if (bed) {
+      const float n = noise(r) * noiseScale_;
+      mountLow_[ch][0] += (n - mountLow_[ch][0]) * lowWind;
+      mountLow_[ch][1] += (mountLow_[ch][0] - mountLow_[ch][1]) * lowWind;
+      const float n2 = noise(r) * noiseScale_;
+      iceLow_[ch] += (n2 - iceLow_[ch]) * lowIce_;
+      float streamOut = 0;
+      if (ch < 2 || ground) {
+        const float n3 = noise(r) * noiseScale_;
+        streamLow_[ch][0] += (n3 - streamLow_[ch][0]) * lowStreamTop_;
+        streamLow_[ch][1] += (n3 - streamLow_[ch][1]) * lowStreamBottom_;
+        streamOut = (streamLow_[ch][0] - streamLow_[ch][1]) * 0.085f * babble * (1.0f - 0.5f * rain_);
+      }
+      out[ch] = mountLow_[ch][1] * 9.0f * windGain + (n2 - iceLow_[ch]) * 0.6f * hiss + streamOut;
+    }
+    if (slideOn) {
+      const float n4 = noise(r) * noiseScale_;
+      slideLow_[ch][0] += (n4 - slideLow_[ch][0]) * lowSlide_;
+      slideLow_[ch][1] += (slideLow_[ch][0] - slideLow_[ch][1]) * lowSlide_;
+      const float n5 = noise(r) * noiseScale_;
+      slideMid_[ch] += (n5 - slideMid_[ch]) * lowSlideMid_;
+      voiceOut_[ch] += wSlide * (slideLow_[ch][1] * 14.0f * slide * slide * roll + slideMid_[ch] * 0.7f * slide * slide * slide * roll) * mixMountains;
     }
   }
+  flushRoom(voiceOut_, mixMountains);
 }
 
 void Ambience::desertSample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -755,6 +794,7 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
   if (place_[kTrain].on) place_[kTrain].v.add((thunk * 0.12f * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ + squeal * 0.08f) * kStereoRef, room_, nch);
   if (place_[kFire].on) place_[kFire].v.add(fireCrack_ * 0.3f * fireNear_ * kStereoRef, room_, nch);
 
+  const float mixCity = mix_[static_cast<int>(AmbientKind::City)];
   // Traffic is the bed, one chain per speaker. The train's rumble and clatter, the fire's roar and the
   // jet are noise too, but they come from somewhere: each chain plays its own noise (so they stay wide
   // and unlike one another) weighted by how near the speaker is to the source. The first two chains
@@ -799,9 +839,9 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
       planeLow_[ch][1] += (planeLow_[ch][0] - planeLow_[ch][1]) * lowJet_;
       placed += wPlane * planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
     }
-    voiceOut_[ch] += placed;
+    voiceOut_[ch] += placed * mixCity;
   }
-  flushRoom(voiceOut_, mix_[static_cast<int>(AmbientKind::City)]);
+  flushRoom(voiceOut_, mixCity);
 }
 
 void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -907,7 +947,7 @@ float Ambience::coeff(float seconds) const {
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
-    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = false;
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = false;
     return;
   }
   if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
@@ -985,17 +1025,13 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   const double ph = std::fmod(t_, period);
   const float thump = static_cast<float>(std::exp(-ph / (big ? 0.2 : 0.11)) * std::sin(kTwoPi * (big ? 44.0 : 62.0) * ph));
   const float stampRumble = (big ? 1.3f : 1.2f) * level * static_cast<float>(std::exp(-ph / 0.25));
-  if (big) {
-    // The stamps are placed at the lizard: the thump is one mono sound with a full bass send, the
-    // rumble under it noise per chain, weighted by how near each speaker is.
-    if (place_[kTitan].on) place_[kTitan].v.add(thump * 0.36f * level * kStereoRef, room_, nch);
-    for (int ch = 0; ch < chains_; ++ch) {
-      const float w = weight(kTitan, ch);
-      if (w >= 1e-3f && live(p.kind, ch)) menaceBus_[ch] += w * menaceLow_[ch][1] * stampRumble;
-    }
-  } else {
-    out[0] += thump * 0.38f * level + menaceLow_[0][1] * stampRumble;
-    out[1] += thump * 0.38f * level + menaceLow_[1][1] * stampRumble;
+  // The stamps are placed at the creature (the lizard, the yeti): the thump is one mono sound with a
+  // bass send, the rumble under it noise per chain, weighted by how near each speaker is.
+  const int body = big ? kTitan : kBeast;
+  if (place_[body].on) place_[body].v.add(thump * (big ? 0.36f : 0.38f) * level * kStereoRef, room_, nch);
+  for (int ch = 0; ch < chains_; ++ch) {
+    const float w = weight(body, ch);
+    if (w >= 1e-3f && live(p.kind, ch)) menaceBus_[ch] += w * menaceLow_[ch][1] * stampRumble;
   }
   if (nextMenaceRoar_ == 0) nextMenaceRoar_ = t_ + rng_.range(0.5, 1.5);
   if (t_ >= nextMenaceRoar_) {
@@ -1013,13 +1049,9 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     menacePhase_[0] += kTwoPi * hz * dt;
     const double tone = std::tanh(2.2 * std::sin(menacePhase_[0]) + 1.1 * std::sin(2 * menacePhase_[0] + 0.5) + 0.5 * std::sin(3 * menacePhase_[0] + 1.0));
     const float roar = static_cast<float>(tone * env * (1.0 + 0.35 * std::sin(kTwoPi * 19.0 * t_))) * level * (menaceRoarVoice_ == 1 ? 0.09f * wingedNear_ : 0.14f);
-    if (big) {  // the lizard bellows from where it stands, the winged monster screeches from where it flies
-      const int id = menaceRoarVoice_ == 1 ? kWinged : kTitan;
-      if (place_[id].on) place_[id].v.add(roar * kStereoRef, room_, nch);
-    } else {
-      out[0] += roar;
-      out[1] += roar;
-    }
+    // The lizard and the yeti bellow from where they stand, the winged monster screeches from where it flies.
+    const int id = big ? (menaceRoarVoice_ == 1 ? kWinged : kTitan) : kBeast;
+    if (place_[id].on) place_[id].v.add(roar * kStereoRef, room_, nch);
   }
 }
 
@@ -1040,6 +1072,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   const float wanderScale = 1.0f / (0.577f * std::sqrt(lowWander / 2.0f));  // back to unit spread
 
   if (p.kind == AmbientKind::City) aimCity(p);  // the placed sounds follow their emitters, once per block
+  if (p.kind == AmbientKind::Mountains) aimMountains(p);
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
@@ -1173,6 +1206,9 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
           s.start = t_ + n * rng_.range(0.05, 0.25);
           s.pitch = static_cast<float>(rng_.range(0.8, 1.3));
           s.used = true;
+          Place& pl = place_[kSqueal0 + static_cast<int>(&s - squealVoices_)];  // where the animal was buried
+          pl.src = squealAt_;
+          pl.v.setTarget(layout_, forLayout(pl.src), true);
         }
       }
       seenSqueals_ = p.squeals;
@@ -1277,7 +1313,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
                            moon[ch] * (mix_[static_cast<int>(AmbientKind::Moon)] * bedGain_[static_cast<int>(AmbientKind::Moon)][ch]) +
                            mountains[ch] * (mix_[static_cast<int>(AmbientKind::Mountains)] * bedGain_[static_cast<int>(AmbientKind::Mountains)][ch]) +
                            city[ch] * (mix_[static_cast<int>(AmbientKind::City)] * bedGain_[static_cast<int>(AmbientKind::City)][ch]) +
-                           voiceOut_[ch] * mix_[static_cast<int>(AmbientKind::City)];
+                           voiceOut_[ch];  // (the placed sounds of the scenes are scaled by their scene's presence already)
       chain[ch] = softClip(sample) * volume_ * 0.8f;
       bassIn += chain[ch];
     }

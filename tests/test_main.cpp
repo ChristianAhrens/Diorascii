@@ -5020,7 +5020,7 @@ double channelCorrelation(const std::vector<float>& v, int ch, int a, int b) {
 }
 }  // namespace
 
-TEST(every_full_range_speaker_carries_the_bed_of_every_scene_except_overhead_in_the_aquarium) {
+TEST(every_full_range_speaker_carries_the_bed_of_every_scene_except_overhead_in_the_city) {
   for (int k = 1; k < kAmbientKinds; ++k) {
     for (int i = 0; i < kLayoutCount; ++i) {
       const Layout layout = Layout::named(static_cast<LayoutId>(i));
@@ -5029,7 +5029,6 @@ TEST(every_full_range_speaker_carries_the_bed_of_every_scene_except_overhead_in_
       for (int c = 0; c < ch; ++c) {
         const double rms = channelRms(out, ch, c);
         if (layout.speaker(c).isLfe()) CHECK(rms > 1e-3);  // the bass channel has the low end
-        else if (static_cast<AmbientKind>(k) == AmbientKind::Aquarium && layout.speaker(c).elevation > 1.0f) CHECK(rms == 0.0);
         else if (static_cast<AmbientKind>(k) == AmbientKind::City && layout.speaker(c).elevation > 1.0f) continue;  // only what the cars put there
         else CHECK(rms > 2e-3);
       }
@@ -5125,7 +5124,7 @@ TEST(overhead_speakers_play_less_of_a_scene_with_a_small_height_share_than_ear_l
   CHECK(high / nh < 0.6 * ground / ng);
 }
 
-TEST(the_second_catastrophe_reaches_the_other_speakers_and_the_height_speakers_stay_silent_in_the_aquarium) {
+TEST(the_second_catastrophe_reaches_every_speaker_including_the_height_speakers) {
   const Layout layout = Layout::named(LayoutId::S7_1_4);
   const int ch = layout.channels();
   for (AmbientKind kind : {AmbientKind::Aquarium, AmbientKind::Forest, AmbientKind::Desert, AmbientKind::Moon}) {
@@ -5137,8 +5136,7 @@ TEST(the_second_catastrophe_reaches_the_other_speakers_and_the_height_speakers_s
     for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
     for (int c = 0; c < ch; ++c) {
       if (layout.speaker(c).isLfe()) continue;
-      if (kind == AmbientKind::Aquarium && layout.speaker(c).elevation > 1.0f) CHECK(channelRms(buf, ch, c) == 0.0);
-      else CHECK(channelRms(buf, ch, c) > 1e-3);
+      CHECK(channelRms(buf, ch, c) > 1e-3);
     }
   }
   // The city's fire streams and the yeti's menace too (the city's monsters have flames).
@@ -5985,6 +5983,197 @@ TEST(a_crushed_thing_is_chewed_where_it_was_crushed_and_a_shot_comes_from_its_mu
     CHECK(leftSide[0] > 1.3 * rightSide[0]);
     CHECK(rightSide[1] > 1.3 * leftSide[1]);
   }
+}
+
+// ------------------------------------------------------------ the aquarium in space ---
+
+namespace {
+/// Per-channel RMS of the last second of 4 s of the aquarium in `layout`, set up by `setup`.
+std::vector<double> aquariumRms(const Layout& layout, const std::function<void(AmbientParams&)>& setup) {
+  Ambience a(48000, 5, layout);
+  AmbientParams p;
+  p.kind = AmbientKind::Aquarium;
+  setup(p);
+  const int ch = layout.channels();
+  std::vector<float> buf(static_cast<size_t>(ch) * 48000);
+  for (int s = 0; s < 4; ++s) a.render(p, buf.data(), 48000);
+  std::vector<double> rms(static_cast<size_t>(ch));
+  for (int c = 0; c < ch; ++c) rms[static_cast<size_t>(c)] = channelRms(buf, ch, c);
+  return rms;
+}
+
+/// Energy of the first difference (the bubbles' notes, not the water's rumble) of channel `c` of an interleaved render.
+double roughEnergy(const std::vector<float>& v, int ch, int c) {
+  double e = 0;
+  for (size_t i = 1; i < v.size() / static_cast<size_t>(ch); ++i) {
+    const double d = static_cast<double>(v[i * static_cast<size_t>(ch) + static_cast<size_t>(c)]) - v[(i - 1) * static_cast<size_t>(ch) + static_cast<size_t>(c)];
+    e += d * d;
+  }
+  return e;
+}
+
+/// The placed sources of the aquarium: the kraken's growl, the whale's song and the submarine.
+std::vector<CitySource> aquariumSources() {
+  return {
+      {"kraken", [](AmbientParams& p, float x, float y) { p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Gloom)] = {1, x, y, 0.4f, 0}; }},
+      {"submarine", [](AmbientParams& p, float x, float y) { p.menace = 1; p.emitters[static_cast<int>(EmitterKey::Submarine)] = {1, x, y, 0.4f, 0}; }},
+  };
+}
+}  // namespace
+
+TEST(the_kraken_and_the_submarine_are_heard_from_where_they_are_and_the_water_surrounds_the_listener) {
+  const Layout layout = Layout::named(LayoutId::S5_1);  // L R C LFE Ls Rs
+  const auto calm = aquariumRms(layout, [](AmbientParams&) {});
+  auto added = [&](const std::vector<double>& with, int a, int b) {
+    return std::max(0.0, with[static_cast<size_t>(a)] * with[static_cast<size_t>(a)] - calm[static_cast<size_t>(a)] * calm[static_cast<size_t>(a)] +
+                             with[static_cast<size_t>(b)] * with[static_cast<size_t>(b)] - calm[static_cast<size_t>(b)] * calm[static_cast<size_t>(b)]);
+  };
+  for (const CitySource& src : aquariumSources()) {
+    const auto left = aquariumRms(layout, [&](AmbientParams& p) { src.set(p, -1.0f, 0.0f); });
+    const auto right = aquariumRms(layout, [&](AmbientParams& p) { src.set(p, 1.0f, 0.0f); });
+    CHECK(added(left, 0, 4) > 1.5 * added(left, 1, 5));
+    CHECK(added(right, 1, 5) > 1.5 * added(right, 0, 4));
+    const auto off = aquariumRms(layout, [&](AmbientParams& p) { src.set(p, -1.5f, 0.0f); });
+    CHECK(off[4] > off[0]);  // off-screen it comes from the side
+  }
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  const auto calmHigh = aquariumRms(l714, [](AmbientParams&) {});
+  for (const CitySource& src : aquariumSources()) {  // high in the water: the height speakers play more of it
+    auto heights = [&](float y) {
+      const auto rms = aquariumRms(l714, [&](AmbientParams& p) { src.set(p, 0.0f, y); });
+      double sum = 0;
+      for (int c = 0; c < l714.channels(); ++c)
+        if (l714.speaker(c).elevation > 1.0f) sum += rms[static_cast<size_t>(c)] * rms[static_cast<size_t>(c)] - calmHigh[static_cast<size_t>(c)] * calmHigh[static_cast<size_t>(c)];
+      return sum;
+    };
+    CHECK(heights(1.0f) > 1.3 * heights(0.0f));
+  }
+  // The water is all around, overhead too: the height speakers play the bed, a good part of the ear-level speakers' level.
+  double ground = 0, high = 0;
+  int ng = 0, nh = 0;
+  for (int c = 2; c < l714.channels(); ++c) {
+    if (l714.speaker(c).isLfe()) continue;
+    if (l714.speaker(c).elevation > 1.0f) { high += calmHigh[static_cast<size_t>(c)]; ++nh; }
+    else { ground += calmHigh[static_cast<size_t>(c)]; ++ng; }
+  }
+  CHECK(high / nh > 0.3 * ground / ng);
+  // The kraken's growl is the deepest sound: the bass channel plays it.
+  CHECK(aquariumRms(layout, [](AmbientParams& p) { p.storm = 1; p.emitters[static_cast<int>(EmitterKey::Gloom)] = {1, 0, 0, 0.4f, 0}; })[3] > 1.8 * calm[3]);  // (the water's own bed has plenty of bass: calm 0.021, with the kraken 0.045)
+}
+
+TEST(a_nibble_a_gulp_and_a_whales_phrase_come_from_where_they_happen) {
+  const Layout layout = Layout::named(LayoutId::S5_1);
+  for (int what = 0; what < 3; ++what) {  // 0: a nibble's blip, 1: the kraken's gulp, 2: a whale's phrase
+    double leftSide[2] = {}, rightSide[2] = {};
+    for (int variant = 0; variant < 2; ++variant) {  // the place is left (-1) or right (+1)
+      Ambience a(48000, 3, layout);
+      AmbientParams p;
+      p.kind = AmbientKind::Aquarium;
+      if (what == 2) {
+        p.whale = 1;
+        p.emitters[static_cast<int>(EmitterKey::Whale)] = {1, variant ? 1.0f : -1.0f, 0, 0.4f, 0};
+      }
+      std::vector<float> buf(6 * 48000);
+      a.render(p, buf.data(), 24000);
+      if (what < 2) {
+        SoundEvent e;
+        e.kind = what ? EventKind::Crush : EventKind::Nibble;
+        e.x = variant ? 1.0f : -1.0f;
+        a.event(e);
+        (what ? p.crushes : p.nibbles) = what ? 1 : 4;  // four blips, so that they stand out of the random bubbles
+      }
+      const int frames = what == 0 ? 24000 : 48000;
+      for (int s = 0; s < (what == 2 ? 6 : 1); ++s) {
+        a.render(p, buf.data(), frames);
+        for (int f = 0; f < frames; ++f) {
+          const bool rough = what == 0;  // a blip is told from the water by its pitch, a gulp and a song are loud and low
+          for (int c = 0; c < 6; ++c) {
+            if (c == 2 || c == 3) continue;
+            const double v = rough ? static_cast<double>(buf[f * 6 + c]) - (f ? buf[(f - 1) * 6 + c] : 0.0f) : buf[f * 6 + c];
+            ((c == 0 || c == 4) ? leftSide : rightSide)[variant] += v * v;
+          }
+        }
+      }
+    }
+    CHECK(leftSide[0] > 1.3 * rightSide[0]);
+    CHECK(rightSide[1] > 1.3 * leftSide[1]);
+  }
+}
+
+TEST(a_nibble_high_in_the_water_is_heard_overhead_and_one_on_the_floor_at_ear_level) {
+  // A nibble high in the water is heard overhead, one at the bottom at ear level.
+  const Layout l714 = Layout::named(LayoutId::S7_1_4);
+  auto overhead = [&](float y) {
+    Ambience a(48000, 3, l714);
+    AmbientParams p;
+    p.kind = AmbientKind::Aquarium;
+    const int ch = l714.channels();
+    std::vector<float> buf(static_cast<size_t>(ch) * 24000);
+    a.render(p, buf.data(), 24000);
+    SoundEvent e;
+    e.kind = EventKind::Nibble;
+    e.y = y;
+    a.event(e);
+    p.nibbles = 4;
+    a.render(p, buf.data(), 24000);
+    double high = 0, ground = 0;
+    for (int c = 0; c < ch; ++c) (l714.speaker(c).elevation > 1.0f ? high : ground) += l714.speaker(c).isLfe() ? 0.0 : roughEnergy(buf, ch, c);
+    return high / (ground + 1e-30);
+  };
+  CHECK(overhead(1.0f) > 2.0 * overhead(0.0f));
+}
+
+TEST(a_string_of_bubbles_starts_anywhere_round_the_listener_and_climbs) {
+  Rng rng(11);
+  int behind = 0, behindLeft = 0, behindRight = 0, strings = 0;
+  float lowest = 1e9f, highest = 0, firstOfLone = 0;
+  int lone = 0;
+  for (int i = 0; i < 600; ++i) {
+    const int n = 1 + i % 3;
+    Source s[3];
+    Ambience::bubbleString(rng, n, s);
+    ++strings;
+    if (std::fabs(s[0].azimuth) > 100.0f) { ++behind; ++(s[0].azimuth < 0 ? behindLeft : behindRight); }
+    for (int k = 0; k < n; ++k) {
+      CHECK(s[k].elevation >= 0.0f && s[k].elevation <= 75.0f);
+      CHECK(std::fabs(s[k].azimuth) <= 160.0f);
+      if (k > 0) CHECK(s[k].elevation > s[k - 1].elevation || s[k].elevation == 75.0f);  // each bubble is higher than the last
+      lowest = std::min(lowest, s[k].elevation);
+      highest = std::max(highest, s[k].elevation);
+    }
+    if (n == 1) { firstOfLone += s[0].elevation; ++lone; }
+  }
+  CHECK(behind > strings / 10 && behindLeft > strings / 30 && behindRight > strings / 30);  // behind the listener on both sides
+  CHECK(lowest < 5.0f && highest > 40.0f);
+  CHECK(firstOfLone / static_cast<float>(lone) > 10.0f);  // a lone bubble is up in the water, not on the floor
+}
+
+TEST(tiny_bubbles_glint_in_the_speakers_of_a_room_and_stereo_is_left_as_it_was) {
+  // Before the first bubble (0.5 s) the water is the bed and nothing else: the front speakers of a room
+  // differ from a stereo pair only by the tiny bubbles that glint in them.
+  const Layout stereo = Layout::named(LayoutId::Stereo), room = Layout::named(LayoutId::S5_1);
+  double glints = 0;
+  for (int seed = 1; seed <= 8; ++seed) {
+    Ambience a(48000, static_cast<uint64_t>(seed), stereo), b(48000, static_cast<uint64_t>(seed), room);
+    AmbientParams p;
+    p.kind = AmbientKind::Aquarium;
+    std::vector<float> x(2 * 21600), y(6 * 21600);
+    a.render(p, x.data(), 21600);
+    b.render(p, y.data(), 21600);
+    for (int i = 0; i < 21600; ++i) {
+      const double l = x[static_cast<size_t>(i) * 2] - y[static_cast<size_t>(i) * 6], r = x[static_cast<size_t>(i) * 2 + 1] - y[static_cast<size_t>(i) * 6 + 1];
+      glints += l * l + r * r;
+    }
+  }
+  CHECK(glints > 1e-4);
+  // In a stereo pair there are no glints: the synth is what it always was (the golden values hold it to the sample).
+  Ambience a(48000, 5, stereo), b(48000, 5, stereo);
+  AmbientParams p;
+  p.kind = AmbientKind::Aquarium;
+  std::vector<float> x(2 * 21600), y(2 * 21600);
+  a.render(p, x.data(), 21600);
+  b.render(p, y.data(), 21600);
+  CHECK(x == y);
 }
 
 int main(int argc, char** argv) {

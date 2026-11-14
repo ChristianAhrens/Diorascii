@@ -118,6 +118,10 @@ class Ambience {
   void event(const SoundEvent& e);
   /// The events handed in since the last render call (for the sounds and for tests).
   int pendingEvents() const { return pendingCount_; }
+  /// Where the `n` bubbles (1 to 3) of one rising cluster are in a room: `out[0..n-1]`, all drawn from `rng`. The
+  /// cluster starts anywhere round the listener, behind included, and every bubble is higher than the one
+  /// before. Public so that the placement can be tested without listening for bubbles.
+  static void bubbleString(Rng& rng, int n, Source* out);
   /// The most events kept between two render calls.
   static constexpr int kMaxPendingEvents = 32;
 
@@ -135,8 +139,9 @@ class Ambience {
   };
   /// Schedules a clap `delay` seconds from now with the given loudness (0 to 1).
   void clap(double delay, double gain, bool strike = false);
-  /// A rising bubble blip, `delay` seconds from now. `f0` is its starting pitch in Hz.
-  void bubble(double delay, float f0, float dur, float amp);
+  /// A rising bubble blip, `delay` seconds from now. `f0` is its starting pitch in Hz. It is heard from `at`
+  /// if given, else from a random place in front (the synth's old random pan).
+  void bubble(double delay, float f0, float dur, float amp, const Source* at = nullptr);
   /// One sample of the aquarium's sound: `out[c]` for each bed chain `c` below `chains_` (the others stay as they were).
   void aquariumSample(const AmbientParams& p, float out[kMaxChannels]);
   /// One sample of the desert's sound, per bed chain as for the aquarium.
@@ -174,7 +179,12 @@ class Ambience {
     kChopper,                     ///< the helicopter's rotor and whine
     kCrunch0,                     ///< the four chewing slots of the sandworm (kCrunch0 + slot)
     kShot0 = kCrunch0 + 4,        ///< the four rifle shots (kShot0 + slot)
-    kPlaceCount = kShot0 + 4
+    kWhale = kShot0 + 4,          ///< the whale's song
+    kGrowl,                       ///< the growl of the kraken
+    kGulp,                        ///< the kraken's gulps
+    kSub,                         ///< the submarine's hiss
+    kBubble0,                     ///< the ten bubble blips (kBubble0 + slot)
+    kPlaceCount = kBubble0 + 10
   };
   /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
   /// gains towards every speaker, and whether it is sounding.
@@ -209,6 +219,8 @@ class Ambience {
   void aimMountains(const AmbientParams& p);
   /// Aims the placed sounds of the desert (the tornado, the sandworm, the helicopter) at their emitters.
   void aimDesert(const AmbientParams& p);
+  /// Aims the placed sounds of the aquarium (the kraken's growl, the submarine, the whale while it sings) at their emitters.
+  void aimAquarium(const AmbientParams& p);
 
   /// The random generator of bed chain `chain`: chains 0 and 1 (the stereo pair) draw from the shared
   /// generator, as the synth always has; the others have their own, so that the stereo sound and
@@ -235,6 +247,16 @@ class Ambience {
   Source squealAt_;                             ///< where the latest squeal event happened (the next squeal starts there)
   Source crushAt_;                              ///< where the latest crush event happened (the next chewing starts there)
   Source shotAt_;                               ///< where the latest shot event happened (the next shot starts there)
+  Source nibbleAt_;                             ///< where the latest nibble event happened (the next blip starts there)
+  bool nibbleFresh_ = false;                    ///< a nibble event came in that no blip has used yet (else a blip rises at a random place)
+  Rng fxRng_;                                   ///< the dice of the surround effects (where bubbles rise in a room): never the stereo sound's
+  /// One speaker's own tiny bubble: the glints of the water around the listener (surround layouts only).
+  struct Micro {
+    float phase = 0, inc = 0;  ///< phase and phase step of its tone
+    float env = 0, decay = 0;  ///< its level, and how fast it dies away
+  };
+  Micro micro_[kMaxChannels];                   ///< the tiny bubble of each chain
+  Rng microRng_[kMaxChannels];                  ///< when each chain's next tiny bubble comes
   bool shotFresh_ = false;                      ///< a shot event came in that no shot has used yet (else a shot is placed by its random pan)
   SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
   int pendingCount_ = 0;                        ///< how many of them

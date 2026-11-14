@@ -119,6 +119,7 @@ Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
     : layout_(layout), rate_(sampleRate), noiseScale_(std::sqrt(static_cast<float>(sampleRate) / 48000.0f)), rng_(seed) {
   for (int c = 0; c < kMaxChannels; ++c) {
     bedRng_[c] = Rng(seed ^ (0xD1B54A32D192ED03ull * static_cast<uint64_t>(c + 1)));
+    microRng_[c] = Rng(seed ^ (0x9E3779B97F4A7C15ull * static_cast<uint64_t>(c + 7)));
     // The moon pad's phase offset of chain c: 0 and 0.9 for the stereo pair, as it has always been, and
     // then steps of the golden angle, which keep any two chains as far apart in phase as 16 can be.
     const double offset = c < 2 ? 0.9 * c : std::fmod(0.9 + 2.399963229728653 * (c - 1), kTwoPi);
@@ -127,10 +128,11 @@ Ambience::Ambience(int sampleRate, uint64_t seed, const Layout& layout)
   }
   std::fill(feed_, feed_ + kMaxChannels, static_cast<int8_t>(kSilent));
   std::fill(speakerOf_, speakerOf_ + kMaxChannels, -1);
+  fxRng_ = Rng(seed ^ 0xA24BAED4963EE407ull);
   for (Place& pl : place_) pl.v = SpatialVoice(rate_);
   // How far the chains of each scene wander in level, slowly, so that wind and storms drift around the room.
   driftDepth_[static_cast<int>(AmbientKind::Forest)] = 0.3f;
-  driftDepth_[static_cast<int>(AmbientKind::Aquarium)] = 0.15f;
+  driftDepth_[static_cast<int>(AmbientKind::Aquarium)] = 0.25f;
   driftDepth_[static_cast<int>(AmbientKind::Desert)] = 0.3f;
   driftDepth_[static_cast<int>(AmbientKind::Moon)] = 0.1f;
   driftDepth_[static_cast<int>(AmbientKind::Mountains)] = 0.3f;
@@ -204,7 +206,7 @@ void Ambience::route() {
 
   // The level of every chain in every scene: the rear a little quieter, the centre not to form a
   // phantom image, the heights by how much of the scene's bed is overhead (none for the aquarium).
-  static constexpr float kHeightShare[kAmbientKinds] = {0.0f, 0.6f, 0.0f, 0.7f, 0.4f, 0.7f, 0.0f};
+  static constexpr float kHeightShare[kAmbientKinds] = {0.0f, 0.6f, 0.5f, 0.7f, 0.4f, 0.7f, 0.0f};
   for (int k = 0; k < kAmbientKinds; ++k) {
     liveMask_[k] = 0;
     for (int ch = 0; ch < kMaxChannels; ++ch) {
@@ -331,9 +333,37 @@ void Ambience::aimDesert(const AmbientParams& p) {
   emitter(kChopper, EmitterKey::Chopper, p.menace > 0, 0.4f, 0.0f, 0.0f);
 }
 
+void Ambience::bubbleString(Rng& rng, int n, Source* out) {
+  // It starts at a place anywhere round the listener (a little more than the front half-circle, so also
+  // behind) and every bubble is higher than the one before; a lone bubble may be anywhere up to the middle height.
+  const float azimuth = static_cast<float>(rng.range(-150.0, 150.0));
+  const float elevation = static_cast<float>(n > 1 ? rng.range(0.0, 12.0) : rng.range(0.0, 40.0));
+  const float climb = static_cast<float>(rng.range(10.0, 20.0));
+  for (int i = 0; i < n; ++i) {
+    out[i] = Source();
+    out[i].azimuth = azimuth + static_cast<float>(rng.range(-8.0, 8.0));
+    out[i].elevation = std::min(elevation + i * climb, 75.0f);
+  }
+}
+
+void Ambience::aimAquarium(const AmbientParams& p) {
+  auto emitter = [&](int id, EmitterKey key, bool wanted, float spread, float lfe) {
+    const Emitter& e = p.emitters[static_cast<int>(key)];
+    if (wanted && (e.level > 0 || !place_[id].on)) aim(id, stageSource(e.x, e.y, spread, lfe));
+  };
+  emitter(kGrowl, EmitterKey::Gloom, p.storm > 0, 0.5f, 1.0f);  // the kraken
+  emitter(kSub, EmitterKey::Submarine, p.menace > 0, 0.35f, 0.0f);
+  const Emitter& whale = p.emitters[static_cast<int>(EmitterKey::Whale)];  // a phrase follows the whale as it swims
+  if (place_[kWhale].on && whale.level > 0) aim(kWhale, stageSource(whale.x, whale.y, 0.6f, 0.4f));
+}
+
 void Ambience::event(const SoundEvent& e) {
   if (e.kind == EventKind::Squeal) squealAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
   if (e.kind == EventKind::Crush) crushAt_ = stageSource(e.x, e.y, 0.0f, 0.4f);
+  if (e.kind == EventKind::Nibble) {
+    nibbleAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
+    nibbleFresh_ = true;
+  }
   if (e.kind == EventKind::Shot) {
     shotAt_ = stageSource(e.x, e.y, 0.0f, 0.0f);
     shotFresh_ = true;
@@ -350,7 +380,7 @@ void Ambience::setLayout(const Layout& layout) {
   route();
 }
 
-void Ambience::bubble(double delay, float f0, float dur, float amp) {
+void Ambience::bubble(double delay, float f0, float dur, float amp, const Source* at) {
   Bubble& b = *std::min_element(std::begin(bubbles_), std::end(bubbles_),
                                 [](const Bubble& x, const Bubble& y) { return x.start < y.start; });
   b.start = t_ + delay;
@@ -358,6 +388,10 @@ void Ambience::bubble(double delay, float f0, float dur, float amp) {
   b.dur = dur;
   b.amp = amp;
   b.pan = static_cast<float>(rng_.range(0.2, 0.8));
+  Place& pl = place_[kBubble0 + static_cast<int>(&b - bubbles_)];  // each blip has a place of its own
+  pl.src = at ? *at : panSource(b.pan);
+  pl.v.setTarget(layout_, forLayout(pl.src), true);
+  pl.on = true;
 }
 
 void Ambience::moonSample(const AmbientParams& p, float out[kMaxChannels]) {
@@ -887,8 +921,11 @@ void Ambience::citySample(const AmbientParams& p, float out[kMaxChannels]) {
 }
 
 void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
-  (void)p;
   const double dt = 1.0 / rate_;
+  const int nch = layout_.channels();
+  const bool room3d = nch > 2;  // in a room the water is all around: bubbles rise at every side and the glints come from every speaker
+  const float mixAq = mix_[static_cast<int>(AmbientKind::Aquarium)];
+  if (storm_ < 1e-3f && !(p.storm > 0)) place_[kGrowl].on = false;
   // Slow swells of the water, from the same irregular gusts that move the wind; night is a bit calmer.
   const float swell = (0.55f + 0.9f * gust_) * (1.0f - 0.25f * night_);
 
@@ -896,22 +933,25 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
   if (nextBubble_ == 0) nextBubble_ = t_ + 0.5;
   if (t_ >= nextBubble_) {
     const int n = rng_.chance(0.25) ? rng_.rangeInt(2, 3) : 1;
+    // In a room a cluster is a string of bubbles that rises through the water (see bubbleString).
+    Source string[3];
+    if (room3d) bubbleString(fxRng_, n, string);
     for (int i = 0; i < n; ++i) {
       bubble(i * rng_.range(0.05, 0.22), static_cast<float>(rng_.range(350, 1100)),
-             static_cast<float>(rng_.range(0.04, 0.10)), static_cast<float>(rng_.range(0.03, 0.07)));
+             static_cast<float>(rng_.range(0.04, 0.10)), static_cast<float>(rng_.range(0.03, 0.07)), room3d ? &string[i] : nullptr);
     }
     nextBubble_ = t_ + rng_.range(0.25, 1.4) * (1.0 + 0.8 * night_);
   }
-  float bub[2] = {0, 0};
-  for (const Bubble& b : bubbles_) {
+  for (int i = 0; i < 10; ++i) {
+    const Bubble& b = bubbles_[i];
     const double tau = t_ - b.start;
+    if (tau > b.dur) place_[kBubble0 + i].on = false;
     if (b.amp <= 0 || tau < 0 || tau > b.dur) continue;
     // A bubble sings a short rising note: it starts at f0 and climbs as it shrinks.
     const double phase = kTwoPi * b.f0 * (tau + 1.1 * tau * tau / b.dur);
     const float v = static_cast<float>(std::sin(phase) * (1.0 - std::exp(-tau * 900.0)) *
                                        std::exp(-tau / (b.dur * 0.38))) * b.amp;
-    bub[0] += v * std::cos(b.pan * 1.5708f);
-    bub[1] += v * std::sin(b.pan * 1.5708f);
+    if (place_[kBubble0 + i].on) place_[kBubble0 + i].v.add(v, room_, nch);  // the blip's own pan law, or its place in the room
   }
 
   // A whale passing: a long, gliding moan that repeats while it is near.
@@ -924,6 +964,11 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
       song_ = Song{t_, rng_.range(3.0, 5.0), static_cast<float>(rng_.range(70, 110)),
                    static_cast<float>(rng_.range(0.3, 0.7)), 0};
       nextSong_ = t_ + song_.dur + rng_.range(3.0, 8.0) * (1.6 - whale_);
+      // The phrase starts where the whale is (a caller that has no whale on the stage keeps the old random pan).
+      const Emitter& whale = p.emitters[static_cast<int>(EmitterKey::Whale)];
+      place_[kWhale].src = whale.level > 0 ? stageSource(whale.x, whale.y, 0.6f, 0.4f) : panSource(song_.pan);
+      place_[kWhale].v.setTarget(layout_, forLayout(place_[kWhale].src), true);
+      place_[kWhale].on = true;
     }
   } else {
     nextSong_ = 0;
@@ -936,6 +981,9 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
     const double env = std::sin(3.14159265 * x);
     song = static_cast<float>((std::sin(song_.phase) + 0.35 * std::sin(2 * song_.phase + 0.5) +
                                0.12 * std::sin(3 * song_.phase)) * env * env) * whaleLevel * 0.16f;
+    if (place_[kWhale].on) place_[kWhale].v.add(song * 1.4f, room_, nch);
+  } else {
+    place_[kWhale].on = false;
   }
 
   // The growl of something huge (the kraken) as it nears.
@@ -943,8 +991,10 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
   // What its tentacles catch is gulped down: two soft glugs, each a tone that sinks in pitch and
   // wobbles a little, heard through the water (low-passed, so it is muffled).
   float gulp = 0;
+  bool gulping = false;  // a gulp is under way or about to start
   for (const Gulp& g : gulps_) {
     const double tau = t_ - g.start;
+    if (g.used && tau <= 0.5) gulping = true;
     if (!g.used || tau < 0 || tau > 0.5) continue;
     for (int k = 0; k < 2; ++k) {  // the second glug follows a moment later, lower
       const double lt = tau - k * 0.2;
@@ -958,9 +1008,14 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
   }
   gulpLow_[0] += (gulp - gulpLow_[0]) * lowGulp_;
   gulpLow_[1] += (gulpLow_[0] - gulpLow_[1]) * lowGulp_;
+  if (place_[kGulp].on) {
+    place_[kGulp].v.add(gulpLow_[1] * 0.45f * kStereoRef, room_, nch);  // from the kraken's mouth
+    if (!gulping && std::fabs(gulpLow_[1]) < 1e-6f && std::fabs(gulpLow_[0]) < 1e-6f) place_[kGulp].on = false;
+  }
 
-  // Hum, flow and growl are the bed, one chain per speaker; bubbles, song and gulps are voices,
-  // which only the stereo pair carries until they are placed.
+  // Hum and flow are the bed, one chain per speaker, with (in a room) the glints of tiny bubbles in
+  // every speaker. The kraken's growl is placed: noise per chain, weighted by how near each speaker
+  // is to the kraken. Bubbles, song and gulps are voices, each with its place.
   for (int ch = 0; ch < chains_; ++ch) {
     if (!live(AmbientKind::Aquarium, ch)) continue;
     Rng& r = chainRng(ch);
@@ -969,17 +1024,30 @@ void Ambience::aquariumSample(const AmbientParams& p, float out[kMaxChannels]) {
     waterLow_[ch][1] += (waterLow_[ch][0] - waterLow_[ch][1]) * lowHum_;
     const float n2 = noise(r) * noiseScale_;
     muffleLow_[ch] += (n2 - muffleLow_[ch]) * lowMuffle_;
-    const float n3 = noise(r) * noiseScale_;
-    deepLow_[ch][0] += (n3 - deepLow_[ch][0]) * lowDeep_;
-    deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
-    if (ch < 2) {
-      const float panSong = ch ? std::sin(song_.pan * 1.5708f) : std::cos(song_.pan * 1.5708f);
-      out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell +
-                deepLow_[ch][1] * 20.0f * growl + bub[ch] + song * panSong * 1.4f + gulpLow_[1] * 0.45f;
-    } else {
-      out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell + deepLow_[ch][1] * 20.0f * growl;
+    if (ch < 2 || growl > 0) {  // (past the stereo pair, whose generator must advance as it always did, a silent layer is not computed)
+      const float n3 = noise(r) * noiseScale_;
+      deepLow_[ch][0] += (n3 - deepLow_[ch][0]) * lowDeep_;
+      deepLow_[ch][1] += (deepLow_[ch][0] - deepLow_[ch][1]) * lowDeep_;
     }
+    if (growl > 0) voiceOut_[ch] += weight(kGrowl, ch) * deepLow_[ch][1] * 20.0f * growl * mixAq;
+    float glint = 0;
+    if (room3d) {
+      Micro& m = micro_[ch];
+      if (m.env > 1e-4f) {
+        m.phase += m.inc;
+        m.inc *= 1.00012f;  // it climbs as it shrinks, like the bubbles do
+        glint = std::sin(m.phase) * m.env;
+        m.env *= m.decay;
+      } else if (microRng_[ch].uniform() < 1.5 * dt) {  // about one tiny bubble a second and a half in each speaker
+        m.env = static_cast<float>(microRng_[ch].range(0.008, 0.020)) * (1.0f - 0.25f * night_);
+        m.inc = static_cast<float>(kTwoPi * microRng_[ch].range(1500.0, 5000.0) / rate_);
+        m.decay = static_cast<float>(std::exp(-1.0 / (rate_ * microRng_[ch].range(0.008, 0.02))));
+        m.phase = 0;
+      }
+    }
+    out[ch] = waterLow_[ch][1] * 9.0f * 0.11f * swell + muffleLow_[ch] * 0.05f * swell + glint;
   }
+  flushRoom(voiceOut_, mixAq);
 }
 
 float Ambience::coeff(float seconds) const {
@@ -989,7 +1057,7 @@ float Ambience::coeff(float seconds) const {
 void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
   std::fill(out, out + chains_, 0.0f);
   if (menace_ < 1e-3f) {  // nothing of the catastrophe sounds: its placed sources are off (unless it is just swelling in)
-    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = false;
+    if (!(p.menace > 0)) place_[kTitan].on = place_[kWinged].on = place_[kFlames].on = place_[kBeast].on = place_[kChopper].on = place_[kSub].on = false;
     return;
   }
   if (flames_ < 1e-3f && !(p.flames > 0)) place_[kFlames].on = false;
@@ -1009,7 +1077,8 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     switch (p.kind) {
       case AmbientKind::Aquarium: {  // poison gas: a hiss that wells up, and glugging bubbles
         menaceHigh_[ch] += (n - menaceHigh_[ch]) * lowHiss_;
-        out[ch] = (n - menaceHigh_[ch]) * 0.3f * level * (0.7f + 0.3f * static_cast<float>(std::sin(kTwoPi * 0.7 * t_ + ch)));
+        menaceBus_[ch] += weight(kSub, ch) * (n - menaceHigh_[ch]) * 0.3f * level *  // the hiss comes from the submarine
+                          (0.7f + 0.3f * static_cast<float>(std::sin(kTwoPi * 0.7 * t_ + ch)));
         break;
       }
       case AmbientKind::Forest: {  // a flood: the deep roar of rushing water and the hiss of its surface
@@ -1036,7 +1105,10 @@ void Ambience::menaceSample(const AmbientParams& p, float out[kMaxChannels]) {
     if (place_[kChopper].on) place_[kChopper].v.add(0.012f * static_cast<float>(std::sin(menacePhase_[1])) * 0.7f * level * kStereoRef, room_, nch);
   }
   if (p.kind == AmbientKind::Aquarium && rng_.uniform() < 5.5 * level * dt) {  // bubbles of gas
-    bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level);
+    const Emitter& sub = p.emitters[static_cast<int>(EmitterKey::Submarine)];
+    const Source leak = stageSource(sub.x, sub.y, 0.0f, 0.0f);  // the gas bubbles out of the submarine
+    bubble(0, static_cast<float>(rng_.range(230, 560)), 0.12f, static_cast<float>(rng_.range(0.05, 0.11)) * level,
+           sub.level > 0 ? &leak : nullptr);
   }
   if (p.kind == AmbientKind::City && flames_ > 1e-3f) {
     // The streams of fire: one steady, rushing roar (broad noise over a deep body), only unevenly
@@ -1115,6 +1187,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
   if (p.kind == AmbientKind::City) aimCity(p);  // the placed sounds follow their emitters, once per block
   if (p.kind == AmbientKind::Mountains) aimMountains(p);
   if (p.kind == AmbientKind::Desert) aimDesert(p);
+  if (p.kind == AmbientKind::Aquarium) aimAquarium(p);
   if (!flashesSynced_) { seenFlashes_ = p.flashes; flashesSynced_ = true; }
   // Lightning: each new flash brings an immediate clap.
   if (p.flashes != seenFlashes_) {
@@ -1205,8 +1278,9 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
       if (p.nibbles > seenNibbles_ && p.kind == AmbientKind::Aquarium) {
         for (unsigned n = 0; n < std::min(p.nibbles - seenNibbles_, 4u); ++n) {
           bubble(rng_.range(0.0, 0.25), static_cast<float>(rng_.range(900, 1500)), 0.05f,
-                 static_cast<float>(rng_.range(0.15, 0.22)));
+                 static_cast<float>(rng_.range(0.15, 0.22)), nibbleFresh_ ? &nibbleAt_ : nullptr);  // at the fish's mouth
         }
+        nibbleFresh_ = false;
       }
       seenNibbles_ = p.nibbles;
     }
@@ -1239,6 +1313,11 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
           g.start = t_ + n * rng_.range(0.08, 0.3);
           g.pitch = static_cast<float>(rng_.range(0.85, 1.2));
           g.used = true;
+          Place& pl = place_[kGulp];  // the gulp is at the kraken's mouth
+          pl.src = crushAt_;
+          pl.src.lfeSend = 0.3f;
+          pl.v.setTarget(layout_, forLayout(pl.src), !pl.on);
+          pl.on = true;
         }
       }
       seenCrushes_ = p.crushes;

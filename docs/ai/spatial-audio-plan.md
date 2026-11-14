@@ -307,13 +307,15 @@ level; `pos` = where the position comes from. Elevation `h`: ground 0, sky 1.
 
 | Sound | Today | Becomes | Notes |
 |---|---|---|---|
-| Hum, muffled flow | bed | bed (front and side groups, no heights) | |
+| Hum, muffled flow | bed | bed with a height share of 0.5 (the water is overhead too), deeper drift | Changed 2026-11-14 on the owner's wish for fully immersive water; was "no heights". |
 | Growl of something huge | per-ear deep noise | bed + LFE 1.0 | Slowly drifting position. |
 | Bubbles | point, random pan | point at a rising position: x from a bubble source fish or random along the floor, `h` rises during the blip | Event per blip. |
 | Nibbles | bubble blip, random pan | point at the food's x | Event with the eating fish's x,y. |
 | Whale song | point, fixed pan per phrase | emitter following the whale's x; large spread; LFE 0.4 | `whale` emitter; azimuth follows motion, so it sweeps through the surrounds when it passes. |
 | Kraken gulp | mono | point at the kraken's mouth, LFE 0.3 | Event. |
 | Submarine leak (menace) | per-ear hiss | moving emitter at the submarine, spread 0.3; trail as a wide hiss behind it (spread grows with the trail length) | |
+| Rising strings of bubbles (added: immersion) | random pan | in a room, a cluster is a string that rises (each bubble 10-20 degrees higher) and starts anywhere round the listener, behind included | `bubbleString`, own random stream; none of it in stereo. |
+| Tiny bubbles in every speaker (added: immersion) | none | about one every 1.5 s per speaker, 1.5-5 kHz, level 0.008-0.020 | Rooms only; no speaker is a dead spot in the water. |
 
 ### 4.3 Desert
 
@@ -540,7 +542,7 @@ Done as planned, with these differences and results:
 - **The bed/voice split** is by kind of sound, listed in `architecture.md`: noise through filters is bed (every chain); events and tones are voices (chains 0 and 1 until placed). Voices therefore are still front-only in every layout.
 - **Stereo and the front pair are bit-identical** to before (`--dump-golden` and `cmp`, 12 cases; and L/R in every layout equal the stereo render): chains 0 and 1 keep `rng_`; chains 2 and up use `bedRng_[c]` seeded from the seed and the chain.
   A speaker's bed does not depend on the layout's size (tested: the centre of 5.1 and 7.1.4 is the same samples).
-- **Bed profile**: trim by position (rear 0.85, centre 0.7), height share per scene (forest 0.6, aquarium 0, desert 0.7, moon 0.4, mountains 0.7, city 0.3) and a slow per-chain drift (depth 0.1 to 0.3). **The tone tilt is not done**
+- **Bed profile**: trim by position (rear 0.85, centre 0.7), height share per scene (forest 0.6, aquarium 0 (0.5 since the aquarium conversion), desert 0.7, moon 0.4, mountains 0.7, city 0.3) and a slow per-chain drift (depth 0.1 to 0.3). **The tone tilt is not done**
   (it would cost an extra filter per chain); the rear is only quieter, not darker.
 - **Moon**: the drone is tonal, so per-speaker independence is impossible; chains differ in phase (golden-angle offsets, one sine and cosine per partial, rotated per chain). Their correlation stays high by nature.
 - **LFE**: the low-passed (120 Hz, two stages) sum of all chains, scaled by 1/sqrt(chains). Object sends come with phase 6.
@@ -601,6 +603,17 @@ Original plan text:
 - Docs: `architecture.md` (sound parameters), `README.md` sound text if it changes.
 
 ### Phase 6 – Per-scene conversions (one commit per scene, six commits; L in total)
+
+**Aquarium: done 2026-11-14** (fourth of six; details in `architecture.md`, "Placed sounds: the aquarium"). Against section 4.2, plus the owner's wish that the underwater and bubble sound be **fully immersive**:
+
+- Done: the whale's phrase at its emitter (follows it while singing), the kraken's growl (bass 1.0) and gulps (at the crush event, bass 0.3), the submarine's hiss and gas bubbles at its emitter (new `EmitterKey::Submarine`), the nibbles at the fish's mouth, every bubble placed.
+- **Immersion added**: the bed plays in the height speakers (share 0.5) with a deeper drift; bubble clusters rise as strings (higher bubble by bubble) from anywhere round the listener, behind included; every speaker has its own tiny bubbles. All of it only in layouts with more than two channels.
+- **Not done**: the submarine's widening trail, depth darkening, the rise inside one blip.
+- **Stereo is kept without re-baselining**: the golden values hold (bubbles without a position keep their old pan law; the whale and the growl fall back to the old pan and the centre; the extras are off in two channels, and a test checks two stereo renders are identical).
+- **Tests** (4 new, 2 adjusted): the kraken and the submarine left, right, off-screen, high, the growl in the bass, the bed overhead; a nibble, a gulp and a whale's phrase from where they happen; a nibble high in the water overhead and one on the floor at ear level; the rising string and its spread round the listener (a unit test of `bubbleString`); the glints (the front of a room differs from a stereo pair before the first bubble only by them). Adjusted: two tests that said the aquarium's heights are silent.
+  Mutations: caught: the growl's and the submarine's weighting, the gulp's and the nibble's position, the height bed (and the tests that assumed none), the string's spread, rise and start height, the glints. **Survived (no test)**: the whale's start position (it follows its emitter within a block), the whale following its emitter while it sings, the submarine's gas bubbles at its place, the gulp's bass send, and the random strings reaching their places (the same path as the nibbles').
+- **CPU** (release, 2013 i3, % of one core, 2.0 / 5.1 / 7.1.4 / 9.1.6): before 3.0 / 4.0 / 5.0 / 5.8, now 3.3 / 4.7 / 7.1 / 8.8 (the height chains and the glints now run; still below the city's 15.5 at 9.1.6).
+- Unverified: how any of it sounds, above all whether the tiny bubbles and the strings are as pleasant as they are measurable; Apple silicon.
 
 **Desert: done 2026-11-14** (third of six; details in `architecture.md`, "Placed sounds: the desert"). Against section 4.3:
 

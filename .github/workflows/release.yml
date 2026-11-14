@@ -52,8 +52,13 @@ jobs:
           - os: macos-latest
             name: macOS
             preset: release-macos
+          # Linux is built natively once per CPU architecture; the name carries the architecture
+          # into the asset names (Diorascii-x.y.z-Linux-x64.deb, ...-Linux-arm64.rpm).
           - os: ubuntu-latest
-            name: Linux
+            name: Linux-x64
+            preset: release
+          - os: ubuntu-24.04-arm
+            name: Linux-arm64
             preset: release
           - os: windows-latest
             name: Windows

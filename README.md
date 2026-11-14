@@ -61,10 +61,13 @@ from any terminal. Nothing else needs to be installed.
 |---|---|---|
 | macOS | `Diorascii-x.y.z-macOS.pkg` | universal (Apple silicon and Intel), installer to `/usr/local/bin` |
 | Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
-| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
-| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
-| Linux, other | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries; unpack and run `bin/diorascii` |
+| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux-x64.deb`, `-Linux-arm64.deb` | `sudo apt install ./Diorascii-x.y.z-Linux-x64.deb` |
+| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux-x64.rpm`, `-Linux-arm64.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux-x64.rpm` |
+| Linux, other | `Diorascii-x.y.z-Linux-x64.tar.gz`, `-Linux-arm64.tar.gz` | no extra libraries; unpack and run `bin/diorascii` |
 | Windows, portable | `Diorascii-x.y.z-Windows.zip` | unpack and run `bin\diorascii.exe` |
+
+The Linux assets exist for x64 (`uname -m` prints `x86_64`) and arm64 (`aarch64`, e.g. Raspberry Pi 4/5 with
+a 64-bit OS, or ARM servers); they were named `Diorascii-x.y.z-Linux.*` (x64 only) up to 1.3.0.
 
 Installing a newer version over an older one upgrades it in place. To uninstall: on Windows use
 *Apps > Installed apps* (or the uninstaller in the install folder), on Debian/Fedora the package
@@ -521,7 +524,7 @@ workflow's asset on the release page with the notarized one.
 The Windows installer is built by the workflow with [Inno Setup](https://jrsoftware.org/isinfo.php)
 from `packaging/windows/diorascii.iss` (installs to Program Files, adds the PATH entry,
 registers an uninstaller; the `AppId` in the script must never change, it is what lets a newer
-version replace an older one). The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
+version replace an older one). The Linux `.deb`, `.rpm` and `.tar.gz` are built per architecture (x64 and arm64, natively, on `ubuntu-latest` and `ubuntu-24.04-arm`; the matrix name is the asset suffix). The `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
 `cpack -G RPM` in the build directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
 ## Layout

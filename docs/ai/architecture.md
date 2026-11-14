@@ -198,7 +198,9 @@ Clouds come in two sizes (`cloud_*` and `cloud_*_l`, about 1.5x), listed as sepa
     environment, removed on uninstall; `ChangesEnvironment=yes`). `windows.yml` installs, upgrades and
     uninstalls it silently as a test. Not code-signed. The portable `.zip` is kept.
   - Linux: `.deb` and `.rpm` from CPack (`cpack -G DEB/RPM`, not default generators because RPM needs
-    rpmbuild), prefix `/usr`, plus the `.tar.gz`. **Flatpak was considered and not done:** a Flatpak
+    rpmbuild), prefix `/usr`, plus the `.tar.gz`, built natively per architecture (`ubuntu-latest` = x64,
+    `ubuntu-24.04-arm` = arm64; the matrix entry's name `Linux-x64`/`Linux-arm64` is the asset suffix,
+    and `linux.yml` mirrors the matrix; the arm64 build has not run yet, the first run is the proof). **Flatpak was considered and not done:** a Flatpak
     exports its command as `<app-id>` (not `diorascii`) and sandboxes a terminal program and its audio;
     `.deb`/`.rpm` give a plain `diorascii` in the PATH. Revisit if the owner wants Flathub reach.
 - Landing page `pages/index.html`: scene toggle (fish/tree/palm/mountain/star icons) and

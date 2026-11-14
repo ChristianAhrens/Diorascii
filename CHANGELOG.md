@@ -14,6 +14,7 @@ the GitHub release (see "Releasing" in the README).
 - Added a brief crossfade between scenes in the cycle mode: the old scene dissolves into the new one over two seconds (and keeps moving while it does), its sound fades out during the first second and the new scene's sound fades in during the second. Switching scenes by hand stays instant
 - Added passengers to the City: a train now stops at the station (it brakes, stands for about nine seconds and pulls out again), two to five passengers get off, walk along the platform and come out of the station as pedestrians
 - Added the options `jitter`, `chance` and `per-cols` and alternative sprites (`oak|oak_small|oak_tall`) to the `--- decor` lines of scene files, and two more sizes of tree for the City
+- Added Linux arm64 packages (`.deb`, `.rpm`, `.tar.gz`) to the release, built natively by the workflows next to the x64 ones, which are now named `Diorascii-x.y.z-Linux-x64.*` (they were `Diorascii-x.y.z-Linux.*`; the arm64 ones are `Diorascii-x.y.z-Linux-arm64.*`)
 
 ### Changed
 - Changed the trains of the City to fall silent while they stand at the station: the rumble and the klack-klack of the wheels follow the speed of the train (the beat slows down as it brakes), its brakes squeal as it rolls in and the air hisses as it comes to a stop

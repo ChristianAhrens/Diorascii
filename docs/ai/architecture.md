@@ -141,6 +141,11 @@ routing gains glide with `spatial::kSmoothingSeconds`, so a channel that keeps i
 `1 - (1 - k)^(n + 1)`, tested sample by sample). The random generator `rng_` is untouched by the layout, so each layout is deterministic per seed. `scripts/bench-audio.sh`
 (`tests/bench_audio.cpp`, not in ctest) prints the CPU share per scene and layout.
 
+**The forest chain is gated** (2026-11-13, finding F-25). The forest's own sounds (wind, rain, thunder, crickets) are made only while `mix_[Forest]` is above 0.001, as the other scenes are
+(`forestOn` in `render`). The gust and wander state, `thunderLevels` and `roll_` keep running because other scenes and the draw order depend on them, and a silent forest still takes the same
+draws from `rng_` that it took when it ran (`noise(rng_)` twice per channel and sample, once more while a clap rings): without them every other scene's noise and events would change. A new
+forest-only sound added to the per-channel loop must go inside `if (forestOn)` and keep that draw count in the `else`.
+
 **Second catastrophes** (2026-11-10). Every scene lists a second sprite in
 `--- rare` with weight 0.25 against 1, so it comes one time in five (`spawnRare` is a weighted pick). `RarePick`
 (`Weighted`, `Common`, `Other`) lets `triggerRare` choose: `x` and the timer are weighted, `X` (`Action::RareOther`), the

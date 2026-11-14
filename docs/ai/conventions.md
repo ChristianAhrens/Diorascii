@@ -41,6 +41,8 @@
   tolerance of 8 % (`kGoldenTolerance`) because libm and fused multiply-add differ between platforms: Linux/GCC matches to 0.2 %, but the macOS and Windows CI runs differ by up to 4.5 % in single windows (a bit-exact hash or a tight bound fails there; the loose bound was set from the CI logs, the platforms themselves were not run locally). Regenerate only for a change
   that is meant to alter sound: `diorascii_tests --print-golden > tests/ambience_golden.inc`, and say so in the commit message. To prove a refactor
   moved nothing on one machine, `diorascii_tests --dump-golden FILE` writes the raw samples; compare the files from before and after with `cmp`.
+  A second case, `leaving_and_re_entering_the_forest_...` (`tests/ambience_golden_switch.inc`, RMS per second over 24 s), pins a forest storm that is left while the thunder rumbles
+  and re-entered; its values were recorded from the synth *before* the forest chain was gated, so it proves the gate changed nothing audible and keeps the random draws in step.
 
 ## Art conventions
 

@@ -4781,6 +4781,27 @@ std::vector<float> goldenRender(int n) {
   return out;
 }
 
+/// Number of one-second windows of the scene-change case.
+constexpr int kSwitchSeconds = 24;
+
+/// The scene-change case: the forest in a storm with a lightning flash after 0.4 s, the aquarium from
+/// 3 s (while the thunder still rumbles), the forest again from 18 s. Interleaved stereo, 24 s.
+std::vector<float> goldenSwitchRender() {
+  Ambience a(48000, 5);
+  AmbientParams p;
+  p.kind = AmbientKind::Forest;
+  p.night = 0.5f; p.rain = 0.6f; p.storm = 0.8f; p.whale = 0.6f;
+  std::vector<float> out, buf(2 * kGoldenBlock);
+  for (int block = 0; block < kSwitchSeconds * 48000 / kGoldenBlock; ++block) {
+    if (block == 4) { ++p.flashes; ++p.nibbles; }
+    if (block == 30) p.kind = AmbientKind::Aquarium;
+    if (block == 180) p.kind = AmbientKind::Forest;
+    a.render(p, buf.data(), kGoldenBlock);
+    out.insert(out.end(), buf.begin(), buf.end());
+  }
+  return out;
+}
+
 /// The RMS of channel `ch` (of `channels`) in window `w` of an interleaved render.
 float goldenRms(const std::vector<float>& s, int channels, int ch, int w) {
   double sum = 0;
@@ -4794,6 +4815,11 @@ float goldenRms(const std::vector<float>& s, int channels, int ch, int w) {
 /// RMS per window and channel of the stereo golden cases (written by --print-golden).
 const float kGolden[kGoldenCases][2][kGoldenWindows] = {
 #include "ambience_golden.inc"
+};
+/// RMS per second and channel of the scene-change case, recorded from the synth that always ran the
+/// forest's chain, before the chain was skipped outside the forest.
+const float kGoldenSwitch[2][kSwitchSeconds] = {
+#include "ambience_golden_switch.inc"
 };
 }  // namespace
 
@@ -4811,6 +4837,22 @@ TEST(ambience_stereo_output_matches_the_golden_values_of_every_scene) {
   }
 }
 
+
+TEST(leaving_and_re_entering_the_forest_sounds_as_it_did_when_its_chain_always_ran) {
+  // Recorded before the forest's wind, rain, thunder and crickets were skipped outside the forest.
+  // It covers the hard part: leaving while the thunder still rumbles, where the silent chain must
+  // still advance the random generator exactly as before, or the aquarium's noise and bubbles change.
+  const std::vector<float> s = goldenSwitchRender();
+  for (float v : s) CHECK(std::isfinite(v) && std::fabs(v) <= 1.0f);
+  for (int ch = 0; ch < 2; ++ch)
+    for (int w = 0; w < kSwitchSeconds; ++w) {
+      double sum = 0;
+      for (int i = 0; i < 48000; ++i) sum += static_cast<double>(s[(w * 48000 + i) * 2 + ch]) * s[(w * 48000 + i) * 2 + ch];
+      const float got = static_cast<float>(std::sqrt(sum / 48000)), want = kGoldenSwitch[ch][w];
+      if (std::fabs(got - want) > 1e-6f + kGoldenTolerance * want) std::printf("  ch %d second %d: got %.6g, golden %.6g\n", ch, w, got, want);
+      CHECK(std::fabs(got - want) <= 1e-6f + kGoldenTolerance * want);
+    }
+}
 
 // ------------------------------------------------- ambience in other layouts ---
 

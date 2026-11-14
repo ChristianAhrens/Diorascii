@@ -105,6 +105,9 @@ would be, in % of one core (2.0 / 5.1 / 7.1 / 5.1.4 / 7.1.4 / 9.1.6): forest 2.4
 moon 4.2 / 8.2 / 10.8 / 13.5 / 16.1 / 21.5, mountains 6.8 / 12.3 / 15.9 / 19.6 / 23.3 / 30.7, city 8.8 / 15.2 / 19.4 / 23.6 / 27.8 / 36.3. At 9.1.6 that is about 3 to 4 times the stereo cost. Not measured: Apple silicon, for which the budget in
 section 8 is stated. Also found: `render()` itself is 24 to 49 % of the time in every
 scene except the forest, because the forest's wind, rain, thunder and crickets are computed in **all** scenes and only multiplied by their (near zero) presence (finding F-25).
+**Fixed afterwards (F-25, 2026-11-13):** the forest chain is now skipped outside the forest. The measurements and the projection above are from **before** that change; stereo cost on the same machine
+dropped to aquarium 2.4, desert 3.9, moon 3.1, mountains 5.6, city 7.6 (forest 2.5 unchanged), so the projected 9.1.6 figures above are too high by the same share of their fixed part (the per-channel forest loop also vanishes outside the forest). Re-measure
+with the real per-speaker beds in phase 3.
 The cost is dominated by what the existing per-sample loops do, so the numbers are only a guide
 for relative scaling, not a prediction for Apple silicon.
 

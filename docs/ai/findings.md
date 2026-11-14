@@ -29,7 +29,7 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
 | F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
 | F-24 | M | Spatial audio phase-0 spike: first miniaudio facts; hardware still unmeasured | open |
-| F-25 | M | The forest's sound chain runs in every scene; per-speaker beds would multiply it | open, needs a decision |
+| F-25 | M | The forest's sound chain ran in every scene; per-speaker beds would multiply it | resolved 2026-11-13: gated (owner said yes) |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -267,6 +267,10 @@ Added 2026-11-13, from the profile in `spatial-audio-plan.md` section 2.4. In `A
 `mix_[Forest]`, which is 0 except in the forest. The other scenes' own functions are skipped below a presence of 0.001, the forest chain is not. Measured with `perf`
 (i3-4010U, all sounds active): `render()` itself takes 49 % of the time in the aquarium, 42 % in the desert, 34 % on the moon, 27 % in the mountains and 24 % in the city (the forest: 96 %);
 part of that is legitimately shared (the mix, `softClip`, event handling), but the forest chain is a large part. With one chain per speaker it would be multiplied by up to 7.5.
-**Decision needed:** gate the forest chain on its presence like the others (likely 10 to 30 % less CPU in the other scenes, but not bit-identical: the output changes below about
--60 dB at scene changes and the golden values would need a look), or leave it. Nothing was changed. If it is gated, the forest's slow state (gust, wander) must keep advancing, so that the forest does not restart from a
-different state when it comes back; only the per-sample filters and oscillators would be skipped.
+**Resolved 2026-11-13 (owner: yes, gate it).** `Ambience::render` now makes the forest's wind, rain, thunder and crickets only while its presence is above 0.001, like the other
+scenes. The gust and wander state keep running (the desert and mountains use the gust), and a silent forest **still advances the random generator exactly as before** (two draws per
+channel per sample, a third while a clap rings), so the noise and events of every other scene are unchanged. Result: ten of the twelve golden cases stay bit-identical (`cmp`); the two
+forest cases differ by at most 1.3e-6, only in the first 10 ms of the fade-in (the filters start cold when the gate opens). In a forest storm that is left while thunder rumbles
+and re-entered 15 s later, the largest difference to the old synth is 4.5e-4 (-67 dBFS) at the moment the gate closes (about 4 s after the scene change, when the presence falls
+below 0.001; the same kind of step the other scenes have at their own gates), then it decays; a recorded golden case from the old synth pins the scene-change scenario. CPU on the
+development machine (release preset, % of one core, 2.0, before / after): aquarium 3.65 / 2.43, desert 4.96 / 3.87, moon 4.20 / 3.05, mountains 6.75 / 5.61, city 8.85 / 7.64, forest 2.43 / 2.51 (unchanged).

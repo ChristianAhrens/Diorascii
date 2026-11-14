@@ -809,11 +809,20 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
             0.12f * static_cast<float>(std::sin(gustPhaseB_ + 1.3)) + 0.25f * wander_,
         0.0f, 1.0f);
     gust_ = gust;
+    // The forest's own sounds (wind, rain, thunder, crickets) are made only while the forest is
+    // audible: its presence below 0.001 is silence, as for the other scenes. What the other scenes
+    // share with it (the gust, and every draw from the random generator) runs regardless, so that
+    // the noise and the events of the other scenes are exactly what they were when this chain
+    // always ran.
+    const bool forestOn = mix_[static_cast<int>(AmbientKind::Forest)] > 1e-3f;
     // Soft wind in the trees is low-passed noise that swells with the gusts. A gust lifts the
     // pitch a little; in a storm the wind is deeper and stronger.
-    const float cutoffHz = (230.0f + 230.0f * gust) * (1.0f - 0.35f * rain_);
-    const float lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
-    const float windGain = (0.3f + 0.9f * gust * gust) * (1.0f + 2.0f * rain_) * 0.10f;
+    float lowWind = 0, windGain = 0;
+    if (forestOn) {
+      const float cutoffHz = (230.0f + 230.0f * gust) * (1.0f - 0.35f * rain_);
+      lowWind = 1.0f - std::exp(-6.2831853f * cutoffHz / static_cast<float>(rate_));
+      windGain = (0.3f + 0.9f * gust * gust) * (1.0f + 2.0f * rain_) * 0.10f;
+    }
     float crackEnv, rumbleEnv, snapEnv;
     thunderLevels(crackEnv, rumbleEnv, snapEnv);
     // A storm on its way: a soft rolling rumble that grows as it nears, and far-off claps now
@@ -836,7 +845,7 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     } else {
       nextFarClap_ = 0;
     }
-    const float chirps = night_ * 0.035f *
+    const float chirps = !forestOn ? 0.0f : night_ * 0.035f *
                          (cricket(t_, 2.3, 34, 4200) + 0.8f * cricket(t_ + 0.4, 1.9, 29, 4650) +
                           0.6f * cricket(t_ + 0.9, 2.9, 31, 3900));
 
@@ -934,34 +943,44 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
 
     float stereo[2];
     for (int ch = 0; ch < 2; ++ch) {
-      // Wind: noise through two low-pass stages (no hiss, no crackle).
-      const float wn = noise(rng_) * noiseScale_;
-      windLow_[ch][0] += (wn - windLow_[ch][0]) * lowWind;
-      windLow_[ch][1] += (windLow_[ch][0] - windLow_[ch][1]) * lowWind;
-      const float wind = windLow_[ch][1] * 9.0f * windGain;
+      float forest = 0;
+      if (forestOn) {
+        // Wind: noise through two low-pass stages (no hiss, no crackle).
+        const float wn = noise(rng_) * noiseScale_;
+        windLow_[ch][0] += (wn - windLow_[ch][0]) * lowWind;
+        windLow_[ch][1] += (windLow_[ch][0] - windLow_[ch][1]) * lowWind;
+        const float wind = windLow_[ch][1] * 9.0f * windGain;
 
-      // Rain: the hiss is noise with its low end removed, plus a quiet rumble beneath it.
-      const float n = noise(rng_) * noiseScale_;
-      rainLow_[ch] += (n - rainLow_[ch]) * lowRain;
-      const float rain = ((n - rainLow_[ch]) * 0.30f + rainLow_[ch] * 0.9f) * rain_;
+        // Rain: the hiss is noise with its low end removed, plus a quiet rumble beneath it.
+        const float n = noise(rng_) * noiseScale_;
+        rainLow_[ch] += (n - rainLow_[ch]) * lowRain;
+        const float rain = ((n - rainLow_[ch]) * 0.30f + rainLow_[ch] * 0.9f) * rain_;
 
-      // Thunder: a brief crack of mid-high noise, then deep rumbling noise.
-      float thunder = 0;
-      if (snapEnv > 1e-3f) {
-        snapLow_[ch] += snapF * snapBand_[ch];
-        const float high = click * 9.0f - snapLow_[ch] - kSnapDamp * snapBand_[ch];
-        snapBand_[ch] += snapF * high;
-        thunder += snapBand_[ch] * snapEnv;
+        // Thunder: a brief crack of mid-high noise, then deep rumbling noise.
+        float thunder = 0;
+        if (snapEnv > 1e-3f) {
+          snapLow_[ch] += snapF * snapBand_[ch];
+          const float high = click * 9.0f - snapLow_[ch] - kSnapDamp * snapBand_[ch];
+          snapBand_[ch] += snapF * high;
+          thunder += snapBand_[ch] * snapEnv;
+        }
+        if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) {
+          const float tn = noise(rng_) * noiseScale_;
+          crackLow_[ch] += (tn - crackLow_[ch]) * lowCrack;
+          rumbleLow_[ch][0] += (tn - rumbleLow_[ch][0]) * lowRumble;
+          rumbleLow_[ch][1] += (rumbleLow_[ch][0] - rumbleLow_[ch][1]) * lowRumble;
+          thunder += crackLow_[ch] * crackEnv * 0.85f + rumbleLow_[ch][1] * rumbleEnv * 17.0f;
+        }
+        forest = wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f);
+      } else {
+        // Silent, but the generator advances as if the chain had run: one draw each for the wind
+        // and the rain, and one for the thunder's noise while a clap is still ringing.
+        noise(rng_);
+        noise(rng_);
+        if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) noise(rng_);
       }
-      if (crackEnv > 1e-4f || rumbleEnv > 1e-4f) {
-        const float tn = noise(rng_) * noiseScale_;
-        crackLow_[ch] += (tn - crackLow_[ch]) * lowCrack;
-        rumbleLow_[ch][0] += (tn - rumbleLow_[ch][0]) * lowRumble;
-        rumbleLow_[ch][1] += (rumbleLow_[ch][0] - rumbleLow_[ch][1]) * lowRumble;
-        thunder += crackLow_[ch] * crackEnv * 0.85f + rumbleLow_[ch][1] * rumbleEnv * 17.0f;
-      }
 
-      const float sample = menaceOut[ch] + (wind + rain + thunder + chirps * (ch ? 0.9f : 1.0f)) * mix_[static_cast<int>(AmbientKind::Forest)] +
+      const float sample = menaceOut[ch] + forest * mix_[static_cast<int>(AmbientKind::Forest)] +
                            aq[ch] * mix_[static_cast<int>(AmbientKind::Aquarium)] +
                            desert[ch] * mix_[static_cast<int>(AmbientKind::Desert)] +
                            moon[ch] * mix_[static_cast<int>(AmbientKind::Moon)] +

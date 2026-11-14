@@ -20,6 +20,7 @@ the GitHub release (see "Releasing" in the README).
 - Changed the trains of the City to fall silent while they stand at the station: the rumble and the klack-klack of the wheels follow the speed of the train (the beat slows down as it brakes), its brakes squeal as it rolls in and the air hisses as it comes to a stop
 - Changed the oasis of the desert to be different every time the scene is built: the pond is small, medium or big and lies anywhere in the middle of the screen, and its palms and reeds stand on its shore wherever it lies (decor lines take `anchor yes` and the alignments `from-left`, `from-right`, `from-center` for this)
 - Changed the Linux text console (`TERM=linux`, also inside tmux, or `--console`) to start in the terminal style, as it cannot show the full style's gradient backdrop; an explicit `--style` still wins
+- The ambient sound uses less CPU outside the forest: the forest's wind, rain, thunder and crickets are no longer computed in the other scenes (14 to 33 % less in the aquarium, desert, moon, mountains and city); the sound itself is unchanged
 
 ### Fixed
 - Fixed the whale of the aquarium missing its tail fin

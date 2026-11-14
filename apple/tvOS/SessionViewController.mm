@@ -129,6 +129,7 @@ static NSString* const kHintCountKey = @"menuHintCount";
 - (void)syncSound {
   if (_session->soundWanted() && !_audio.running() && !_audio.start()) _session->soundUnavailable();
   if (!_session->soundWanted() && _audio.running()) _audio.stop();
+  if (_audio.running()) _audio.update();  // follows a change of route (the layout follows the new route)
 }
 
 /// True while the ASCII menu is open and takes the navigation.

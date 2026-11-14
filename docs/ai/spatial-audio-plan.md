@@ -702,6 +702,11 @@ converts the scene's sounds per section 4, re-baselines that scene's golden hash
 - Tests: the negotiation logic (choice + device report → layout, including step-down and the
   unnamed-map mapping) is pure and lives in the core or app layer so it is unit-tested without a device.
 
+**7b Apple: written 2026-11-14, not compiled** (details in `architecture.md`, "The Apple backend"). The owner asked for the full set (stereo, 5.1, 7.1 and the Atmos layouts up to 9.1.6) and will check the history on macOS and Windows; there is no Apple toolchain in the environment that wrote it, so the tag names, the buffer orders and the session calls are from memory of the documentation.
+
+- Done: `audio_apple.mm` with `start(choice)`, negotiation from the route's channel count, the layout tags and the buffer permutation, the step-down, `update()` on route and engine-configuration notifications, `layout()`, `deviceChannels()`, `downmixed()`; the tvOS view controller calls `update()` every step.
+- **Unverified (all of it)**: that it compiles; the Atmos tag names and the channel order of each tag (the synth's channel k goes to the buffer the table says); the mixer path; that the OS spatializes the stream for AirPods; what HDMI gives. No test can cover it here (the only testable part, the negotiation, is the same code as 7a).
+
 ### Phase 8 – Controls, docs and release notes (S)
 
 - `--audio-layout`, menu entry, tvOS menu entry; `Session` tests for the key/menu, as for the `X` key.

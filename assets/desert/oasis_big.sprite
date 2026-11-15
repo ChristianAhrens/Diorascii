@@ -1,0 +1,61 @@
+name: oasis_big
+habitat: ground
+solid: yes
+depth: 16
+fps: 2
+--- art
+
+
+
+--- mask
+CCCCCcccccccccCCCCCcccccccccCCCCCccc
+CCCcccccccccCCCCCcccccccccCCCCCccccc
+CcccccccccCCCCCcccccccccCCCCCccccccc
+--- art
+
+
+
+--- mask
+CCCcccccccccCCCCCcccccccccCCCCCccccc
+CcccccccccCCCCCcccccccccCCCCCccccccc
+ccccccccCCCCCcccccccccCCCCCccccccccc
+--- art
+
+
+
+--- mask
+CcccccccccCCCCCcccccccccCCCCCccccccc
+ccccccccCCCCCcccccccccCCCCCccccccccc
+ccccccCCCCCcccccccccCCCCCcccccccccCC
+--- art
+
+
+
+--- mask
+ccccccccCCCCCcccccccccCCCCCccccccccc
+ccccccCCCCCcccccccccCCCCCcccccccccCC
+ccccCCCCCcccccccccCCCCCcccccccccCCCC
+--- art
+
+
+
+--- mask
+ccccccCCCCCcccccccccCCCCCcccccccccCC
+ccccCCCCCcccccccccCCCCCcccccccccCCCC
+ccCCCCCcccccccccCCCCCcccccccccCCCCCc
+--- art
+
+
+
+--- mask
+ccccCCCCCcccccccccCCCCCcccccccccCCCC
+ccCCCCCcccccccccCCCCCcccccccccCCCCCc
+CCCCCcccccccccCCCCCcccccccccCCCCCccc
+--- art
+
+
+
+--- mask
+ccCCCCCcccccccccCCCCCcccccccccCCCCCc
+CCCCCcccccccccCCCCCcccccccccCCCCCccc
+CCCcccccccccCCCCCcccccccccCCCCCccccc

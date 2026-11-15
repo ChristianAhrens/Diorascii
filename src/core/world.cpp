@@ -430,6 +430,12 @@ void engine(Entity& e, World& w, double dt) { w.engineStep(e, dt); }
 /// A vehicle of the city: drives along the main road, may turn into a side street (see World::driveStep).
 void drive(Entity& e, World& w, double dt) { w.driveStep(e, dt); }
 
+/// A train: runs along the railway and stops at the station (see World::trainStep).
+void train(Entity& e, World& w, double dt) { w.trainStep(e, dt); }
+
+/// A passenger who has got off a train: walks to the station and leaves it by the stairs (see World::commuteStep).
+void commute(Entity& e, World& w, double dt) { w.commuteStep(e, dt); }
+
 /// A fire in the city: the skyscraper burns, then is renovated (see World::blazeStep).
 void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 
@@ -463,7 +469,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
-      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
+      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine}, {"train", train}, {"commute", commute},
       {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}, {"asteroid", asteroid}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
@@ -619,8 +625,10 @@ void World::populate() {
       else spawnCreature(sprite, true);
     }
   }
+  decorAnchor_ = {};
   for (const auto& d : scene_->decor) spawnDecor(d);
   flushIncoming();
+  if (scene_->city) placeCrossings();  // after the station: one of them lies at its foot
 }
 
 double World::habitatY(const Props& p, int spriteHeight) {
@@ -747,42 +755,88 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
 }
 
 void World::spawnDecor(const SceneDef::Decor& d) {
-  auto sprite = pack_->find(d.sprite);
+  if (d.perCols > 0) {  // as many as the width allows, each somewhere else
+    const double want = static_cast<double>(w_) / d.perCols;
+    int n = static_cast<int>(want);
+    if (rng_.chance(want - n)) ++n;
+    for (int i = 0; i < n; ++i) placeDecor(d);
+  } else {
+    placeDecor(d);
+  }
+}
+
+void World::placeDecor(const SceneDef::Decor& d, const DecorAnchor* fixed) {
+  if (d.chance < 1.0 && !rng_.chance(d.chance)) return;
+  // One of the sprites separated by `|` (trees of different sizes).
+  std::vector<std::string> names;
+  for (size_t from = 0; from <= d.sprite.size();) {
+    const size_t bar = std::min(d.sprite.find('|', from), d.sprite.size());
+    names.push_back(d.sprite.substr(from, bar - from));
+    from = bar + 1;
+  }
+  auto sprite = pack_->find(names[static_cast<size_t>(rng_.rangeInt(0, static_cast<int>(names.size()) - 1))]);
   if (!sprite) return;
   const Props& p = sprite->props();
-  if (p.str("habitat", "ground") == "rail" && railY_ < 0) return;  // no railway on this screen
+  const bool onRail = p.str("habitat", "ground") == "rail";
+  if (onRail && railY_ < 0) return;  // no railway on this screen
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
   e->z = static_cast<int>(p.range("depth", {20, 20}).first);
+  e->decor = true;
 
-  if (d.align == "left") e->x = d.margin;
-  else if (d.align == "right") e->x = w_ - e->width() - d.margin;
-  else if (d.align == "center") e->x = (w_ - e->width()) / 2 + d.margin;
-  else e->x = rng_.rangeInt(0, std::max(w_ - e->width(), 0));
-  // Things that stand on the sidewalk make room for the side streets: they move aside, or are left out.
-  if (!avenues_.empty() && e->grounded && p.str("habitat", "ground") == "ground") {
-    for (int pass = 0; pass < 4; ++pass) {
+  // Decorations in the far distance (the pyramids, z >= 30) are a backdrop: things may stand in front of them.
+  constexpr int kBackdropZ = 30;
+  const bool onSidewalk = !avenues_.empty() && e->grounded;
+  // Whether a column is free: not in a side street (a station's foot may not be either) and, for
+  // things that stand on the ground, not on top of another decoration of any size.
+  auto blocked = [&](double x) {
+    if (!avenues_.empty() && (onSidewalk || onRail)) {
       for (const Avenue& a : avenues_) {
-        const double lo = a.cx - a.halfW - 3, hi = a.cx + a.halfW + 3;
-        if (e->x + e->width() <= lo || e->x >= hi) continue;
-        const double left = lo - e->width(), right = hi;
-        const bool leftOk = left >= 0, rightOk = right + e->width() <= w_;
-        if (!leftOk && !rightOk) return;
-        e->x = (!rightOk || (leftOk && e->x - left < right - e->x)) ? left : right;
+        if (x + e->width() > a.cx - a.halfW - 3 && x < a.cx + a.halfW + 3) return true;
       }
     }
-    for (const Avenue& a : avenues_) {
-      if (e->x + e->width() > a.cx - a.halfW - 3 && e->x < a.cx + a.halfW + 3) return;  // still in the way
+    if (e->grounded && e->height() > 3) {
+      auto overlaps = [&](const std::unique_ptr<Entity>& o) {
+        return !o->dead && o->decor && o->grounded && o->height() > 3 && (o->z < kBackdropZ || e->z >= kBackdropZ) && x + e->width() > o->x - 1 && x < o->x + o->width() + 1;
+      };
+      if (std::any_of(entities_.begin(), entities_.end(), overlaps) || std::any_of(incoming_.begin(), incoming_.end(), overlaps)) return true;
     }
+    return false;
+  };
+  const DecorAnchor anchor = fixed ? *fixed : decorAnchor_;
+  const int span = std::max(w_ - e->width(), 0);
+  auto pick = [&]() {
+    double x;
+    if (d.align == "left") x = d.margin;
+    else if (d.align == "right") x = w_ - e->width() - d.margin;
+    else if (d.align == "center") x = (w_ - e->width()) / 2 + d.margin;
+    else if (d.align == "from-left" && anchor.valid) x = anchor.x + d.margin;
+    else if (d.align == "from-right" && anchor.valid) x = anchor.x + anchor.width + d.margin;
+    else if (d.align == "from-center" && anchor.valid) x = anchor.x + (anchor.width - e->width()) / 2.0 + d.margin;
+    else if (d.align.rfind("from-", 0) == 0) x = (w_ - e->width()) / 2 + d.margin;  // no anchor: the middle
+    else x = rng_.rangeInt(0, span);
+    if (d.jitter > 0) x += rng_.rangeInt(-d.jitter, d.jitter);
+    return std::clamp(x, 0.0, static_cast<double>(span));
+  };
+  // Several tries: a thing that finds no free place is left out (the station is the exception, it
+  // stays and the avenues are ignored once nothing else works).
+  bool placed = false;
+  for (int attempt = 0; attempt < 24 && !placed; ++attempt) {
+    e->x = pick();
+    placed = !blocked(e->x);
   }
+  if (!placed && !onRail) return;
+  if (!placed) e->x = pick();
 
   if (d.hasY) e->y = d.y >= 0 ? d.y : h_ + d.y;
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
   else e->y = habitatY(p, e->height());
   e->anchorY = e->y;
   if (e->zone != Zone::None && d.align == "random" && !ridge_.empty()) placeInZone(*e, false, false, true);
-  e->restock = [d](World& w) { w.spawnDecor(d); };  // planted again after a catastrophe
+  if (d.anchor) decorAnchor_ = {true, e->x, e->width()};
+  // Planted again after a catastrophe, where the thing it is aligned to stood.
+  e->restock = [d, anchor](World& w) { w.placeDecor(d, &anchor); };
   spawn(std::move(e));
 }
 

@@ -28,14 +28,26 @@ struct SceneDef {
   };
   /// A decoration placed once when the scene starts.
   struct Decor {
-    /// Sprite name.
+    /// Sprite name, or several separated by `|` of which one is picked each time (trees of different sizes).
     std::string sprite;
-    std::string align = "left";  ///< left | right | center | random
+    /// left | right | center | random, or relative to the decoration marked `anchor`:
+    /// from-left (its left edge), from-right (its right edge), from-center (its middle).
+    std::string align = "left";
     /// Distance in cells from the aligned edge.
     int margin = 0;
     /// True if y is set explicitly. Otherwise the sprite habitat decides the row.
     bool hasY = false;
     int y = 0;  ///< row; negative counts from the bottom
+    /// Random shift of the position by up to this many cells either way, each time it is placed.
+    int jitter = 0;
+    /// Chance (0 to 1) that it is placed at all.
+    double chance = 1.0;
+    /// If above 0: one more for every this many columns of the screen, each at a random place
+    /// (the margin is ignored).
+    int perCols = 0;
+    /// True if the decorations that follow may be placed relative to this one (see `align`): the
+    /// palms and reeds of the oasis follow the pond wherever it lies and however wide it is.
+    bool anchor = false;
   };
   /// A rare visitor (ship, shark, meteor...) that the scene sends one at a time.
   struct Event {

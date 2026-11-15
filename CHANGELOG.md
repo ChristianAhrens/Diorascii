@@ -10,11 +10,17 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added passengers to the City: a train now stops at the station (it brakes, stands for about nine seconds and pulls out again), two to five passengers get off, walk along the platform and come out of the station as pedestrians
+- Added the options `jitter`, `chance` and `per-cols` and alternative sprites (`oak|oak_small|oak_tall`) to the `--- decor` lines of scene files, and two more sizes of tree for the City
 
 ### Changed
+- Changed the trains of the City to fall silent while they stand at the station: the rumble and the klack-klack of the wheels follow the speed of the train (the beat slows down as it brakes), its brakes squeal as it rolls in and the air hisses as it comes to a stop
+- Changed the oasis of the desert to be different every time the scene is built: the pond is small, medium or big and lies anywhere in the middle of the screen, and its palms and reeds stand on its shore wherever it lies (decor lines take `anchor yes` and the alignments `from-left`, `from-right`, `from-center` for this)
 - Changed the Linux text console (`TERM=linux`, also inside tmux, or `--console`) to start in the terminal style, as it cannot show the full style's gradient backdrop; an explicit `--style` still wins
 
 ### Fixed
+- Fixed the whale of the aquarium missing its tail fin
+- Fixed the City always looking the same: the station, the trees (their number, size and place; they keep clear of shops, side streets and each other, and there are more of them on a wider screen), the bushes, the flowers and the zebra crossings are now different every time the scene is built (one crossing always lies at the foot of the station, and none in a side street). The wire of the railway moved two rows up to clear the taller station
 
 ## [1.3.0] 2026-11-11
 ### Added

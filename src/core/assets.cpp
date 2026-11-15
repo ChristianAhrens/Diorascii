@@ -85,7 +85,13 @@ void AssetPack::validate() {
   };
   for (const auto& [name, sc] : scenes_) {
     for (const auto& p : sc->population) check(*sc, "population", p.sprite);
-    for (const auto& d : sc->decor) check(*sc, "decor", d.sprite);
+    for (const auto& d : sc->decor) {  // a decoration may list alternatives separated by `|`
+      for (size_t from = 0; from <= d.sprite.size();) {
+        const size_t bar = std::min(d.sprite.find('|', from), d.sprite.size());
+        check(*sc, "decor", d.sprite.substr(from, bar - from));
+        from = bar + 1;
+      }
+    }
     for (const auto& e : sc->events) check(*sc, "events", e.sprite);
     for (const auto& e : sc->rare) check(*sc, "rare", e.sprite);
     check(*sc, "action", sc->action.sprite);

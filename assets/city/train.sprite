@@ -1,7 +1,7 @@
 name: train
 facing: right
 habitat: rail
-behaviors: swim
+behaviors: train
 speed: 14..20
 depth: 18
 tag: train

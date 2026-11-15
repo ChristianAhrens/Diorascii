@@ -139,6 +139,22 @@ TEST(scene_parses_all_sections) {
   CHECK(sc->action.label == "Strike" && sc->gravity == 2.5 && sc->dustSettle == 12);
 }
 
+TEST(decor_lines_take_jitter_chance_per_cols_and_alternatives) {
+  std::string err;
+  auto sc = SceneDef::parse("name: s\n--- decor\noak|pine center -4 jitter 6 chance 0.5 per-cols 40\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->decor[0].sprite == "oak|pine" && sc->decor[0].jitter == 6 && sc->decor[0].chance == 0.5 && sc->decor[0].perCols == 40);
+  CHECK(SceneDef::parse("name: s\n--- decor\noak left 0 shade 3\n", err) == nullptr);
+}
+
+TEST(decor_lines_can_be_aligned_to_an_anchor) {
+  std::string err;
+  auto sc = SceneDef::parse("name: s\n--- decor\npond center 0 jitter 9 anchor yes\npalm from-left -6\npalm from-right -7\nreeds from-center 0\n", err);
+  CHECK(sc != nullptr);
+  CHECK(sc->decor[0].anchor && !sc->decor[1].anchor);
+  CHECK(sc->decor[1].align == "from-left" && sc->decor[2].align == "from-right" && sc->decor[3].align == "from-center");
+}
+
 TEST(scene_rejects_bad_input) {
   std::string err;
   CHECK(SceneDef::parse("title: x\n", err) == nullptr);                          // no name
@@ -171,7 +187,7 @@ TEST(embedded_assets_all_load) {
                         "dust", "flag", "rock", "pine_big", "pine_small", "oak", "bush", "cloud_big",
                         "cloud_small", "flower", "reeds", "bird", "deer", "rabbit", "duck", "eagle",
                         "raindrop", "splash", "sun_big", "moon_big", "firefly", "butterfly", "dune_big",
-                        "dune_small", "pyramid_big", "pyramid_small", "oasis", "funnel", "sandgrain",
+                        "dune_small", "pyramid_big", "pyramid_small", "oasis", "oasis_small", "oasis_big", "funnel", "sandgrain",
                         "sandspray", "sandpuff", "dustburst", "palm_big", "palm_small", "cactus_big",
                         "cactus_small", "boulder", "tent", "campfire", "camel", "horse", "gazelle",
                         "lion", "vulture", "bat", "tumbleweed", "kraken", "inkburst", "thundercloud",
@@ -211,7 +227,7 @@ TEST(aquarium_keeps_population_over_time) {
   World world(pack, pack.scene("aquarium"), 120, 40, 11);
   const size_t start = world.entityCount();
   CHECK(start > 10);
-  for (int i = 0; i < 4000; ++i) world.step(0.05);  // creatures leave and respawn
+  for (int i = 0; i < 2800; ++i) world.step(0.05);  // creatures leave and respawn (140 s: before the first rare catastrophe, at 150 s)
   CHECK(world.entityCount() > start / 2);
   CHECK(world.entityCount() < start * 4);
 }
@@ -3158,7 +3174,7 @@ TEST(the_railway_is_a_visible_viaduct_and_the_vehicles_and_planes_are_detailed_l
     deck += (f.at(x, rail).ch == U'=' && f.at(x, rail).bg.r < 80) ? 1 : 0;
     beam += (f.at(x, rail + 1).ch == U'_' && f.at(x, rail + 1).bg.r > 100) ? 1 : 0;
     pillars += f.at(x, rail + 3).bg.r > 100 && f.at(x, rail + 3).bg.r < 150 && f.at(x, rail + 3).ch == U' ' ? 1 : 0;
-    wire += f.at(x, rail - 5).ch == U'-' ? 1 : 0;
+    wire += f.at(x, rail - 7).ch == U'-' ? 1 : 0;
   }
   CHECK(deck > 90 && beam > 90 && pillars > 10 && wire > 40);
   // Vehicles, trains and planes are fine line art with many different glyphs, on a darkened backing
@@ -3532,6 +3548,163 @@ TEST(trains_run_on_the_railway_and_planes_come_in_to_land_behind_the_skyline) {
     }
   }
   CHECK(train && plane);
+}
+
+/// Number of live entities of a decoration sprite (the trees are three sizes).
+static size_t treeCount(const World& world) {
+  return world.countSprite("oak") + world.countSprite("oak_small") + world.countSprite("oak_tall");
+}
+
+TEST(the_station_trees_and_crossings_differ_from_seed_to_seed_and_keep_clear_of_the_side_streets) {
+  AssetPack pack = AssetPack::embedded();
+  std::set<int> stations;
+  std::set<size_t> trees;
+  std::set<std::string> kinds;
+  for (uint64_t seed = 1; seed <= 12; ++seed) {
+    World world(pack, pack.scene("city"), 160, 40, seed);
+    double station = -1;
+    for (auto& e : world.entities()) {
+      if (e->tag == "station") station = e->x + e->width() / 2.0;
+      if (e->sprite->name().rfind("oak", 0) == 0) {
+        kinds.insert(e->sprite->name());
+        for (const auto& a : world.avenues()) {  // no tree in the mouth of a side street
+          CHECK(e->x + e->width() <= a.cx - a.halfW || e->x >= a.cx + a.halfW);
+        }
+      }
+    }
+    CHECK(world.countSprite("station") == 1);
+    stations.insert(static_cast<int>(station));
+    trees.insert(treeCount(world));
+    CHECK(treeCount(world) >= 1);
+    // One crossing lies at the foot of the station, and none in a side street.
+    CHECK(std::count(world.crossings().begin(), world.crossings().end(), static_cast<int>(station) - 1) == 1);
+    for (int c : world.crossings()) {
+      if (c == static_cast<int>(station) - 1) continue;
+      for (const auto& a : world.avenues()) CHECK(std::abs(c + 1 - a.cx) > a.halfW);
+    }
+  }
+  CHECK(stations.size() >= 5);  // the station moves
+  CHECK(trees.size() >= 3);     // the number of trees varies
+  CHECK(kinds.size() == 3);     // and so does their size
+  // A wider screen has more trees than a narrow one.
+  size_t narrow = 0, wide = 0;
+  for (uint64_t seed = 1; seed <= 8; ++seed) {
+    narrow += treeCount(World(pack, pack.scene("city"), 90, 40, seed));
+    wide += treeCount(World(pack, pack.scene("city"), 240, 40, seed));
+  }
+  CHECK(wide > narrow);
+}
+
+TEST(a_train_stops_at_the_station_and_its_passengers_get_off_and_walk_down_to_the_street) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  bool stopped = false, passengers = false;
+  for (int i = 0; i < 20000 && !(stopped && passengers); ++i) {
+    world.step(0.05);
+    double station = -1;
+    for (auto& e : world.entities()) {
+      if (!e->dead && e->tag == "station") station = e->x + e->width() / 2.0;
+    }
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "train" && e->vx == 0 && e->stopPhase == 2) {
+        stopped = true;
+        CHECK(std::abs(e->x + e->width() / 2.0 - station) < 1.0);  // level with the platform
+      }
+      if (e->sprite->name() == "commuter") {
+        passengers = true;
+        CHECK(e->y + e->height() == world.railRow());  // on the platform deck
+      }
+    }
+  }
+  CHECK(stopped && passengers);
+  // They all reach the station, and nobody is left on the deck; the train pulls out again.
+  bool left = false;
+  for (int i = 0; i < 2000 && !left; ++i) {
+    world.step(0.05);
+    left = world.countSprite("commuter") == 0;
+  }
+  CHECK(left);
+}
+
+TEST(the_oasis_pond_changes_in_size_and_place_with_every_seed_and_the_palms_stay_on_its_shore) {
+  AssetPack pack = AssetPack::embedded();
+  std::set<std::string> kinds;
+  std::set<int> places;
+  for (uint64_t seed = 1; seed <= 24; ++seed) {
+    World world(pack, pack.scene("desert"), 120, 30, seed);
+    const Entity* pond = nullptr;
+    for (auto& e : world.entities()) {
+      if (!e->dead && e->sprite->name().rfind("oasis", 0) == 0) pond = e.get();
+    }
+    CHECK(pond != nullptr);
+    if (!pond) continue;
+    kinds.insert(pond->sprite->name());
+    places.insert(static_cast<int>(pond->x));
+    CHECK(pond->x >= 0 && pond->x + pond->width() <= 120);
+    // The reeds that are placed relative to the pond lie inside it, and some palm stands at its left edge.
+    bool reedsInside = false, palmAtEdge = false;
+    for (auto& e : world.entities()) {
+      if (e->dead) continue;
+      if (e->sprite->name() == "reeds" && e->decor && e->x >= pond->x - 0.5 && e->x + e->width() <= pond->x + pond->width() + 0.5) reedsInside = true;
+      if (e->sprite->name() == "palm_big" && e->decor && std::abs(e->x - (pond->x - 6)) < 0.5) palmAtEdge = true;
+    }
+    CHECK(reedsInside);
+    CHECK(palmAtEdge || pond->x < 6);  // (a pond at the very edge of the screen pushes the palm off it)
+  }
+  CHECK(kinds.size() == 3);   // small, medium and big
+  CHECK(places.size() >= 8);  // and in many places
+}
+
+TEST(a_train_stops_rumbling_while_it_stands_and_its_brakes_squeal_on_the_way_in) {
+  AssetPack pack = AssetPack::embedded();
+  World world(pack, pack.scene("city"), 130, 40, 3);
+  bool braked = false, stood = false, hissed = false;
+  for (int i = 0; i < 20000 && !(braked && stood && hissed); ++i) {
+    world.step(0.05);
+    const World::TrainSound ts = world.trainSound();
+    for (auto& e : world.entities()) {
+      if (e->dead || e->sprite->name() != "train") continue;
+      if (e->stopPhase == 0 && e->driveSpeed > 0) CHECK(ts.motion > 0.99 && ts.brake == 0 && ts.hiss == 0);  // at full speed it only rolls
+      if (e->stopPhase == 1 && ts.brake > 0.2) braked = true;
+      if (e->stopPhase == 2) {
+        stood = true;
+        CHECK(ts.motion == 0 && ts.brake == 0);  // it does not roll any more
+        if (ts.hiss > 0.5) hissed = true;
+      }
+    }
+  }
+  CHECK(braked && stood && hissed);
+  // In the sound: the wheels are silent while the train stands, and the brakes are heard.
+  AmbientParams rolling, standing, braking;
+  rolling.kind = standing.kind = braking.kind = AmbientKind::City;
+  rolling.train = standing.train = braking.train = 1;
+  standing.trainMotion = 0;
+  braking.trainMotion = 0.3f;
+  braking.trainBrake = 1;
+  AmbientParams calm;
+  calm.kind = AmbientKind::City;
+  CHECK(ambienceRms(rolling, 8) > ambienceRms(standing, 8) * 1.2);  // the traffic is the same, the train is not
+  CHECK(ambienceRms(standing, 8) < ambienceRms(calm, 8) * 1.1);     // standing it adds nothing
+  AmbientParams slowQuiet = braking;
+  slowQuiet.trainBrake = 0;
+  CHECK(ambienceRms(braking, 8) > ambienceRms(slowQuiet, 8) * 1.1);
+  AmbientParams air = standing;
+  air.trainHiss = 1;
+  CHECK(ambienceRms(air, 8) > ambienceRms(standing, 8) * 1.1);
+}
+
+TEST(the_whale_has_a_tail_fin) {
+  AssetPack pack = AssetPack::embedded();
+  auto whale = pack.find("whale");
+  CHECK(whale && whale->width() >= 44);  // the body alone is 35 cells wide
+  const SpriteFrame& fr = whale->frame(false, 0);
+  // The fluke is drawn at the tail end, in the right-hand cells of the upper rows.
+  int cells = 0;
+  for (int x = 38; x < whale->width(); ++x) {
+    for (const auto& row : fr.art) cells += static_cast<size_t>(x) < row.size() && row[static_cast<size_t>(x)] != U' ';
+  }
+  CHECK(cells >= 8);
 }
 
 TEST(a_skyscraper_burns_with_smoke_and_a_fire_engine_then_is_renovated_quickly) {

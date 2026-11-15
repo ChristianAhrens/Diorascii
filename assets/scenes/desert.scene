@@ -42,17 +42,19 @@ cloud_small_l  per-cols   300
 bat            per-cols   70
 
 --- decor
-# sprite       align      margin
+# sprite       align      margin  [y row] [jitter n] [anchor yes]
 pyramid_big    left       6
 pyramid_small  left       30
 pyramid_small  right      34
-oasis          center     0     y -5
-palm_big       center     -13
-palm_big       center     12
-palm_small     center     -17
-palm_small     center     16
-reeds          center     -9    y -8
-reeds          center     8     y -8
+# The pond changes size and place every time the scene is built; the palms and the reeds that
+# follow are placed relative to it (from-left / from-right are its edges), so they stay on its shore.
+oasis|oasis_small|oasis_big  center  0  y -5  jitter 22  anchor yes
+palm_big       from-left  -6
+palm_big       from-right -7
+palm_small     from-left  -9
+palm_small     from-right 0
+reeds          from-left  0     y -8
+reeds          from-right -7    y -8
 tent           right      10
 campfire       right      22
 

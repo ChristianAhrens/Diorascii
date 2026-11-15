@@ -445,6 +445,123 @@ void World::engineStep(Entity& e, double dt) {
   }
 }
 
+/// Seconds a train stands at the station, and the pause between two passengers getting out.
+constexpr double kDwell = 9.0, kUnloadGap = 0.7;
+
+double World::stationColumn() const {
+  for (const auto& o : entities_) {
+    if (!o->dead && o->tag == "station") return o->x + o->width() / 2.0;
+  }
+  return -1;
+}
+
+void World::trainStep(Entity& e, double dt) {
+  if (e.driveSpeed == 0) {  // first step: remember the cruising speed and the direction
+    e.driveSpeed = std::fabs(e.vx);
+    e.driveDir = e.vx > 0 ? 1 : -1;
+  }
+  const double station = stationColumn();
+  // Drawn at the stop: where the middle of the train is level with the middle of the station.
+  const double stopX = station - e.width() / 2.0;
+  const double ahead = (stopX - e.x) * e.driveDir;  // cells still to go to the stop; negative = passed it
+  switch (e.stopPhase) {
+    case 0:  // at full speed; brakes in good time before the station
+      if (station >= 0 && ahead > 0 && ahead <= e.driveSpeed * 3.0) {
+        e.stopPhase = 1;
+        e.driveX0 = ahead;  // distance at which the braking began
+      }
+      break;
+    case 1: {  // braking: slower and slower, but always a little speed left to roll in
+      const double v = std::max(1.2, e.driveSpeed * std::sqrt(std::max(ahead, 0.0) / std::max(e.driveX0, 1.0)));
+      e.vx = e.driveDir * v;
+      if (ahead <= 0.2) {
+        e.x = stopX;
+        e.vx = 0;
+        e.stopPhase = 2;
+        e.driveT = 0;
+        e.unload = rng_.rangeInt(2, 5);
+        e.driveY0 = 0;  // seconds until the next passenger gets out
+      }
+      break;
+    }
+    case 2: {  // standing at the platform: the doors open and the passengers get out one by one
+      e.driveT += dt;
+      e.driveY0 -= dt;
+      if (e.unload > 0 && e.driveY0 <= 0) {
+        --e.unload;
+        e.driveY0 = kUnloadGap;
+        if (auto s = pack_->find("commuter")) {
+          Placement where;
+          where.hasX = true;
+          where.x = e.x + rng_.range(3.0, std::max(e.width() - 6.0, 3.0));
+          where.dir = where.x + 1 < station ? 1 : -1;
+          const size_t before = incoming_.size();
+          spawnCreature(s, false, false, &where);
+          if (incoming_.size() > before) incoming_.back()->onDeath = nullptr;  // no replacement when it leaves
+        }
+      }
+      if (e.driveT >= kDwell) {
+        e.stopPhase = 3;
+        e.vx = e.driveDir * 1.2;
+      }
+      break;
+    }
+    default:  // pulling out: speeds up to cruising speed
+      e.vx = e.driveDir * std::min(e.driveSpeed, std::fabs(e.vx) + e.driveSpeed / 5.0 * dt);
+      break;
+  }
+  e.x += e.vx * dt;
+  if ((e.vx > 0 && e.x > w_) || (e.vx < 0 && e.x + e.width() < 0)) e.dead = true;
+}
+
+World::TrainSound World::trainSound() const {
+  TrainSound s;
+  double best = 1e9;  // distance of the closest train so far
+  for (const auto& e : entities_) {
+    if (e->dead || e->sprite->name() != "train") continue;
+    const double dist = std::fabs(e->x + e->width() / 2.0 - w_ / 2.0);
+    if (dist >= best) continue;
+    best = dist;
+    s.motion = e->driveSpeed > 0 ? std::clamp(std::fabs(e->vx) / e->driveSpeed, 0.0, 1.0) : 1.0;
+    s.brake = e->stopPhase == 1 ? std::sqrt(1.0 - s.motion) : 0.0;
+    s.hiss = e->stopPhase == 2 ? std::clamp(1.0 - e->driveT / 1.6, 0.0, 1.0) : 0.0;
+  }
+  return s;
+}
+
+void World::commuteStep(Entity& e, double dt) {
+  const double station = stationColumn();
+  e.x += e.vx * dt;
+  const double mid = e.x + e.width() / 2.0;
+  if (station < 0 || (e.vx > 0 ? mid >= station : mid <= station)) {  // down the stairs
+    e.dead = true;
+    if (station < 0) return;
+    static const char* const kinds[] = {"walker_front", "walker_back", "kid"};
+    if (auto s = rng_.chance(0.8) ? pack_->find(kinds[rng_.rangeInt(0, 1)]) : pack_->find(kinds[2])) {
+      Placement where;
+      where.hasX = true;
+      where.x = station - s->width() / 2.0;
+      where.dir = rng_.chance(0.5) ? 1 : -1;
+      const size_t before = incoming_.size();
+      spawnCreature(s, false, false, &where);
+      if (incoming_.size() > before) incoming_.back()->onDeath = nullptr;  // a visitor, not a resident
+    }
+  }
+}
+
+void World::placeCrossings() {
+  crossings_.clear();
+  if (seabedY_ < 8) return;
+  const double station = stationColumn();
+  if (station >= 0) crossings_.push_back(static_cast<int>(station) - 1);  // the passengers cross here
+  for (int x = 4; x + 3 < w_; x += 29) {
+    const int at = x + rng_.rangeInt(0, 8);
+    const bool inSideStreet = std::any_of(avenues_.begin(), avenues_.end(), [&](const Avenue& a) { return std::abs(at + 1 - a.cx) <= a.halfW + 3; });
+    const bool crowded = std::any_of(crossings_.begin(), crossings_.end(), [&](int c) { return std::abs(c - at) < 10; });
+    if (!inSideStreet && !crowded) crossings_.push_back(at);
+  }
+}
+
 int World::skylineTop() const {
   return std::accumulate(city_.begin(), city_.end(), h_, [&](int top, const Building& b) { return std::min(top, seabedY_ - b.h - b.antenna); });
 }
@@ -738,14 +855,14 @@ void World::renderStreet(Frame& out, Style style, const Light& light) const {
       under.bg = beam;
       under.defaultFg = style == Style::Mono;
       under.defaultBg = !full;
-      if (railY_ - 5 >= 0 && x % 2 == 0) {  // the wire the train draws its current from
-        Cell& wire = out.at(x, railY_ - 5);
+      if (railY_ - 7 >= 0 && x % 2 == 0) {  // the wire the train draws its current from
+        Cell& wire = out.at(x, railY_ - 7);
         wire.ch = U'-';
         wire.fg = mast;
         wire.defaultFg = style == Style::Mono;
       }
       if (x % 14 == 3) {  // a mast
-        for (int y = std::max(railY_ - 5, 0); y < railY_; ++y) {
+        for (int y = std::max(railY_ - 7, 0); y < railY_; ++y) {
           Cell& m = out.at(x, y);
           m.ch = U'|';
           m.fg = mast;
@@ -816,12 +933,11 @@ void World::renderStreet(Frame& out, Style style, const Light& light) const {
       c->defaultFg = style == Style::Mono;
     }
   }
-  // Zebra crossings here and there.
-  for (int x = 4; x + 3 < w_; x += 29) {
-    const int at = x + static_cast<int>(hash2(x, 3) % 9);
+  // Zebra crossings: at the foot of the station and here and there (see placeCrossings).
+  for (const int at : crossings_) {
     for (int g = 1; g < rows - 1; ++g) {
       for (int k = 0; k < 3; ++k) {
-        if (at + k >= w_) continue;
+        if (at + k < 0 || at + k >= w_) continue;
         Cell& c = out.at(at + k, seabedY_ + g);
         c.ch = U'=';
         c.fg = backdrop(Rgb{210, 210, 215}, light);

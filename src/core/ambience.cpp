@@ -86,6 +86,10 @@ AmbientParams ambientFor(const World& world) {
   p.siren = static_cast<float>(world.nearness("siren"));
   p.wail = static_cast<float>(world.nearness("wail"));
   p.train = static_cast<float>(world.nearness("train"));
+  const World::TrainSound ts = world.trainSound();
+  p.trainMotion = static_cast<float>(ts.motion);
+  p.trainBrake = static_cast<float>(ts.brake);
+  p.trainHiss = static_cast<float>(ts.hiss);
   p.plane = static_cast<float>(world.nearness("plane"));
   p.fire = static_cast<float>(world.fireLevel());
   p.crushes = world.crushCount();
@@ -475,7 +479,9 @@ void Ambience::citySample(const AmbientParams& p, float out[2]) {
   // A train: a deep rumble and the clatter of wheels over the rail joints, and a horn as it arrives.
   // The wheels beat out "klack-klack ... klack-klack": two quick knocks, then a pause, over and over
   // (the two axles of a bogie crossing a rail joint). Each knock is a woody thunk, not a click.
-  trainClock_ += dt * (1.0 + 0.2 * trainNear_);
+  // The wheels only knock while the train rolls, and slower as it slows down; standing at the
+  // platform it is silent, apart from the squeal of the brakes and the hiss of the air as it stops.
+  trainClock_ += dt * trainMove_ * (1.0 + 0.2 * trainNear_);
   if (trainClock_ >= kKlackPeriod) trainClock_ -= kKlackPeriod;
   float clack = 0, thunk = 0;
   for (int k = 0; k < 2; ++k) {
@@ -486,6 +492,10 @@ void Ambience::citySample(const AmbientParams& p, float out[2]) {
     clack += static_cast<float>(gain * rise * std::exp(-tau / 0.05));
     thunk += static_cast<float>(gain * rise * std::exp(-tau / 0.09) * std::sin(kTwoPi * (k ? 105.0 : 92.0) * tau));
   }
+  const double squealHz = 1500.0 + 900.0 * trainMove_;  // the pitch falls as the train slows
+  trainSquealPhase_ += kTwoPi * squealHz * dt;
+  const float squeal = static_cast<float>(std::tanh(1.5 * std::sin(trainSquealPhase_)) * 0.6 + 0.4 * std::sin(trainSquealPhase_ * 1.51 + 0.4)) *
+                       trainBrake_ * (0.85f + 0.15f * static_cast<float>(std::sin(kTwoPi * 7.0 * t_))) * trainNear_;  // a wavering squeal
   if (trainNear_ > 0.2f && !trainHorned_) { trainHorned_ = true; trainHornStart_ = t_; }
   if (trainNear_ < 0.03f) trainHorned_ = false;
   float trainHorn = 0;
@@ -513,6 +523,8 @@ void Ambience::citySample(const AmbientParams& p, float out[2]) {
     const float n4 = noise(rng_) * noiseScale_;
     trainBand_[ch][0] += (n4 - trainBand_[ch][0]) * lowTrainBand_;
     trainBand_[ch][1] += (n4 - trainBand_[ch][1]) * lowKlack_;
+    trainHissLow_[ch] += (n4 - trainHissLow_[ch]) * 0.25f;  // what the low-pass leaves of the noise is the hiss
+    const float airHiss = (n4 - trainHissLow_[ch]) * trainHiss_ * trainNear_;
     const float n5 = noise(rng_) * noiseScale_;
     fireLow_[ch][0] += (n5 - fireLow_[ch][0]) * lowFire_;
     fireLow_[ch][1] += (fireLow_[ch][0] - fireLow_[ch][1]) * lowFire_;
@@ -524,8 +536,9 @@ void Ambience::citySample(const AmbientParams& p, float out[2]) {
     const float hornOut = hornLow_[ch];
     const float traffic = carLow_[ch][1] * 9.0f * 0.075f * day + (carMid_[ch][0] - carMid_[ch][1]) * 0.45f * 0.04f * day;
     out[ch] = traffic + engineLow_[ch] * 0.16f * day + hornOut * 0.045f + siren * 0.15f + wail * 0.13f +
-              trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ +
-              ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ + trainHorn * 0.05f * trainNear_ +
+              trainLow_[ch][1] * 9.0f * 0.07f * trainNear_ * trainNear_ * trainMove_ +
+              ((trainBand_[ch][0] - trainBand_[ch][1]) * 1.6f * clack + thunk * 0.12f) * trainNear_ * trainMove_ + trainHorn * 0.05f * trainNear_ +
+              squeal * 0.08f + airHiss * 0.9f +
               fireLow_[ch][1] * 9.0f * 0.11f * fireNear_ + fireCrack_[ch] * 0.3f * fireNear_ +
               planeLow_[ch][1] * 9.0f * 0.06f * planeNear_ * planeNear_;
   }
@@ -744,6 +757,9 @@ void Ambience::render(const AmbientParams& p, float* out, int frames) {
     approach(sirenNear_, p.kind == AmbientKind::City ? p.siren : 0.0f, kRain);
     approach(wailNear_, p.kind == AmbientKind::City ? p.wail : 0.0f, kRain);
     approach(trainNear_, p.kind == AmbientKind::City ? p.train : 0.0f, kRain);
+    approach(trainMove_, p.trainMotion, kRain);
+    approach(trainBrake_, p.trainBrake, kRain);
+    approach(trainHiss_, p.trainHiss, kRain);
     approach(planeNear_, p.kind == AmbientKind::City ? p.plane : 0.0f, kStorm);
     approach(fireNear_, p.kind == AmbientKind::City ? p.fire : 0.0f, kRain);
     approach(menace_, p.menace, kStorm);

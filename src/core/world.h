@@ -62,6 +62,8 @@ struct Entity {
   bool destructible = true;   ///< can be wrecked by an impact
   /// A living thing: catastrophes that wipe out life take it (animals have `life: yes`).
   bool life = false;
+  /// A scene decoration (see World::placeDecor): they keep clear of one another.
+  bool decor = false;
   /// A rare catastrophe (kraken, thunderstorm...): at most one exists at a time.
   bool isRare = false;
   /// For catastrophes: how far across the scene (0 to 1) it is when it strikes.
@@ -190,6 +192,10 @@ struct Entity {
   double driveT = 0, driveX0 = 0, driveY0 = 0;
   /// Draw order it takes up again on the main road.
   int driveZ = 10;
+  /// A train: 0 at speed, 1 braking for the station, 2 standing at the platform, 3 pulling out.
+  int stopPhase = 0;
+  /// Passengers a stopped train still has to let out.
+  int unload = 0;
   /// Behaviors, run in order every step.
   std::vector<BehaviorFn> behaviors;
   /// Called after removal, for example to spawn a replacement.
@@ -282,6 +288,14 @@ class World {
   const std::vector<Avenue>& avenues() const { return avenues_; }
   /// Side streets seen between the buildings of the front row (cars do not drive there).
   const std::vector<Avenue>& glimpses() const { return glimpses_; }
+  /// Runs a train along the railway: it brakes, stops at the station for a while, lets its passengers
+  /// out and pulls out again. Called by the `train` behavior.
+  void trainStep(Entity& e, double dt);
+  /// Walks a passenger along the platform to the station; there it is gone, and comes out on the
+  /// street at the foot of the station as a pedestrian. Called by the `commute` behavior.
+  void commuteStep(Entity& e, double dt);
+  /// Column of the middle of the station, or -1 when there is none.
+  double stationColumn() const;
   /// Moves a vehicle that may turn off the main road into a side street, or comes down one.
   /// Called by the `drive` behavior.
   void driveStep(Entity& e, double dt);
@@ -457,6 +471,14 @@ class World {
   double stormProximity() const;
   /// Like stormProximity() for any creature whose tag or sprite name is `key` (a whale, a tornado).
   double nearness(const std::string& key) const;
+  /// How the train nearest to the middle of the screen moves, for the sound.
+  struct TrainSound {
+    double motion = 1;  ///< its speed as a share of the cruising speed: 0 standing, 1 at full speed
+    double brake = 0;   ///< how hard it brakes (rolling into the station), 0 to 1
+    double hiss = 0;    ///< the air let out in the first moments of standing at the platform, 0 to 1
+  };
+  /// The sound state of the train nearest to the middle of the screen (all zero but `motion` = 1 if none).
+  TrainSound trainSound() const;
   /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
   double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.
@@ -521,6 +543,15 @@ class World {
     bool hold = false;         ///< a ruin that is not rebuilt until it is released (the monster fight's)
     double timer = 0;          ///< seconds in the state
   };
+  /// Chooses where the zebra crossings of the main street go: one at the foot of the station, the
+  /// others spread over the street, clear of the side streets (which have their own).
+  void placeCrossings();
+  /// Where a zebra crossing starts (it is 3 columns wide).
+  std::vector<int> crossings_;
+ public:
+  /// Where the zebra crossings of the main street start (each is 3 columns wide).
+  const std::vector<int>& crossings() const { return crossings_; }
+ private:
   /// Chooses where the side streets go, clear of the shops and trees on the sidewalk.
   void placeAvenues();
   /// Lets cars come down the side streets now and then.
@@ -551,8 +582,20 @@ class World {
   void buildTerrain();
   /// Takes an entity out of the world after a catastrophe and brings it back some seconds later.
   void claim(Entity& o, const std::string& effect);
-  /// Places one decoration.
+  /// Where the decoration marked `anchor` stands: the others may be placed relative to it.
+  struct DecorAnchor {
+    bool valid = false;  ///< whether one has been placed
+    double x = 0;        ///< its left edge
+    int width = 0;       ///< its width
+  };
+  /// Places a decoration: as many as its `per-cols` asks for, or one.
   void spawnDecor(const SceneDef::Decor& d);
+  /// Places one decoration (or leaves it out, by chance or for lack of room). A decoration that is
+  /// aligned to the anchor uses `fixed` (where it stood when it was first planted) if given,
+  /// otherwise the anchor placed last.
+  void placeDecor(const SceneDef::Decor& d, const DecorAnchor* fixed = nullptr);
+  /// The last decoration placed with `anchor yes` in the scene file.
+  DecorAnchor decorAnchor_;
   /// Grows one procedural seaweed plant.
   void spawnSeaweed();
   /// Sends one weighted-random scene event.

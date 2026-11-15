@@ -52,6 +52,13 @@ struct AmbientParams {
   float wail = 0;
   /// How near a train is, from 0 to 1 (World::nearness("train")): it rumbles, clatters and sounds its horn.
   float train = 0;
+  /// How fast that train is rolling, from 0 (standing at the station) to 1 (cruising speed): the
+  /// rumble and the clatter of the wheels follow it and stop when the train does (World::trainSound()).
+  float trainMotion = 1;
+  /// How hard that train is braking, from 0 to 1: its brakes squeal as it rolls into the station.
+  float trainBrake = 0;
+  /// The hiss of the compressed air that the train lets out as it comes to a stop, from 0 to 1.
+  float trainHiss = 0;
   /// How near a plane is, from 0 to 1 (World::nearness("plane")): a faint, distant jet.
   float plane = 0;
   /// How fiercely a building burns, from 0 to 1 (World::fireLevel()): it crackles and roars.
@@ -267,6 +274,9 @@ class Ambience {
   double wailPhase_ = 0;            ///< phase of the wail's tone
   float trainNear_ = 0, planeNear_ = 0, fireNear_ = 0;  ///< smoothed proximity of train and plane, fire level
   double trainClock_ = 0;           ///< seconds into the current "klack-klack" of the wheels
+  float trainMove_ = 1, trainBrake_ = 0, trainHiss_ = 0;  ///< smoothed motion, braking and air hiss of the train
+  double trainSquealPhase_ = 0;     ///< phase of the brakes' squeal
+  float trainHissLow_[2] = {};      ///< low-pass state that is taken off the noise to leave the hiss, per ear
   static constexpr double kKlackPeriod = 0.64;  ///< seconds from one "klack-klack" to the next
   double trainHornStart_ = -10, trainHornPhase_ = 0;  ///< the train's horn
   bool trainHorned_ = false;        ///< this train has sounded its horn already

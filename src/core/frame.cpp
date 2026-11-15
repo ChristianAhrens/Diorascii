@@ -22,6 +22,30 @@ std::string Frame::toText() const {
   return out;
 }
 
+void crossfade(const Frame& from, Frame& to, double t) {
+  if (from.width() != to.width() || from.height() != to.height()) return;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  for (int y = 0; y < to.height(); ++y) {
+    for (int x = 0; x < to.width(); ++x) {
+      // A fixed pseudo-random threshold in [0, 1) for the cell.
+      const uint32_t h = (static_cast<uint32_t>(x) * 73856093u) ^ (static_cast<uint32_t>(y) * 19349663u);
+      const double threshold = ((h ^ (h >> 13)) * 2654435761u >> 8) / 16777216.0;
+      const Cell& a = from.at(x, y);
+      Cell& b = to.at(x, y);
+      const bool plain = !a.defaultFg && !a.defaultBg && !b.defaultFg && !b.defaultBg && !a.reverse && !b.reverse;
+      const Cell shown = t > threshold ? b : a;
+      if (plain) {
+        Cell c = shown;
+        c.fg = lerp(a.fg, b.fg, t);
+        c.bg = lerp(a.bg, b.bg, t);
+        b = c;
+      } else {
+        b = shown;
+      }
+    }
+  }
+}
+
 void drawText(Frame& f, int x, int y, std::string_view utf8, Rgb fg, Rgb bg) {
   for (char32_t ch : decodeUtf8(utf8)) {
     if (f.inBounds(x, y)) {

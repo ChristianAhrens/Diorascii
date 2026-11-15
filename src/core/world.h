@@ -457,6 +457,13 @@ class World {
   void setHour(double hour) { setPhase(hour / 24.0); }
   /// Time of day as a fraction of a day, see setPhase().
   double phase() const { return phase_; }
+  /// Days the clock has run on its own (in the cycle time mode) since the world was built: 1.0 is
+  /// one full day and night. Setting the time by hand does not count.
+  double daysElapsed() const { return daysElapsed_; }
+  /// How many rare events (catastrophes) have started since the world was built, scheduled or summoned.
+  unsigned raresStarted() const { return raresStarted_; }
+  /// True while a rare event is under way (or about to appear).
+  bool rareActive() const;
   /// True if the scene has a day and night cycle.
   bool hasDayNight() const { return scene_->dayNight; }
   /// True if the entity is asleep right now: it sleeps (see Entity::sleepBelow), the scene has a day
@@ -807,6 +814,9 @@ class World {
   double overcast_ = 0;
   /// Time of day as a fraction of a day.
   double phase_ = 0.4;
+  /// Days the clock has run on its own, and rare events started (see daysElapsed(), raresStarted()).
+  double daysElapsed_ = 0;
+  unsigned raresStarted_ = 0;
   /// Whether the time of day runs or stands still.
   TimeMode timeMode_ = TimeMode::Cycle;
   /// True if the scene has a medium and there is room for it.

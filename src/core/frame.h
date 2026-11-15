@@ -69,6 +69,14 @@ class Frame {
   std::vector<Cell> cells_;
 };
 
+/// Dissolves `from` into `to` (the crossfade between two scenes): each cell shows its glyph from
+/// `to` once `t` passes a fixed per-cell threshold (a scatter, so the picture dissolves rather than
+/// wipes), and where both cells have plain colors those are blended too. Cells with the terminal's
+/// own colors or reverse video are taken whole from one side, as they have no color to blend.
+/// The result replaces `to`; nothing is done unless both frames have the same size.
+/// @param t 0 shows `from`, 1 shows `to` (clamped)
+void crossfade(const Frame& from, Frame& to, double t);
+
 /// Draws UTF-8 text with a solid background (used by the UI layer).
 void drawText(Frame& f, int x, int y, std::string_view utf8, Rgb fg, Rgb bg);
 

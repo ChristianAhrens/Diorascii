@@ -928,9 +928,15 @@ void World::spawnRare(RarePick pick) {
     if (auto sprite = pack_->find(ev.sprite)) {
       spawnCreature(sprite, false, true);
       if (!incoming_.empty()) incoming_.back()->isRare = true;
+      ++raresStarted_;
     }
     return;
   }
+}
+
+bool World::rareActive() const {
+  const auto live = [](const auto& e) { return e->isRare && !e->dead; };
+  return std::any_of(entities_.begin(), entities_.end(), live) || std::any_of(incoming_.begin(), incoming_.end(), live);
 }
 
 bool World::triggerRare(RarePick pick) {
@@ -1390,7 +1396,10 @@ void World::step(double dt) {
     rainLeft_ = std::max(0.0, rainLeft_ - dt);
     spawnWeather(dt);
   }
-  if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
+  if (scene_->dayNight && timeMode_ == TimeMode::Cycle) {
+    phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
+    daysElapsed_ += dt / scene_->dayLength;
+  }
   const double cloudTarget =
       (rainLeft_ > 0 || countTag("tornado") > 0 || countTag("gloom") > 0) ? 1.0 : 0.0;
   flashElapsed_ += dt;

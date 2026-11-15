@@ -24,6 +24,7 @@ class Menu {
     std::string label;
     std::vector<std::string> options;  ///< empty = a button
     size_t value = 0;                  ///< selected option
+    bool enabled = true;               ///< false: shown dimmed, and changing or selecting it does nothing
   };
   /// A change the user made, reported to the app.
   struct Event {
@@ -46,6 +47,9 @@ class Menu {
   void setLabel(const std::string& id, std::string label);
   /// Replaces the options of a choice, for example when a scene offers different ones.
   void setOptions(const std::string& id, std::vector<std::string> options, size_t value = 0);
+  /// Switches an entry on or off. A disabled entry is still shown (dimmed, marked as automatic) but
+  /// reports no events.
+  void setEnabled(const std::string& id, bool enabled);
   /// Currently selected option of a choice.
   size_t value(const std::string& id) const;
 

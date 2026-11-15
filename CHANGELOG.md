@@ -10,6 +10,8 @@ the GitHub release (see "Releasing" in the README).
 
 ## [Unreleased]
 ### Added
+- Added the overarching *cycle* mode, which is now the default: all scenes one after the other, each until it has shown one full day and night, a rare event (a late one is waited for, however many days it takes) and a regular event; the regular event (`f`) is triggered at random every 10 to 90 seconds, and choosing the time of day or triggering an event by hand (`t`, `f`, `x`, `X`, the menu) ends the cycle mode and switches to the user mode, while switching to the cycle mode sets the time of day to *Cycle*. `--user`, the `o` key or the *Mode* entry of the menu switch to the user mode, where everything is manual as before
+- Added a brief crossfade between scenes in the cycle mode: the old scene dissolves into the new one over two seconds (and keeps moving while it does), its sound fades out during the first second and the new scene's sound fades in during the second. Switching scenes by hand stays instant
 - Added passengers to the City: a train now stops at the station (it brakes, stands for about nine seconds and pulls out again), two to five passengers get off, walk along the platform and come out of the station as pedestrians
 - Added the options `jitter`, `chance` and `per-cols` and alternative sprites (`oak|oak_small|oak_tall`) to the `--- decor` lines of scene files, and two more sizes of tree for the City
 

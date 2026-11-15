@@ -92,6 +92,7 @@ macOS asks for confirmation (right-click, Open).
     diorascii --dump 400 --rare-other 20  # ...or its second, less likely catastrophe
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
     diorascii --realtime            # let the time of day follow this computer's clock
+    diorascii --user                # start in the user mode instead of the cycle mode (see "Cycle mode")
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
@@ -179,6 +180,20 @@ In the terminal styles the cycle shows in the stars, the sun and moon and the cr
 coming and going; the colors themselves stay with your terminal theme.
 
 ### Sound
+
+**Cycle mode.** The program has two overarching modes: *cycle* (the default) and *user* (`--user`; switch with the `o`
+key or *Mode* in the menu). In the cycle mode it runs by itself: it goes through all scenes in the order of the menu,
+and a scene is only left once it has shown one full day and night, one rare event (which must have come to an end)
+and one regular event (what `f` does by hand). The regular event is triggered at random every 10 to 90 seconds; a
+rare event is waited for, so a scene whose rare event is late stays on for more than a day until it has come. While
+the mode is on, the time of day runs as a cycle. Choosing anything that the mode governs by hand (the time of day, the
+scene action or a rare event, with `t`, `f`, `x`, `X` or the menu) ends the cycle mode, switches to the user mode and
+does what you chose. Switching from the user mode to the cycle mode sets the time of day to *Cycle*. Changing the
+scene by hand (arrow keys) still works and starts that scene's round afresh; in the user mode you choose the scene,
+the time of day and the events yourself, and leaving the cycle mode with the *Mode* entry or `o` brings back the time
+of day you had chosen before. When the cycle mode moves on to the next scene, the picture dissolves into it over two seconds
+(the old scene keeps moving meanwhile) and the sound crossfades too: the old scene's fades out, then the new one's fades in.
+Scene changes by hand are instant.
 
 Ambient sound is synthesized at run time (no recordings) and on by default: `--mute` starts without it, and the `a`
 key or the menu's Sound entry switch it. Without a sound device the app simply stays silent.

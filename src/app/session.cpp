@@ -56,6 +56,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
       style_(config.style),
       timeMode_(config.realtime ? World::TimeMode::Realtime : World::TimeMode::Cycle),
       carriedPhase_(config.hour >= 0 ? config.hour / 24.0 : -1),
+      rng_(config.seed ^ 0x5eed5eedULL),
       menu_("DIORASCII"),
       info_(config.info) {
   std::vector<std::string> titles;
@@ -65,6 +66,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   menu_.addChoice("style", "Style",
                   {styleName(Style::Full), styleName(Style::Terminal), styleName(Style::Mono)},
                   static_cast<size_t>(style_));
+  menu_.addChoice("mode", "Mode", {"User", "Cycle"}, 0);
   menu_.addChoice("time", "Time of day", timeOptions(scenes_[sceneIdx_]->dayNight),
                   scenes_[sceneIdx_]->dayNight ? static_cast<size_t>(timeMode_) : 0);
   menu_.addChoice("info", "Info line", {"off", "on"}, info_ ? 1 : 0);
@@ -78,6 +80,7 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   rebuild();
   toast(scenes_[sceneIdx_]->title, 2.0);
   if (config.sound) setSound(true);
+  if (config.cycle) setCycle(true);
 }
 
 void Session::rebuild() {
@@ -87,13 +90,25 @@ void Session::rebuild() {
   syncClock();
   rebuildPending_ = false;
   repaint_ = true;
+  markProgress();
 }
 
 void Session::flush() {
   if (!rebuildPending_) return;
   // The time of day survives scene switches, restarts and resizes.
   if (world_->hasDayNight()) carriedPhase_ = world_->phase();
+  endFade();
+  if (fadePending_) {  // the old world stays on screen and in the ears while the new one comes in
+    outgoing_ = std::move(world_);
+    fadeLeft_ = kFadeSeconds;
+  }
+  fadePending_ = false;
   rebuild();
+}
+
+void Session::endFade() {
+  outgoing_.reset();
+  fadeLeft_ = 0;
 }
 
 void Session::switchScene(size_t idx) {
@@ -115,8 +130,58 @@ void Session::soundUnavailable(bool announce) {
   if (announce) toast("No audio device", 1.5);
 }
 
-void Session::runAction() {
-  if (world_->interact() > 0) toast(scenes_[sceneIdx_]->action.label, 1.2);
+bool Session::runAction() {
+  if (world_->interact() <= 0) return false;
+  ++actions_;
+  toast(scenes_[sceneIdx_]->action.label, 1.2);
+  return true;
+}
+
+void Session::markProgress() {
+  baseDays_ = world_->daysElapsed();
+  baseRares_ = world_->raresStarted();
+  actions_ = 0;
+  actionTimer_ = rng_.range(10.0, 90.0);
+}
+
+void Session::setCycle(bool on) {
+  if (on == cycle_) return;
+  cycle_ = on;
+  flush();
+  if (on) {  // the clock runs by itself; what the user chose is kept for later
+    userTimeMode_ = timeMode_;
+    timeMode_ = World::TimeMode::Cycle;
+  } else {
+    timeMode_ = userTimeMode_;
+  }
+  world_->setTimeMode(timeMode_);
+  syncClock();
+  menu_.setValue("mode", on ? 1 : 0);
+  menu_.setValue("time", static_cast<size_t>(timeMode_));
+  markProgress();
+  toast(on ? "Cycle mode" : "User mode", 1.5);
+}
+
+bool Session::sceneDone() const {
+  const SceneDef& sc = *scenes_[sceneIdx_];
+  const bool day = !sc.dayNight || world_->daysElapsed() - baseDays_ >= 1.0;
+  const bool rare = sc.rare.empty() || (world_->raresStarted() > baseRares_ && !world_->rareActive());
+  const bool act = sc.action.kind == SceneDef::Action::Kind::None || actions_ > 0;
+  return day && rare && act;
+}
+
+void Session::stepCycle(double dt) {
+  actionTimer_ -= dt;
+  if (actionTimer_ <= 0) {  // the F key, pressed by nobody
+    actionTimer_ = rng_.range(10.0, 90.0);
+    runAction();
+  }
+  // A rare event that has not come yet is waited for: the scene stays on, day after day.
+  if (sceneDone()) {
+    ++seed_;  // a scene that comes round again looks different
+    fadePending_ = true;
+    switchScene(sceneIdx_ + 1);
+  }
 }
 
 void Session::toast(const std::string& text, double seconds) {
@@ -139,9 +204,10 @@ void Session::handle(Action a) {
     case Action::Quit: quit_ = true; break;
     case Action::Pause: paused_ = !paused_; break;
     case Action::Info: info_ = !info_; menu_.setValue("info", info_); break;
-    case Action::Interact: flush(); runAction(); break;
-    case Action::Rare: flush(); world_->triggerRare(); break;
-    case Action::RareOther: flush(); world_->triggerRare(RarePick::Other); break;
+    case Action::Interact: setCycle(false); flush(); runAction(); break;
+    case Action::Rare: setCycle(false); flush(); world_->triggerRare(); break;
+    case Action::RareOther: setCycle(false); flush(); world_->triggerRare(RarePick::Other); break;
+    case Action::Mode: setCycle(!cycle_); break;
     case Action::Audio: setSound(!sound_); break;
     case Action::Redraw: rebuildPending_ = true; ++seed_; break;
     case Action::Style:
@@ -151,6 +217,10 @@ void Session::handle(Action a) {
       break;
     case Action::Time:
       if (scenes_[sceneIdx_]->dayNight) {
+        if (cycle_) {  // choosing the time by hand ends the cycle mode; the clock steps on from "Cycle"
+          setCycle(false);
+          timeMode_ = World::TimeMode::Cycle;
+        }
         flush();
         timeMode_ = static_cast<World::TimeMode>((static_cast<int>(timeMode_) + 1) % World::kTimeModes);
         world_->setTimeMode(timeMode_);
@@ -172,23 +242,27 @@ void Session::applyMenuEvents() {
   for (const auto& ev : menu_.takeEvents()) {
     if (ev.id == "scene") switchScene(ev.value);
     else if (ev.id == "style") { style_ = static_cast<Style>(ev.value); repaint_ = true; }
+    else if (ev.id == "mode") setCycle(ev.value == 1);
     else if (ev.id == "time") {
+      setCycle(false);  // the chosen time of day replaces the automatic one
       flush();
       timeMode_ = static_cast<World::TimeMode>(ev.value);
       world_->setTimeMode(timeMode_);
       syncClock();
+      menu_.setValue("time", ev.value);  // leaving the cycle mode reset the entry
     }
     else if (ev.id == "info") info_ = ev.value == 1;
     else if (ev.id == "audio") setSound(ev.value == 1);
-    else if (ev.id == "action") { flush(); runAction(); }
-    else if (ev.id == "rare") { flush(); world_->triggerRare(); }
-    else if (ev.id == "rare2") { flush(); world_->triggerRare(RarePick::Other); }
+    else if (ev.id == "action") { setCycle(false); flush(); runAction(); }
+    else if (ev.id == "rare") { setCycle(false); flush(); world_->triggerRare(); }
+    else if (ev.id == "rare2") { setCycle(false); flush(); world_->triggerRare(RarePick::Other); }
     else if (ev.id == "resume") menu_.close();
     else if (ev.id == "quit") quit_ = true;
   }
 }
 
 void Session::resize(int width, int height) {
+  endFade();  // the old world has the old size
   w_ = width;
   h_ = height;
   rebuildPending_ = true;
@@ -201,13 +275,25 @@ void Session::syncClock() {
 void Session::step(double dt) {
   flush();
   syncClock();
-  if (!paused_) world_->step(dt);
+  if (!paused_) {
+    world_->step(dt);
+    if (outgoing_) {
+      outgoing_->step(dt);
+      fadeLeft_ -= dt;
+      if (fadeLeft_ <= 0) endFade();
+    }
+    if (cycle_) stepCycle(dt);
+  }
   if (toastLeft_ > 0 && !menu_.isOpen()) toastLeft_ -= dt;
 }
 
 void Session::render(Frame& out) {
   flush();
   world_->render(out, style_);
+  if (outgoing_) {
+    outgoing_->render(fadeFrame_, style_);
+    crossfade(fadeFrame_, out, 1.0 - fadeLeft_ / kFadeSeconds);
+  }
   if (info_) drawInfo(out, *world_, paused_, fps_, style_);
   if (toastLeft_ > 0 && !menu_.isOpen()) drawToast(out, toast_, style_);
   menu_.render(out, style_);
@@ -215,6 +301,15 @@ void Session::render(Frame& out) {
 
 AmbientParams Session::ambient() const {
   AmbientParams p = ambientFor(*world_);
+  if (outgoing_) {  // out with the old scene's sound, then in with the new one's
+    const double progress = 1.0 - fadeLeft_ / kFadeSeconds;
+    if (progress < 0.5) {
+      p = ambientFor(*outgoing_);
+      p.volume = static_cast<float>(1.0 - 2.0 * progress);
+    } else {
+      p.volume = static_cast<float>(2.0 * progress - 1.0);
+    }
+  }
   if (paused_) p.volume = 0;
   return p;
 }

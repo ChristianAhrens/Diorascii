@@ -2971,7 +2971,9 @@ TEST(an_animal_buried_by_an_avalanche_squeals_muffled_and_the_world_counts_it) {
 }
 
 /// A session over the built-in scenes, 100 by 30 cells.
-static Session makeSession(const AssetPack& pack, const Session::Config& config = {}) {
+/// Starts in the user mode unless `cycle` asks for the cycle mode (the program's default).
+static Session makeSession(const AssetPack& pack, Session::Config config = {}, bool cycle = false) {
+  config.cycle = cycle;
   return Session(pack, pack.scenes(), config, 100, 30);
 }
 
@@ -2998,6 +3000,183 @@ TEST(session_starts_in_its_scene_with_the_title_as_a_toast_and_switches_scenes_w
   s.handle(Action::Left);
   s.step(0.05);
   CHECK(s.sceneIndex() == (2 + scenes.size() - 3) % scenes.size());
+}
+
+TEST(the_mode_key_toggles_the_cycle_mode_and_switching_it_on_sets_the_clock_to_cycle) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  config.scene = 0;
+  Session s = makeSession(pack, config);
+  CHECK(!s.cycling());
+  s.handle(Action::Time);  // user mode: the time of day is chosen by hand
+  s.step(0.05);
+  const auto chosen = s.world().timeMode();
+  CHECK(chosen != World::TimeMode::Cycle);
+  s.handle(Action::Mode);
+  s.step(0.05);
+  CHECK(s.cycling() && s.world().timeMode() == World::TimeMode::Cycle);  // the clock runs by itself
+  CHECK(s.menu().value("time") == static_cast<size_t>(World::TimeMode::Cycle) && s.menu().value("mode") == 1);
+  s.handle(Action::Mode);  // back to the user mode
+  s.step(0.05);
+  CHECK(!s.cycling() && s.world().timeMode() == chosen && s.menu().value("mode") == 0);  // what the user had chosen is back
+}
+
+TEST(any_manual_choice_ends_the_cycle_mode_and_is_applied) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  config.scene = 0;
+  {  // the time of day key: the clock steps on from "cycle" to dawn
+    Session s = makeSession(pack, config, true);
+    CHECK(s.cycling());
+    s.handle(Action::Time);
+    s.step(0.05);
+    CHECK(!s.cycling() && s.world().timeMode() == World::TimeMode::Dawn && s.menu().value("mode") == 0);
+  }
+  {  // a rare event (x)
+    Session s = makeSession(pack, config, true);
+    s.handle(Action::Rare);
+    CHECK(!s.cycling() && s.world().raresStarted() == 1);
+  }
+  {  // the other rare event (X)
+    Session s = makeSession(pack, config, true);
+    s.handle(Action::RareOther);
+    CHECK(!s.cycling() && s.world().raresStarted() == 1);
+  }
+  {  // the action (f)
+    Session s = makeSession(pack, config, true);
+    s.handle(Action::Interact);
+    CHECK(!s.cycling() && s.actionsRun() == 1);
+  }
+  {  // the menu: choosing a time of day (the mode shows "User", the time is the one chosen)
+    Session s = makeSession(pack, config, true);
+    s.handle(Action::Menu);
+    s.handle(Action::Down);
+    s.handle(Action::Down);
+    s.handle(Action::Down);  // scene, style, mode, time
+    s.handle(Action::Right);  // cycle -> dawn
+    s.step(0.05);
+    CHECK(!s.cycling() && s.world().timeMode() == World::TimeMode::Dawn);
+    CHECK(s.menu().value("mode") == 0 && s.menu().value("time") == static_cast<size_t>(World::TimeMode::Dawn));
+  }
+}
+
+TEST(cycle_mode_runs_a_random_action_within_ninety_seconds) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  size_t aquarium = 0;
+  for (size_t i = 0; i < scenes.size(); ++i) aquarium = scenes[i]->name == "aquarium" ? i : aquarium;
+  Session::Config config;
+  config.scene = aquarium;
+  Session s = makeSession(pack, config, true);
+  bool food = false;
+  double t = 0;
+  for (; t < 95 && !food; t += 0.1) {
+    s.step(0.1);
+    food = s.world().countTag("food") > 0;
+  }
+  CHECK(food && t >= 10);  // and not before ten seconds
+}
+
+TEST(cycle_mode_shows_every_scene_a_full_day_a_rare_event_and_an_action_before_moving_on) {
+  AssetPack pack = AssetPack::embedded();
+  const auto scenes = pack.scenes();
+  Session::Config config;
+  Session s = makeSession(pack, config, true);
+  for (size_t visit = 0; visit < scenes.size(); ++visit) {
+    const size_t scene = s.sceneIndex();
+    CHECK(scene == visit);  // in the order of the menu
+    double t = 0;
+    unsigned rares = 0;
+    double days = 0;
+    unsigned acts = 0;
+    while (s.sceneIndex() == scene && t < 3000) {
+      s.step(0.1);
+      t += 0.1;
+      if (s.sceneIndex() != scene) break;
+      rares = s.world().raresStarted();
+      days = s.world().daysElapsed();
+      acts = s.actionsRun();
+    }
+    CHECK(s.sceneIndex() == (scene + 1) % scenes.size());  // it did move on
+    CHECK(days >= 0.9);  // sampled one step before the switch
+    if (!scenes[scene]->rare.empty()) CHECK(rares >= 1);
+    CHECK(t >= scenes[scene]->dayLength);
+    if (scenes[scene]->action.kind != SceneDef::Action::Kind::None) CHECK(acts >= 1);
+  }
+}
+
+TEST(crossfade_dissolves_one_frame_into_the_other_and_blends_plain_colors) {
+  Frame a(20, 10), b(20, 10);
+  for (int y = 0; y < 10; ++y) {
+    for (int x = 0; x < 20; ++x) {
+      a.at(x, y).ch = U'a';
+      a.at(x, y).fg = a.at(x, y).bg = Rgb{0, 0, 0};
+      b.at(x, y).ch = U'b';
+      b.at(x, y).fg = b.at(x, y).bg = Rgb{200, 100, 50};
+    }
+  }
+  auto count = [](const Frame& f, char32_t ch) {
+    int n = 0;
+    for (int y = 0; y < f.height(); ++y)
+      for (int x = 0; x < f.width(); ++x) n += f.at(x, y).ch == ch;
+    return n;
+  };
+  Frame start = b, mid = b, end = b;
+  crossfade(a, start, 0.0);
+  crossfade(a, mid, 0.5);
+  crossfade(a, end, 1.0);
+  CHECK(count(start, U'a') == 200);  // only the old picture
+  CHECK(count(end, U'b') == 200);    // only the new one
+  CHECK(count(mid, U'a') > 50 && count(mid, U'b') > 50);  // a mixture
+  CHECK(mid.at(3, 3).fg == (Rgb{100, 50, 25}));           // colors halfway
+  Frame small(5, 5), same = small;
+  crossfade(a, small, 0.5);  // different sizes: left alone
+  CHECK(small.toText() == same.toText());
+}
+
+TEST(cycle_mode_crossfades_picture_and_sound_into_the_next_scene) {
+  AssetPack pack = AssetPack::embedded();
+  Session::Config config;
+  Session s = makeSession(pack, config, true);
+  const size_t first = s.sceneIndex();
+  CHECK(!s.fading());
+  double t = 0;
+  while (s.sceneIndex() == first && t < 3000) { s.step(0.1); t += 0.1; }
+  CHECK(s.sceneIndex() != first);
+  s.step(0.1);  // the new world is built, the old one stays
+  CHECK(s.fading());
+  Frame f;
+  s.render(f);
+  CHECK(f.width() == 100);
+  // Sound: the old scene fades out, then the new one fades in; silent at the midpoint.
+  float lowest = 1;
+  bool quieter = false;
+  for (int i = 0; i < 25 && s.fading(); ++i) {
+    s.step(0.1);
+    const float v = s.ambient().volume;
+    lowest = std::min(lowest, v);
+    quieter = quieter || v < 0.9f;
+  }
+  CHECK(quieter && lowest < 0.15f);
+  for (int i = 0; i < 25; ++i) s.step(0.1);
+  CHECK(!s.fading() && s.ambient().volume == 1.0f);
+}
+
+TEST(user_scene_switches_and_resizes_do_not_crossfade) {
+  AssetPack pack = AssetPack::embedded();
+  Session s = makeSession(pack);
+  s.handle(Action::Right);
+  s.step(0.05);
+  CHECK(!s.fading());
+  Session c = makeSession(pack, {}, true);
+  double t = 0;
+  const size_t first = c.sceneIndex();
+  while (c.sceneIndex() == first && t < 3000) { c.step(0.1); t += 0.1; }
+  c.step(0.1);
+  CHECK(c.fading());
+  c.resize(80, 24);
+  c.step(0.05);
+  CHECK(!c.fading());
 }
 
 TEST(session_pause_freezes_the_world_and_mutes_the_sound_and_style_changes_ask_for_a_repaint) {

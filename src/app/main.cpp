@@ -46,6 +46,8 @@ struct Options {
   int dumpWidth = 100, dumpHeight = 30;
   /// Start time of day in hours (--hour); negative means the scene's own start time.
   double hour = -1;
+  /// Start in the user mode (--user) instead of the cycle mode.
+  bool user = false;
   /// Let the time of day follow the host clock (--realtime).
   bool realtime = false;
   /// Frame rate (--fps).
@@ -87,6 +89,8 @@ void usage() {
       "  --rare-other N   ...or its second, less likely catastrophe\n"
       "  --hour H         start at this time of day, 0 to 24 (scenes with a day and night cycle)\n"
       "  --realtime       let the time of day follow this computer's clock\n"
+      "  --user           start in the user mode: you choose scene, time of day and events\n"
+      "                   (by default the program cycles through all scenes by itself)\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
@@ -107,6 +111,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--rare") { const char* v = next(); if (!v) return false; o.dumpRare = std::atoi(v); }
     else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
     else if (a == "--realtime") o.realtime = true;
+    else if (a == "--user") o.user = true;
     else if (a == "--hour") { const char* v = next(); if (!v) return false; o.hour = std::atof(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
     else if (a == "--style") {
@@ -227,6 +232,7 @@ int main(int argc, char** argv) {
   config.style = opt.styleSet ? opt.style : defaultStyleFor(term.colorMode());  // an explicit --style wins
   config.hour = opt.hour;
   config.realtime = opt.realtime;
+  config.cycle = !opt.user;
   config.sound = !opt.mute;
   Session session(pack, scenes, config, w, h);
 

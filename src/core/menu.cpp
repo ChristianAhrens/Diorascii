@@ -56,6 +56,10 @@ void Menu::setOptions(const std::string& id, std::vector<std::string> options, s
   it->value = std::min(value, it->options.size() - 1);
 }
 
+void Menu::setEnabled(const std::string& id, bool enabled) {
+  if (Item* it = find(id)) it->enabled = enabled;
+}
+
 size_t Menu::value(const std::string& id) const {
   for (const auto& it : items_) {
     if (it.id == id) return it.value;
@@ -80,12 +84,13 @@ bool Menu::handle(Action a) {
     case Action::Up: selected_ = (selected_ + items_.size() - 1) % items_.size(); return true;
     case Action::Down: selected_ = (selected_ + 1) % items_.size(); return true;
     case Action::Left:
-      if (!cur.options.empty()) step(cur, -1);
+      if (!cur.options.empty() && cur.enabled) step(cur, -1);
       return true;
     case Action::Right:
-      if (!cur.options.empty()) step(cur, +1);
+      if (!cur.options.empty() && cur.enabled) step(cur, +1);
       return true;
     case Action::Select:
+      if (!cur.enabled) return true;
       if (cur.options.empty()) events_.push_back({cur.id, 0});
       else step(cur, +1);
       return true;
@@ -114,6 +119,7 @@ void Menu::render(Frame& f, Style style) const {
   std::transform(items_.begin(), items_.end(), std::back_inserter(rows), [&](const auto& it) {
     std::string r = pad(it.label, labelW);
     if (!it.options.empty()) r += "  < " + pad(it.options[it.value], optW) + " >";
+    if (!it.enabled) r += " (auto)";
     return r;
   });
 
@@ -189,7 +195,7 @@ void Menu::render(Frame& f, Style style) const {
     if (sel) {
       for (int x = 1; x < boxWFinal - 1; ++x) put(x0 + x, y, U' ', selCell);
     }
-    text(x0 + 2, y, (sel ? "> " : "  ") + rows[i], sel ? selCell : panel);
+    text(x0 + 2, y, (sel ? "> " : "  ") + rows[i], sel ? selCell : items_[i].enabled ? panel : faint);
   }
   const int hintY = y0 + boxH - 2 - footerRows;
   text(x0 + (boxWFinal - cols(hint)) / 2, hintY, hint, panel);

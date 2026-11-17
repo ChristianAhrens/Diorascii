@@ -24,6 +24,7 @@ class Menu {
     std::string label;
     std::vector<std::string> options;  ///< empty = a button
     size_t value = 0;                  ///< selected option
+    bool enabled = true;               ///< false: shown dimmed, and changing or selecting it does nothing
   };
   /// A change the user made, reported to the app.
   struct Event {
@@ -46,12 +47,19 @@ class Menu {
   void setLabel(const std::string& id, std::string label);
   /// Replaces the options of a choice, for example when a scene offers different ones.
   void setOptions(const std::string& id, std::vector<std::string> options, size_t value = 0);
+  /// Switches an entry on or off. A disabled entry is still shown (dimmed, marked as automatic) but
+  /// reports no events.
+  void setEnabled(const std::string& id, bool enabled);
   /// Currently selected option of a choice.
   size_t value(const std::string& id) const;
+  /// The text of the selected option of a choice (empty for a button or an unknown id).
+  std::string optionText(const std::string& id) const;
 
   /// Sets lines of small print shown at the bottom of the box, below the hint (the version and the
   /// copyright). They are left out when the box would not fit.
   void setFooter(std::vector<std::string> lines) { footer_ = std::move(lines); }
+  /// The lines of small print at the bottom of the box.
+  const std::vector<std::string>& footer() const { return footer_; }
 
   /// Shows the menu and starts consuming input.
   void open() { open_ = true; }

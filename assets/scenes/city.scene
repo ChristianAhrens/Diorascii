@@ -45,8 +45,8 @@ cloud_small_l  per-cols   70
 bird           per-cols   60
 
 --- decor
-# sprite       align      margin
-station        left       18
+# sprite       align      margin  [jitter n] [chance p] [per-cols n]; sprite|sprite picks one
+station        random     0
 shop_cafe      left       2
 shop_bakery    left       16
 shop_flowers   center     -26
@@ -56,11 +56,13 @@ kiosk          right      16
 fountain       center     -6
 bench          center     -16
 bench          center     6
-oak            center     -12
-oak            center     2
-bush           center     -2
-bush           center     -9
-flower         center     -4
+oak|oak_small|oak_tall  center  -12  jitter 6  chance 0.8
+oak|oak_small|oak_tall  center  2    jitter 6  chance 0.8
+bush           center     -2         jitter 8  chance 0.8
+bush           center     -9         jitter 8  chance 0.8
+flower         center     -4         jitter 10 chance 0.8
+# trees along the street: one more for every this many columns, wherever there is room
+oak|oak_small|oak_tall  random  0  per-cols 45  chance 0.9
 
 --- events
 train          2

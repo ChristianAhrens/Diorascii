@@ -4,6 +4,8 @@
 #include "core/menu.h"
 
 #include <algorithm>
+#include <iterator>
+#include <numeric>
 #include <utility>
 
 #include "core/utf8.h"
@@ -54,6 +56,17 @@ void Menu::setOptions(const std::string& id, std::vector<std::string> options, s
   it->value = std::min(value, it->options.size() - 1);
 }
 
+void Menu::setEnabled(const std::string& id, bool enabled) {
+  if (Item* it = find(id)) it->enabled = enabled;
+}
+
+std::string Menu::optionText(const std::string& id) const {
+  for (const auto& it : items_) {
+    if (it.id == id && it.value < it.options.size()) return it.options[it.value];
+  }
+  return {};
+}
+
 size_t Menu::value(const std::string& id) const {
   for (const auto& it : items_) {
     if (it.id == id) return it.value;
@@ -78,12 +91,13 @@ bool Menu::handle(Action a) {
     case Action::Up: selected_ = (selected_ + items_.size() - 1) % items_.size(); return true;
     case Action::Down: selected_ = (selected_ + 1) % items_.size(); return true;
     case Action::Left:
-      if (!cur.options.empty()) step(cur, -1);
+      if (!cur.options.empty() && cur.enabled) step(cur, -1);
       return true;
     case Action::Right:
-      if (!cur.options.empty()) step(cur, +1);
+      if (!cur.options.empty() && cur.enabled) step(cur, +1);
       return true;
     case Action::Select:
+      if (!cur.enabled) return true;
       if (cur.options.empty()) events_.push_back({cur.id, 0});
       else step(cur, +1);
       return true;
@@ -103,18 +117,18 @@ void Menu::render(Frame& f, Style style) const {
   if (!open_ || f.width() < 1 || f.height() < 1) return;
 
   // Row text for every item, without the selection marker.
-  int labelW = 0;
-  for (const auto& it : items_) labelW = std::max(labelW, cols(it.label));
-  int optW = 0;
-  for (const auto& it : items_) {
-    for (const auto& o : it.options) optW = std::max(optW, cols(o));
-  }
+  const int labelW = std::accumulate(items_.begin(), items_.end(), 0, [](int w, const auto& it) { return std::max(w, cols(it.label)); });
+  const int optW = std::accumulate(items_.begin(), items_.end(), 0, [](int w, const auto& it) {
+    return std::accumulate(it.options.begin(), it.options.end(), w, [](int ow, const auto& o) { return std::max(ow, cols(o)); });
+  });
   std::vector<std::string> rows;
-  for (const auto& it : items_) {
+  rows.reserve(items_.size());
+  std::transform(items_.begin(), items_.end(), std::back_inserter(rows), [&](const auto& it) {
     std::string r = pad(it.label, labelW);
     if (!it.options.empty()) r += "  < " + pad(it.options[it.value], optW) + " >";
-    rows.push_back(std::move(r));
-  }
+    if (!it.enabled) r += " (auto)";
+    return r;
+  });
 
   const std::string hintLong = "arrows: move / change   enter: select   esc: close";
   const std::string hintShort = "esc: close";
@@ -188,7 +202,7 @@ void Menu::render(Frame& f, Style style) const {
     if (sel) {
       for (int x = 1; x < boxWFinal - 1; ++x) put(x0 + x, y, U' ', selCell);
     }
-    text(x0 + 2, y, (sel ? "> " : "  ") + rows[i], sel ? selCell : panel);
+    text(x0 + 2, y, (sel ? "> " : "  ") + rows[i], sel ? selCell : items_[i].enabled ? panel : faint);
   }
   const int hintY = y0 + boxH - 2 - footerRows;
   text(x0 + (boxWFinal - cols(hint)) / 2, hintY, hint, panel);

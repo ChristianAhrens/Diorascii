@@ -11,7 +11,9 @@
 #include "core/frame.h"
 #include "core/input.h"
 #include "core/menu.h"
+#include "core/rng.h"
 #include "core/world.h"
+#include "core/negotiate.h"
 
 namespace dio {
 
@@ -32,12 +34,18 @@ class Session {
     Style style = Style::Full;
     /// Start time of day in hours; negative means each scene's own start time.
     double hour = -1;
+    /// Start in the cycle mode (the default): the scenes run one after the other by themselves (see
+    /// Session::cycling()). False starts in the user mode.
+    bool cycle = true;
     /// Start in the real-time mode (the time of day follows the host clock, see setClockHour()).
     bool realtime = false;
     /// Show the info line from the start.
     bool info = false;
-    /// Ask for ambient sound from the start.
+    /// Ask for ambient sound from the start (immersive, or stereo if `audioLayout` is 2.0).
     bool sound = false;
+    /// The speaker layout of the immersive sound (auto: the richest one the route offers, see negotiate()); 2.0
+    /// starts the sound as stereo. The menu has no layout entry: the sound is off, stereo or immersive.
+    LayoutChoice audioLayout;
     /// Offer "Quit" in the menu. Frontends that are left another way (tvOS: the Menu button) turn it off.
     bool quitEntry = true;
   };
@@ -76,17 +84,49 @@ class Session {
   /// Tells the session the host's local time of day in hours (0 to 24, fractional). The frontend
   /// calls this every frame; it only matters while the time mode is World::TimeMode::Realtime.
   void setClockHour(double hour) { clockHour_ = hour; }
+  /// True in the overarching cycle mode: the session goes through all scenes by itself, choosing the
+  /// time of day and the events, and the user's own choices for these are replaced (choosing one by hand, such as the time of day or an event, ends the mode). Each scene
+  /// stays until it has shown one full day and night, a rare event (waited for, however many days
+  /// it takes) and an action (the `F` key, triggered at random every 10 to 90 seconds). Otherwise (the user mode) all of that is manual.
+  bool cycling() const { return cycle_; }
+  /// Actions (the `F` key) run in the current scene since it began or since the cycle mode was switched on.
+  unsigned actionsRun() const { return actions_; }
+  /// True while the cycle mode is crossfading from one scene to the next (picture and sound).
+  bool fading() const { return outgoing_ != nullptr; }
+  /// Length of the crossfade between scenes in seconds: the picture dissolves over all of it, the
+  /// sound of the old scene fades out over the first half and that of the new one in over the second.
+  static constexpr double kFadeSeconds = 2.0;
   /// Frame rate shown on the info line; the frontend measures it.
   void setMeasuredFps(double fps) { fps_ = fps; }
 
-  /// True while the user wants ambient sound. The frontend opens or closes its sound device
+  /// What the menu's *Sound* entry says: no ambient sound, the sound in stereo, or the immersive sound (the
+  /// layout of the route: surround and height speakers, or the system's 3D audio on AirPods). Immersive is the default.
+  enum class SoundMode { Off, Stereo, Immersive };
+  /// The sound mode now.
+  SoundMode soundMode() const { return mode_; }
+  /// True while the user wants ambient sound (stereo or immersive). The frontend opens or closes its sound device
   /// to match and, if it cannot open one, calls soundUnavailable().
-  bool soundWanted() const { return sound_; }
+  bool soundWanted() const { return mode_ != SoundMode::Off; }
   /// Called by the frontend when ambient sound was requested but no device could be opened:
   /// switches the request off and, if `announce`, says so on screen.
   void soundUnavailable(bool announce = true);
+  /// The speaker layout to open the sound output with: 2.0 in the stereo mode, else the immersive layout (auto, unless
+  /// the command line named one).
+  LayoutChoice layoutChoice() const;
+  /// True once after the user switched between stereo and immersive in the menu: the frontend then opens its sound
+  /// device again with layoutChoice() (while the sound is on).
+  bool takeLayoutChange();
+  /// The frontend tells what its sound output rendered to after it opened (or reopened): the menu's small print
+  /// shows it, for example "Audio output: 7.1 on 8 channels", "Audio output: 7.1.4 on 2 channels (mixed down)" or, if the route's own
+  /// spatializer makes the sound (AirPods), "Audio output: 7.1.4 on 2 channels (spatialized)". Switching the sound off
+  /// clears it.
+  void soundLayout(const char* name, int deviceChannels, bool downmixed, bool spatialized = false);
   /// What the ambient sound should reflect now (muted while paused).
   AmbientParams ambient() const;
+  /// Moves the one-off sounds (with their places on the stage) that happened since the last call to the
+  /// end of `out`. The frontend calls this every frame, also while muted, and hands them to the
+  /// sound output.
+  void takeSoundEvents(std::vector<SoundEvent>& out);
 
  private:
   /// Builds a fresh world for the current scene, size and carried-over time of day.
@@ -97,10 +137,23 @@ class Session {
   void switchScene(size_t idx);
   /// In the real-time mode, sets the world's time of day from the host clock.
   void syncClock();
-  /// Turns the sound request on or off and keeps the menu in step.
-  void setSound(bool on);
-  /// Runs the scene's action and confirms it on screen.
-  void runAction();
+  /// Sets the sound mode and keeps the menu in step.
+  void setSound(SoundMode mode);
+  /// Runs the scene's action and confirms it on screen. Returns true if something happened.
+  bool runAction();
+  /// Switches between the user and the cycle mode.
+  void setCycle(bool on);
+  /// True once the current scene has shown what the cycle mode asks of it.
+  bool sceneDone() const;
+  /// The cycle mode's own work: the random action, the rare event that has not come by itself, and
+  /// the move on to the next scene.
+  void stepCycle(double dt);
+  /// Notes where the current scene stands now, so that only what happens from here counts.
+  void markProgress();
+  /// Ends a crossfade (drops the outgoing world).
+  void endFade();
+  /// Sets the menu's small print: the layout the sound is rendered to now, the version and the copyright.
+  void updateFooter();
   /// Applies what the user changed in the open menu.
   void applyMenuEvents();
 
@@ -122,16 +175,39 @@ class Session {
   double clockHour_ = -1;
   /// Phase (0..1) of the day to start the next world at; negative means the scene's own.
   double carriedPhase_;
+  /// True in the cycle mode, and the time mode the user had chosen before it.
+  bool cycle_ = false;
+  World::TimeMode userTimeMode_ = World::TimeMode::Cycle;
+  /// What the current scene had behind it when it was marked: days run, rare events started, and
+  /// actions run since; seconds until the next random action.
+  double baseDays_ = 0;
+  unsigned baseRares_ = 0, actions_ = 0;
+  double actionTimer_ = 0;
+  /// Chooses the times of the random actions.
+  Rng rng_;
   /// The simulation.
   std::unique_ptr<World> world_;
+  /// During a crossfade, the scene being left (it keeps running), seconds of the fade left, and
+  /// scratch space for its picture. Null when no fade is on.
+  std::unique_ptr<World> outgoing_;
+  double fadeLeft_ = 0;
+  Frame fadeFrame_;
+  /// The pending rebuild is a scene change of the cycle mode and starts a crossfade.
+  bool fadePending_ = false;
   /// The ASCII menu.
   Menu menu_;
   /// Simulation paused.
   bool paused_ = false;
   /// Info line visible.
   bool info_;
-  /// Sound requested.
-  bool sound_ = false;
+  /// The sound mode (the menu's *Sound* entry).
+  SoundMode mode_ = SoundMode::Off;
+  /// The layout the immersive mode asks for (auto, or what the command line named).
+  LayoutChoice immersive_;
+  /// The sound switched between stereo and immersive and the frontend has not taken it yet.
+  bool layoutChanged_ = false;
+  /// The layout the sound is rendered to right now, as a line of the menu's small print (empty while there is no sound).
+  std::string outputLine_;
   /// Quit requested.
   bool quit_ = false;
   /// A scene switch, restart or resize wants a new world.

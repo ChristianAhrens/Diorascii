@@ -37,6 +37,7 @@ enum class Action {
   Rare,   ///< summon the scene's rare event right now (usually the common one, see World::triggerRare)
   RareOther,  ///< summon the scene's second, less likely catastrophe right now
   Audio,  ///< toggle the ambient sound
+  Mode,   ///< switch the overarching mode: user (everything by hand) <-> cycle (the scenes run themselves)
 };
 
 }  // namespace dio

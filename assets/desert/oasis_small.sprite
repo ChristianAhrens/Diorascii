@@ -1,0 +1,61 @@
+name: oasis_small
+habitat: ground
+solid: yes
+depth: 16
+fps: 2
+--- art
+
+
+
+--- mask
+CCCCCcccccccccCC
+CCCcccccccccCCCC
+CcccccccccCCCCCc
+--- art
+
+
+
+--- mask
+CCCcccccccccCCCC
+CcccccccccCCCCCc
+ccccccccCCCCCccc
+--- art
+
+
+
+--- mask
+CcccccccccCCCCCc
+ccccccccCCCCCccc
+ccccccCCCCCccccc
+--- art
+
+
+
+--- mask
+ccccccccCCCCCccc
+ccccccCCCCCccccc
+ccccCCCCCccccccc
+--- art
+
+
+
+--- mask
+ccccccCCCCCccccc
+ccccCCCCCccccccc
+ccCCCCCccccccccc
+--- art
+
+
+
+--- mask
+ccccCCCCCccccccc
+ccCCCCCccccccccc
+CCCCCcccccccccCC
+--- art
+
+
+
+--- mask
+ccCCCCCccccccccc
+CCCCCcccccccccCC
+CCCcccccccccCCCC

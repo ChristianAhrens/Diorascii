@@ -5,14 +5,15 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
+#include <span>
 #include <sstream>
 
 namespace dio {
 
 AssetPack AssetPack::embedded() {
   AssetPack pack;
-  for (size_t i = 0; i < kEmbeddedAssetCount; ++i) {
-    const auto& a = kEmbeddedAssets[i];
+  for (const auto& a : std::span(kEmbeddedAssets, kEmbeddedAssetCount)) {
     pack.addText(a.name, std::string(reinterpret_cast<const char*>(a.data), a.size));
   }
   pack.validate();
@@ -68,7 +69,8 @@ std::shared_ptr<const SceneDef> AssetPack::scene(const std::string& name) const 
 
 std::vector<std::shared_ptr<const SceneDef>> AssetPack::scenes() const {
   std::vector<std::shared_ptr<const SceneDef>> out;
-  for (const auto& [name, sc] : scenes_) out.push_back(sc);
+  out.reserve(scenes_.size());
+  std::transform(scenes_.begin(), scenes_.end(), std::back_inserter(out), [](const auto& entry) { return entry.second; });
   std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) {
     return a->order != b->order ? a->order < b->order : a->name < b->name;
   });
@@ -83,7 +85,13 @@ void AssetPack::validate() {
   };
   for (const auto& [name, sc] : scenes_) {
     for (const auto& p : sc->population) check(*sc, "population", p.sprite);
-    for (const auto& d : sc->decor) check(*sc, "decor", d.sprite);
+    for (const auto& d : sc->decor) {  // a decoration may list alternatives separated by `|`
+      for (size_t from = 0; from <= d.sprite.size();) {
+        const size_t bar = std::min(d.sprite.find('|', from), d.sprite.size());
+        check(*sc, "decor", d.sprite.substr(from, bar - from));
+        from = bar + 1;
+      }
+    }
     for (const auto& e : sc->events) check(*sc, "events", e.sprite);
     for (const auto& e : sc->rare) check(*sc, "rare", e.sprite);
     check(*sc, "action", sc->action.sprite);

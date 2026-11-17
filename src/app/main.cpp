@@ -46,6 +46,8 @@ struct Options {
   int dumpWidth = 100, dumpHeight = 30;
   /// Start time of day in hours (--hour); negative means the scene's own start time.
   double hour = -1;
+  /// Start in the user mode (--user) instead of the cycle mode.
+  bool user = false;
   /// Let the time of day follow the host clock (--realtime).
   bool realtime = false;
   /// Frame rate (--fps).
@@ -56,10 +58,14 @@ struct Options {
   bool audio = false;
   /// Start without ambient sound (--mute).
   bool mute = false;
+  /// Speaker layout of the sound (--audio-layout).
+  LayoutChoice audioLayout;
   /// Print scenes or sprites and exit (--list-scenes, --gallery).
   bool listScenes = false, gallery = false;
   /// Render style (--style).
   Style style = Style::Full;
+  /// True if --style was given, which then wins over the style picked from the terminal.
+  bool styleSet = false;
 };
 
 /// Prints the command line help.
@@ -72,11 +78,12 @@ void usage() {
       "  --seed N         deterministic run\n"
       "  --assets DIR     load extra/override *.sprite and *.scene files from DIR\n"
       "  --fps N          frame rate (default 20)\n"
-      "  --style NAME     full (default) | terminal (16 ANSI colors, your background) | mono\n"
+      "  --style NAME     full (default; terminal on the Linux text console) | terminal (16 ANSI colors, your background) | mono\n"
       "  --truecolor      force 24-bit color\n"
       "  --256            force 256-color\n"
       "  --audio          ambient sound is on by default; with --audio a missing device is reported\n"
       "  --mute           start without ambient sound (a toggles it)\n"
+      "  --audio-layout L speaker layout of the sound: auto (default) | 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6\n"
       "  --console        force the Linux text console look (16 colors, dark backdrops)\n"
       "  --dump N         headless: print the scene after N steps (no terminal needed)\n"
       "  --size WxH       size for --dump (default 100x30)\n"
@@ -85,6 +92,8 @@ void usage() {
       "  --rare-other N   ...or its second, less likely catastrophe\n"
       "  --hour H         start at this time of day, 0 to 24 (scenes with a day and night cycle)\n"
       "  --realtime       let the time of day follow this computer's clock\n"
+      "  --user           start in the user mode: you choose scene, time of day and events\n"
+      "                   (by default the program cycles through all scenes by itself)\n"
       "  --gallery        print every sprite (for art review) and exit\n"
       "  --version, --help\n"
       "\n"
@@ -105,12 +114,14 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--rare") { const char* v = next(); if (!v) return false; o.dumpRare = std::atoi(v); }
     else if (a == "--act") { const char* v = next(); if (!v) return false; o.dumpAct = std::atoi(v); }
     else if (a == "--realtime") o.realtime = true;
+    else if (a == "--user") o.user = true;
     else if (a == "--hour") { const char* v = next(); if (!v) return false; o.hour = std::atof(v); }
     else if (a == "--size") { const char* v = next(); if (!v || std::sscanf(v, "%dx%d", &o.dumpWidth, &o.dumpHeight) != 2) return false; }
     else if (a == "--style") {
       const char* v = next();
       if (!v) return false;
       const std::string n = v;
+      o.styleSet = true;
       if (n == "full") o.style = Style::Full;
       else if (n == "terminal") o.style = Style::Terminal;
       else if (n == "mono") o.style = Style::Mono;
@@ -121,6 +132,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
     else if (a == "--console") o.forceConsole = true;
     else if (a == "--audio") o.audio = true;
     else if (a == "--mute") o.mute = true;
+    else if (a == "--audio-layout") { const char* v = next(); if (!v || !LayoutChoice::parse(v, o.audioLayout)) return false; }
     else if (a == "--list-scenes") o.listScenes = true;
     else if (a == "--gallery") o.gallery = true;
     else if (a == "--version") { std::puts("diorascii " DIORASCII_VERSION); std::exit(0); }
@@ -221,10 +233,12 @@ int main(int argc, char** argv) {
   Session::Config config;
   config.seed = opt.seed;
   config.scene = sceneIdx;
-  config.style = opt.style;
+  config.style = opt.styleSet ? opt.style : defaultStyleFor(term.colorMode());  // an explicit --style wins
   config.hour = opt.hour;
   config.realtime = opt.realtime;
+  config.cycle = !opt.user;
   config.sound = !opt.mute;
+  config.audioLayout = opt.audioLayout;
   Session session(pack, scenes, config, w, h);
 
   using clock = std::chrono::steady_clock;
@@ -237,12 +251,18 @@ int main(int argc, char** argv) {
   // Ambient sound is on unless muted; a machine without a sound device just stays silent. The
   // missing device is only announced when the user asked for sound (--audio or the a key).
   AudioOutput audio;
+  std::vector<SoundEvent> soundEvents;  // the one-off sounds of one frame
   bool startup = true;
   auto syncSound = [&]() {
-    if (session.soundWanted() && !audio.running() && !audio.start()) {
-      session.soundUnavailable(!startup || opt.audio);
+    if (session.takeLayoutChange() && audio.running()) audio.stop();  // reopened below with the new choice
+    bool reported = false;
+    if (session.soundWanted() && !audio.running()) {
+      if (audio.start(session.layoutChoice())) reported = true;
+      else session.soundUnavailable(!startup || opt.audio);
     }
     if (!session.soundWanted() && audio.running()) audio.stop();
+    if (audio.running() && audio.update()) reported = true;  // follows a change of route (the layout follows the new device)
+    if (reported && audio.running()) session.soundLayout(audio.layout().name(), audio.deviceChannels(), audio.downmixed(), audio.spatialized());
     startup = false;
   };
   syncSound();
@@ -268,12 +288,19 @@ int main(int argc, char** argv) {
     session.setMeasuredFps(measuredFps);
     session.setClockHour(localClockHour());
     session.step(dt);
-    if (audio.running()) audio.setParams(session.ambient());
+    soundEvents.clear();
+    session.takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
+    if (audio.running()) {
+      for (const SoundEvent& e : soundEvents) audio.pushEvent(e);  // first, so that a sound that the counters start finds its place
+      audio.setParams(session.ambient());
+    }
     session.render(cur);
     if (session.takeRepaint()) havePrev = false;
     // The terminal style uses the user's 16 ANSI colors so it follows their theme.
     const Style style = session.style();
-    const ColorMode mode = style == Style::Terminal ? ColorMode::Ansi16 : term.colorMode();
+    // The Linux console keeps its own mode: it cannot show the bright backgrounds of Ansi16.
+    const ColorMode mode =
+        style == Style::Terminal && term.colorMode() != ColorMode::Console ? ColorMode::Ansi16 : term.colorMode();
     term.write(encodeFrame(havePrev ? &prev : nullptr, cur, mode));
     prev = cur;
     havePrev = true;

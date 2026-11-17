@@ -6,7 +6,17 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Natively on both architectures the release ships (x64 and arm64).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure
@@ -15,6 +25,12 @@ jobs:
         run: cmake --build build/release -j
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
+      # The headless pictures of the manual are generated output; a change that alters the
+      # scenes must refresh them (scripts/manual-dumps.sh). Only on x64: the pictures are
+      # compared byte for byte, and the same on arm64 is not guaranteed.
+      - name: Check the manual's generated pictures
+        if: matrix.arch == 'x64'
+        run: scripts/manual-dumps.sh --check
       - name: Check binary dependencies
         run: ldd build/release/src/diorascii
       - name: Package
@@ -31,7 +47,7 @@ jobs:
           rpm -qpl build/release/diorascii*.rpm
       - uses: actions/upload-artifact@v4
         with:
-          name: diorascii-linux
+          name: diorascii-linux-${{ matrix.arch }}
           path: |
             build/release/diorascii-*.tar.gz
             build/release/diorascii*.deb

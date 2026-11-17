@@ -11,6 +11,7 @@ on:
 # assets - no extra secret is needed.
 permissions:
   contents: write
+  actions: write   # to start the Pages deployment after publishing (see the last step)
 
 jobs:
   # The release starts as a draft so "latest release" never points at a release
@@ -52,8 +53,13 @@ jobs:
           - os: macos-latest
             name: macOS
             preset: release-macos
+          # Linux is built natively once per CPU architecture; the name carries the architecture
+          # into the asset names (Diorascii-x.y.z-Linux-x64.deb, ...-Linux-arm64.rpm).
           - os: ubuntu-latest
-            name: Linux
+            name: Linux-x64
+            preset: release
+          - os: ubuntu-24.04-arm
+            name: Linux-arm64
             preset: release
           - os: windows-latest
             name: Windows
@@ -160,3 +166,11 @@ jobs:
           --repo "${{ github.repository }}"
           --draft=false
           --latest
+
+      # The manual's download links name the files of the latest release, so the site is rebuilt now
+      # that they exist (a workflow started by the built-in token does not react to events, but it
+      # can be started explicitly). docs.yml runs from main, where the release was merged.
+      - name: Redeploy the project page and the manual
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "${{ github.repository }}" --ref main

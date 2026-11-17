@@ -1,4 +1,4 @@
-name: Deploy Landing Page and Doxygen to GitHub Pages
+name: Deploy Landing Page, Manual and Doxygen to GitHub Pages
 
 on:
   push:
@@ -19,10 +19,10 @@ jobs:
         with:
           fetch-depth: 0  # tags, so the docs can show the latest version
 
-      - name: Install Doxygen and Graphviz
+      - name: Install Doxygen, Graphviz and pandoc
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y doxygen graphviz
+          sudo apt-get install -y doxygen graphviz pandoc
 
       - name: Generate Doxygen documentation
         run: |
@@ -36,6 +36,8 @@ jobs:
           # The background clips are optional: the page falls back to a gradient without them.
           cp Resources/*.mp4 site/Resources/ 2>/dev/null || true
           cp -r docs/html/. site/doxygen/
+          # The user manual: docs/manual/*.md as HTML, with the download links of the latest release.
+          scripts/build-manual.sh site/manual
           touch site/.nojekyll
 
       - name: Deploy to gh-pages branch

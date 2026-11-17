@@ -17,6 +17,11 @@ namespace dio {
 ///               backgrounds, which are snapped to the dark ones
 enum class ColorMode { TrueColor, Ansi256, Ansi16, Console };
 
+/// The style to start in when the user gave no --style: the Linux text console (ColorMode::Console)
+/// cannot show the full style's gradient backdrop, so it starts in the terminal style; every other
+/// color mode starts in the full style. Pure function, unit-testable.
+Style defaultStyleFor(ColorMode mode);
+
 /// Encodes `cur` as VT/ANSI output. If `prev` is non-null and the same size, only
 /// changed cells are emitted; otherwise the whole screen is repainted.
 /// Pure function (no I/O), so it is unit-testable and shared by all platforms.

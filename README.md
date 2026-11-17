@@ -9,7 +9,7 @@ river, a desert with an oasis, a mountain range from the meadow up to the snow, 
 no runtime dependencies. Truecolor with automatic 256-color fallback, or a
 terminal-themed look that follows your own colors.
 
-**[Download the latest release](https://github.com/ChristianAhrens/Diorascii/releases/latest)**
+**[Download the latest release](https://github.com/ChristianAhrens/Diorascii/releases/latest)** | **[User manual](https://christianahrens.github.io/Diorascii/manual/)** ([sources](docs/manual/index.md))
 &middot; [Project page](https://christianahrens.github.io/Diorascii/)
 &middot; [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html)
 
@@ -61,10 +61,13 @@ from any terminal. Nothing else needs to be installed.
 |---|---|---|
 | macOS | `Diorascii-x.y.z-macOS.pkg` | universal (Apple silicon and Intel), installer to `/usr/local/bin` |
 | Windows | `Diorascii-x.y.z-Windows-Setup.exe` | installer to Program Files, adds the PATH, Windows Terminal or Windows 10+ console |
-| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux.deb` | `sudo apt install ./Diorascii-x.y.z-Linux.deb` |
-| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux.rpm` |
-| Linux, other | `Diorascii-x.y.z-Linux.tar.gz` | 64-bit, no extra libraries; unpack and run `bin/diorascii` |
+| Linux (Debian, Ubuntu) | `Diorascii-x.y.z-Linux-x64.deb`, `-Linux-arm64.deb` | `sudo apt install ./Diorascii-x.y.z-Linux-x64.deb` |
+| Linux (Fedora, openSUSE) | `Diorascii-x.y.z-Linux-x64.rpm`, `-Linux-arm64.rpm` | `sudo dnf install ./Diorascii-x.y.z-Linux-x64.rpm` |
+| Linux, other | `Diorascii-x.y.z-Linux-x64.tar.gz`, `-Linux-arm64.tar.gz` | no extra libraries; unpack and run `bin/diorascii` |
 | Windows, portable | `Diorascii-x.y.z-Windows.zip` | unpack and run `bin\diorascii.exe` |
+
+The Linux assets exist for x64 (`uname -m` prints `x86_64`) and arm64 (`aarch64`, e.g. Raspberry Pi 4/5 with
+a 64-bit OS, or ARM servers); they were named `Diorascii-x.y.z-Linux.*` (x64 only) up to 1.3.0.
 
 Installing a newer version over an older one upgrades it in place. To uninstall: on Windows use
 *Apps > Installed apps* (or the uninstaller in the install folder), on Debian/Fedora the package
@@ -84,14 +87,16 @@ macOS asks for confirmation (right-click, Open).
     diorascii                       # m menu, left/right scene, f action, x rare event (X: the second one), c style, t time of day, i info, p pause, r restart, q quit
     diorascii --scene moon          # start in a specific scene (--list-scenes shows all)
     diorascii --mute                # start without the ambient sound; a toggles it (see Sound below)
+    diorascii --audio-layout 7.1.4  # render the sound to a speaker layout (default: auto, what the device has; see Speaker layouts below)
     diorascii --console             # force the Linux text console look (picked automatically on TERM=linux, also inside tmux)
-    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full)
+    diorascii --style terminal      # 16 ANSI colors on your own background (also: mono, full); the default is full, but terminal on the Linux text console
     diorascii --dump 100            # headless: print the scene after 100 steps
     diorascii --dump 200 --act 20   # ...and trigger the scene's action at step 20
     diorascii --dump 400 --rare 20  # ...or summon the scene's rare event at step 20
     diorascii --dump 400 --rare-other 20  # ...or its second, less likely catastrophe
     diorascii --hour 22             # start at 22:00 (scenes with a day and night cycle)
     diorascii --realtime            # let the time of day follow this computer's clock
+    diorascii --user                # start in the user mode instead of the cycle mode (see "Cycle mode")
     diorascii --gallery             # print every sprite (art review)
     diorascii --assets ./my-art     # add or override sprites and scenes from a directory
 
@@ -123,8 +128,8 @@ water towers, helipads or steps, and their windows light up as it gets dark. Str
 pool light on the street. Cars, taxis, buses, trucks and cyclists keep to their side of the road, and the traffic follows the **rush hours**: it is thin at night and at midday and peaks at about 8:00 and 17:30 (a vehicle sprite with `rush: yes` only joins the street with the chance that the time of day gives), people walk on
 both sidewalks (fewer at night), and there are shops, a kiosk and a park with a fountain, benches and trees. An
 elevated railway runs through the buildings on a viaduct (a dark deck with bright rails on a concrete beam with
-pillars, masts and a wire above it) with a station, and trains run on it now and then (on screens too small for it
-there is no railway). On wide enough screens one to three **side streets** break off from the main street at a broad crossing with a zebra stripe, run a short way back between the buildings and disappear behind them: some cars turn off the main road into them, showing three-quarter and rear views as they turn and drive away, and others come down them, seen from the front, and turn onto the main road. Between the buildings of the front row (which are spaced out) you can sometimes see other side streets running back behind them. Planes come in on their landing approach in the background, sinking slowly behind the
+pillars, masts and a wire above it) with a station somewhere along it (a different place every time), and trains run on it now and then: they stop at the station, passengers get off, walk to it and come out into the street (on screens too small for it
+there is no railway). The number, size and place of the trees, bushes and flowers of the park and the street, and the zebra crossings (one of them at the foot of the station) change with every start. On wide enough screens one to three **side streets** break off from the main street at a broad crossing with a zebra stripe, run a short way back between the buildings and disappear behind them: some cars turn off the main road into them, showing three-quarter and rear views as they turn and drive away, and others come down them, seen from the front, and turn onto the main road. Between the buildings of the front row (which are spaced out) you can sometimes see other side streets running back behind them. Planes come in on their landing approach in the background, sinking slowly behind the
 skyline towards an airport that is off screen. Vehicles, trains and planes are drawn as fine line art on a darkened backing so that they stand out. The buildings are generated to the height of your terminal, always lower than the mountains' peaks.
 
 ### The mountains
@@ -180,8 +185,22 @@ coming and going; the colors themselves stay with your terminal theme.
 
 ### Sound
 
+**Cycle mode.** The program has two overarching modes: *cycle* (the default) and *user* (`--user`; switch with the `o`
+key or *Mode* in the menu). In the cycle mode it runs by itself: it goes through all scenes in the order of the menu,
+and a scene is only left once it has shown one full day and night, one rare event (which must have come to an end)
+and one regular event (what `f` does by hand). The regular event is triggered at random every 10 to 90 seconds; a
+rare event is waited for, so a scene whose rare event is late stays on for more than a day until it has come. While
+the mode is on, the time of day runs as a cycle. Choosing anything that the mode governs by hand (the time of day, the
+scene action or a rare event, with `t`, `f`, `x`, `X` or the menu) ends the cycle mode, switches to the user mode and
+does what you chose. Switching from the user mode to the cycle mode sets the time of day to *Cycle*. Changing the
+scene by hand (arrow keys) still works and starts that scene's round afresh; in the user mode you choose the scene,
+the time of day and the events yourself, and leaving the cycle mode with the *Mode* entry or `o` brings back the time
+of day you had chosen before. When the cycle mode moves on to the next scene, the picture dissolves into it over two seconds
+(the old scene keeps moving meanwhile) and the sound crossfades too: the old scene's fades out, then the new one's fades in.
+Scene changes by hand are instant.
+
 Ambient sound is synthesized at run time (no recordings) and on by default: `--mute` starts without it, and the `a`
-key or the menu's Sound entry switch it. Without a sound device the app simply stays silent.
+key or the menu's *Sound* entry switch it between *off*, *stereo* and *immersive* (the default; the `a` key goes round the three). Without a sound device the app simply stays silent.
 Every scene has its own soundscape, and the sound follows what happens on screen:
 
 | Scene | What you hear |
@@ -190,8 +209,31 @@ Every scene has its own soundscape, and the sound follows what happens on screen
 | Aquarium | a deep underwater hum, bubbles rising now and then, a small blip for every flake of food a fish eats, the song of a passing whale the growl of the kraken as it nears, and a muffled double gulp for every animal its tentacles swallow. In the poisoned sea there is the hiss of gas and the glugging of bubbles |
 | Desert | a dry, steady wind, a few crickets at night; in a sandstorm the wind howls with the hiss of blown sand, and a tornado crossing the scene adds a deep, turning roar. The sandworm shakes the ground as it nears, bellows with a very deep, trumpeting roar while it crosses, and each animal it swallows is chewed with a series of low, grumbling crunches. The poachers' helicopter beats the air with its rotor, and every rifle shot cracks |
 | Mountains | thin alpine wind, a gurgling stream and now and then, by day, the shrill cry of an eagle or a woodpecker drumming on a tree. A snowstorm brings a howling icy wind with a gliding whistle and the hiss of ice crystals, and silences the eagle and the woodpecker; an avalanche creaks, then breaks with a burst of crackling and swells into a deep rumble with the roar of tumbling snow and rock, crackling and thumping as it knocks down trees and boulders on its way, and every animal it buries lets out a short, muffled squeal. The yeti's steps thud through the ground and it roars now and then |
-| City | a steady murmur of traffic that thins out at night, cars passing by with a sinking engine note, a horn (sometimes two honks, sometimes one long blast) from time to time, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it once the fire is out), trains that rumble and beat out the regular "klack-klack, klack-klack" of the wheels over the rail joints and sound their horn as they arrive, a faint jet when a plane is on its approach, and the roar and crackle of a burning skyscraper. When the monsters fight, their heavy steps shake the ground and the lizard's deep bellow alternates with the winged one's shrill screech (which is gone for good once the winged one has fallen); every stream of fire has its own roaring, crackling whoosh |
+| City | a steady murmur of traffic that thins out at night, cars passing by with a sinking engine note, a horn (sometimes two honks, sometimes one long blast) from time to time, the quick two-tone siren of the ambulance and the slow, wailing siren of the fire engine (which drives off without it once the fire is out), trains that rumble and beat out the regular "klack-klack, klack-klack" of the wheels over the rail joints (slower as they slow down) and sound their horn as they arrive, then fall silent at the station apart from the squeal of the brakes on the way in and the hiss of the air as they stop, a faint jet when a plane is on its approach, and the roar and crackle of a burning skyscraper. When the monsters fight, their heavy steps shake the ground and the lizard's deep bellow alternates with the winged one's shrill screech (which is gone for good once the winged one has fallen); every stream of fire has its own roaring, crackling whoosh |
 | Moon | no air, so only what could be felt through the ground: a faint, deep drone. A meteor strike thuds up through the ground, with a dull rumble and debris pattering down slowly; the alien's flash comes with an eerie warble. The big meteor is a rumble in the ground that swells as it comes down, ending in the thud of the impact |
+
+### Speaker layouts
+
+The sound is rendered for the speakers your output has. By default (`--audio-layout auto`) the app asks the sound
+device what it has: on a stereo device it plays stereo, on a device with more channels (a surround receiver, a
+multichannel interface, the tvOS audio route) it renders to them, from 5.1 up to 7.1.4 and 9.1.6 with height speakers. Sounds are
+placed where they happen: a siren moves with its vehicle, a lightning strike cracks where it struck, a
+shot comes from the helicopter, bubbles rise round you, and what is far off or off-screen comes from the sides.
+There is no speaker setting in the menu: *Sound: immersive* is that, and *Sound: stereo* plays a plain stereo pair on any
+output. The menu's small print always says what is playing now (`Audio output: 7.1 on 8 channels`, `Audio output: 7.1.4 on 2 channels (mixed down)` if
+the output has fewer channels than the layout, `Audio output: 7.1.4 on 2 channels (spatialized)` if the headphones' own spatializer makes the
+sound from it (AirPods), or `Audio output: sound off`). `--audio-layout 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6`
+names the layout of the immersive sound for a test (`2.0` starts the sound as stereo); a layout the device would not open with steps down (the small print says what was used). Good to know:
+
+- Plain PCM over HDMI is usually limited to eight channels (7.1), so 7.1.4 and 9.1.6 reach a receiver only through a
+  multichannel interface or an Atmos-capable path; over normal HDMI `auto` gives what the device reports, typically 7.1.
+- Choosing a layout above what the device has is allowed, and the operating system or the sound server mixes it down
+  (the menu says so). On Linux a stereo device behind PulseAudio or PipeWire accepts every layout this way.
+- On macOS the layout set for the device in Audio MIDI Setup (stereo, 5.1, 7.1.4, ...) is what `auto` finds, and a layout you choose is played on the device's channels of the same positions (the system places each channel by its label), so the height speakers of a 7.1.4 device are used. A layout the device has no speakers for steps down to the richest one it has (7.1.4 on a 5.1 device plays as 5.1; the small print says `Audio output: 5.1 ...`), except on a device with just one or two channels, where the system mixes it down. macOS, tvOS and iOS hand the sound to the system as tagged multichannel PCM (AVSampleBufferAudioRenderer, the way Apple's own players do). On AirPods the system's spatial audio ("3D audio", with head tracking and its Control Center switch) then works on it: `auto` renders 7.1.4 for them. This was checked with AirPods Pro on macOS only; on tvOS and iOS, where the system says whether the route spatializes, it is not yet tried. Sound that an action starts plays about a quarter of a second late on these platforms.
+- Plain ALSA `default` is often stereo; a surround device has to be selected in the system's sound settings.
+- The layout follows a change of output while the app runs (headphones plugged in, another output chosen) where the
+  sound system reports it. The layouts were tested with measurements, not with a surround system; how it sounds in a room is
+  yet to be heard.
 
 ### Rare events
 
@@ -253,8 +295,8 @@ hand-made Xcode project.
 
 The generated project serves both the simulator and devices (pick the destination in Xcode);
 configure with `-DCMAKE_OSX_SYSROOT=appletvos -DDIORASCII_APPLE_TEAM=<team id>` to sign for a device. Siri Remote: swipe left/right
-changes the scene, swipe up the time of day, swipe down the sound, click runs the scene's action,
-Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it), Menu closes
+changes the scene, swipe up the time of day, swipe down the sound (off, stereo, immersive), click runs the scene's action,
+Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it; its *Sound* entry picks off, stereo or immersive), Menu closes
 the menu or leaves the app.
 
 With GCC the C++ runtime is linked statically for a single-file binary when the static library
@@ -409,8 +451,13 @@ scenes. See `assets/scenes/aquarium.scene`, `moon.scene` and `mountains.scene`.
     darter  per-cells  230
     @seaweed per-cols  15           # built-in procedural plant
 
-    --- decor                       # <sprite> left|right|center|random <margin> [y <row>]
+    --- decor                       # <sprite>[|<sprite>...] left|right|center|random <margin> [y <row>] [jitter <n>] [chance <p>] [per-cols <n>] [anchor yes]
     castle  right  2
+    # jitter n: moves it up to n cells either way; chance p: it is planted only with that chance;
+    # per-cols n: one more for every n columns, each somewhere else; a|b picks one of the sprites
+    # anchor yes: the lines after it may use the alignments from-left, from-right and from-center, which
+    # measure the margin from that decoration's left edge, right edge or middle (the desert's palms and reeds
+    # follow the oasis, whose size (oasis|oasis_small|oasis_big) and place are new every time)
 
     --- events                      # <sprite> <weight>; one at a time
     shark   3
@@ -428,7 +475,16 @@ reported as an error instead of being silently ignored.
 
 ## Documentation
 
-The [project page](https://christianahrens.github.io/Diorascii/) links the latest
+The [user manual](https://christianahrens.github.io/Diorascii/manual/) (overview, installation
+with direct download links for every platform, usage and the scenes) is written in markdown in
+[docs/manual](docs/manual/index.md), which reads fine on GitHub, and is turned into the website's pages by
+`scripts/build-manual.sh` (needs [pandoc](https://pandoc.org); `DIORASCII_VERSION` sets the release the links point
+to). In it, `x.y.z` stands for the version (and a link whose text is a release asset name becomes a direct
+download link), and the plain-text pictures between `<!-- dump: ... -->` and `<!-- /dump -->` are generated
+with the program itself: edit the arguments, then run `scripts/manual-dumps.sh` (`--check` fails when they are out
+of date, which the Linux workflow tests). The Usage section below stays the quick reference; the manual is the long form.
+
+The [project page](https://christianahrens.github.io/Diorascii/) links the manual, the latest
 release, this repository and the generated
 [API documentation](https://christianahrens.github.io/Diorascii/doxygen/index.html). To
 build the documentation yourself, install [Doxygen](https://www.doxygen.nl) and
@@ -459,7 +515,9 @@ the text of the release.
 
 The release is created as a draft and only published once all three platforms built
 and passed their tests. The binaries report the tag as their version. Every push to
-`main` also redeploys the project page and the API documentation to GitHub Pages.
+`main` also redeploys the project page, the manual and the API documentation to GitHub Pages, and
+the last job of the release workflow starts that deployment again once the release is published, so that the
+manual's download links point at files that exist.
 
 The tvOS app goes to App Store Connect (TestFlight) with one script, which generates the project
 with CMake, archives it, signs it with automatic signing, exports the `.ipa`, validates it and
@@ -501,7 +559,7 @@ workflow's asset on the release page with the notarized one.
 The Windows installer is built by the workflow with [Inno Setup](https://jrsoftware.org/isinfo.php)
 from `packaging/windows/diorascii.iss` (installs to Program Files, adds the PATH entry,
 registers an uninstaller; the `AppId` in the script must never change, it is what lets a newer
-version replace an older one). The Linux `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
+version replace an older one). The Linux `.deb`, `.rpm` and `.tar.gz` are built per architecture (x64 and arm64, natively, on `ubuntu-latest` and `ubuntu-24.04-arm`; the matrix name is the asset suffix). The `.deb` and `.rpm` come from CPack (`cpack -G DEB`,
 `cpack -G RPM` in the build directory; the latter needs `rpmbuild`) and install to `/usr/bin`.
 
 ## Layout

@@ -4,7 +4,10 @@
 #pragma once
 #include <cstdint>
 
+#include "core/layout.h"
 #include "core/rng.h"
+#include "core/spatializer.h"
+#include "core/soundstage.h"
 
 namespace dio {
 
@@ -16,9 +19,8 @@ enum class AmbientKind { Silent, Forest, Aquarium, Desert, Moon, Mountains, City
 inline constexpr int kAmbientKinds = 7;
 
 /// What the sound should reflect right now. All levels run from 0 to 1.
-/// Every field must also be handed on by the audio backends (src/audio/audio.cpp and
-/// audio_apple.mm copy them one by one); a field missing there is silent in the real program
-/// although the synthesis tests pass.
+/// The audio backends hand the whole struct to the audio thread as one copy (core/seqlock.h), so a
+/// new field needs no change in them. It must stay trivially copyable (plain numbers and enums only).
 struct AmbientParams {
   AmbientKind kind = AmbientKind::Silent;
   float night = 0;   ///< how dark it is
@@ -52,6 +54,13 @@ struct AmbientParams {
   float wail = 0;
   /// How near a train is, from 0 to 1 (World::nearness("train")): it rumbles, clatters and sounds its horn.
   float train = 0;
+  /// How fast that train is rolling, from 0 (standing at the station) to 1 (cruising speed): the
+  /// rumble and the clatter of the wheels follow it and stop when the train does (World::trainSound()).
+  float trainMotion = 1;
+  /// How hard that train is braking, from 0 to 1: its brakes squeal as it rolls into the station.
+  float trainBrake = 0;
+  /// The hiss of the compressed air that the train lets out as it comes to a stop, from 0 to 1.
+  float trainHiss = 0;
   /// How near a plane is, from 0 to 1 (World::nearness("plane")): a faint, distant jet.
   float plane = 0;
   /// How fiercely a building burns, from 0 to 1 (World::fireLevel()): it crackles and roars.
@@ -70,6 +79,10 @@ struct AmbientParams {
   float winged = 0;
   /// Counts the poachers' rifle shots (World::shotCount()); each one cracks.
   unsigned shots = 0;
+  /// Where each continuous sound source stands (World::emitter): its level is the matching field above
+  /// (`whale`, `tornado`, ...) and its x, y and depth place it on the stage. Indexed by EmitterKey. Not
+  /// yet used by the synth (the scenes switch to it in phase 6 of the multichannel plan).
+  Emitter emitters[kEmitterKeys];
 };
 
 /// Derives the sound parameters from the state of a world (volume stays at 1).
@@ -84,9 +97,33 @@ class Ambience {
  public:
   /// @param sampleRate output rate in Hz
   /// @param seed seeds the noise
-  explicit Ambience(int sampleRate, uint64_t seed = 1);
-  /// Writes `frames` frames of interleaved stereo float samples, each within -1 to 1.
+  /// @param layout the speakers to render for (stereo by default)
+  explicit Ambience(int sampleRate, uint64_t seed = 1, const Layout& layout = Layout());
+  /// Writes `frames` frames of interleaved float samples, `layout().channels()` per frame, each
+  /// within -1 to 1. The continuous sounds (the bed) play in every full-range speaker with
+  /// independent noise per speaker; the discrete voices are still a stereo pair (until phases 5 and
+  /// 6 of the multichannel plan place them) that plays on the layout's front left and right speakers
+  /// (`Layout::stereoPair`); the LFE channel plays the low end of the beds. With the stereo layout,
+  /// and on the front pair of any layout, the output is exactly what the synth has always produced.
   void render(const AmbientParams& p, float* out, int frames);
+  /// Changes the layout between two render calls (a route change). Nothing in the synth is reset:
+  /// channels that keep their role play on without a break, new ones fade in over about 20 ms.
+  void setLayout(const Layout& layout);
+  /// The layout the synth renders for.
+  const Layout& layout() const { return layout_; }
+  /// Hands the synth a one-off sound with its place (see SoundEvent). The events wait until the next
+  /// render call; at most kMaxPendingEvents are kept (the newest), and they are dropped after that
+  /// call. Not used by any sound yet (the scenes switch to it in phase 6 of the multichannel plan);
+  /// the counters in AmbientParams still trigger them.
+  void event(const SoundEvent& e);
+  /// The events handed in since the last render call (for the sounds and for tests).
+  int pendingEvents() const { return pendingCount_; }
+  /// Where the `n` bubbles (1 to 3) of one rising cluster are in a room: `out[0..n-1]`, all drawn from `rng`. The
+  /// cluster starts anywhere round the listener, behind included, and every bubble is higher than the one
+  /// before. Public so that the placement can be tested without listening for bubbles.
+  static void bubbleString(Rng& rng, int n, Source* out);
+  /// The most events kept between two render calls.
+  static constexpr int kMaxPendingEvents = 32;
 
  private:
   /// Moves `v` towards `target`; `k` is the per-sample smoothing coefficient.
@@ -102,23 +139,159 @@ class Ambience {
   };
   /// Schedules a clap `delay` seconds from now with the given loudness (0 to 1).
   void clap(double delay, double gain, bool strike = false);
-  /// A rising bubble blip, `delay` seconds from now. `f0` is its starting pitch in Hz.
-  void bubble(double delay, float f0, float dur, float amp);
-  /// One sample of the aquarium's sound for both ears.
-  void aquariumSample(const AmbientParams& p, float out[2]);
-  /// One sample of the desert's sound for both ears.
-  void desertSample(const AmbientParams& p, float out[2]);
-  /// One sample of the moon's sound for both ears.
-  void moonSample(const AmbientParams& p, float out[2]);
-  /// One sample of the city's sound for both ears.
-  void citySample(const AmbientParams& p, float out[2]);
-  /// One sample of the mountains' sound for both ears.
-  void mountainSample(const AmbientParams& p, float out[2]);
-  /// One sample of the second catastrophe of the current scene, for both ears (silent without one).
-  void menaceSample(const AmbientParams& p, float out[2]);
-  /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble.
-  void thunderLevels(float& crack, float& rumble, float& snap) const;
+  /// A rising bubble blip, `delay` seconds from now. `f0` is its starting pitch in Hz. It is heard from `at`
+  /// if given, else from a random place in front (the synth's old random pan).
+  void bubble(double delay, float f0, float dur, float amp, const Source* at = nullptr);
+  /// One sample of the aquarium's sound: `out[c]` for each bed chain `c` below `chains_` (the others stay as they were).
+  void aquariumSample(const AmbientParams& p, float out[kMaxChannels]);
+  /// One sample of the desert's sound, per bed chain as for the aquarium.
+  void desertSample(const AmbientParams& p, float out[kMaxChannels]);
+  /// One sample of the moon's sound, per bed chain as for the aquarium.
+  void moonSample(const AmbientParams& p, float out[kMaxChannels]);
+  /// One sample of the city's sound, per bed chain as for the aquarium.
+  void citySample(const AmbientParams& p, float out[kMaxChannels]);
+  /// One sample of the mountains' sound, per bed chain as for the aquarium.
+  void mountainSample(const AmbientParams& p, float out[kMaxChannels]);
+  /// One sample of the second catastrophe of the current scene, per bed chain (silent without one).
+  void menaceSample(const AmbientParams& p, float out[kMaxChannels]);
+  /// Thunder envelopes at the current time, summed over all claps: a sharp crack and a rumble, `[0]` of the
+  /// lightning strikes and `[1]` of the far claps, and the strikes' snap. `strikeLive` is true while a strike is
+  /// pending or still ringing.
+  void thunderLevels(float crack[2], float rumble[2], float& snap, bool& strikeLive) const;
 
+  /// Chooses which bed chain each output channel plays, derives the per-chain levels of every
+  /// scene, and glides to the new choice.
+  void route();
+  /// Recomputes the slowly drifting level of every bed chain of every scene (called every few samples).
+  void updateDrift();
+  /// Where the placed sounds are (see Place): the ids of the sources of the city.
+  enum PlaceId : int {
+    kEngine0 = 0,                 ///< the four passing cars (kEngine0 + slot)
+    kHorn = 4,                    ///< a car horn
+    kSiren, kWail, kTrain,        ///< the ambulance, the fire engine, the train
+    kPlane, kFire, kFlames,       ///< the jet, the burning building, the streams of fire
+    kTitan, kWinged,              ///< the monsters' bodies and the winged one's screech
+    kEagle, kPecker,              ///< the eagle's cry and the woodpecker's knocks
+    kWhistle,                     ///< the icy wind's whistle, which drifts round the room
+    kSlide,                       ///< the avalanche
+    kBeast,                       ///< the yeti
+    kSqueal0,                     ///< the three buried animals' squeals (kSqueal0 + slot)
+    kTornado = kSqueal0 + 3,      ///< the tornado's roar
+    kWorm,                        ///< the sandworm's growl and bellow
+    kChopper,                     ///< the helicopter's rotor and whine
+    kCrunch0,                     ///< the four chewing slots of the sandworm (kCrunch0 + slot)
+    kShot0 = kCrunch0 + 4,        ///< the four rifle shots (kShot0 + slot)
+    kWhale = kShot0 + 4,          ///< the whale's song
+    kGrowl,                       ///< the growl of the kraken
+    kGulp,                        ///< the kraken's gulps
+    kSub,                         ///< the submarine's hiss
+    kBubble0,                     ///< the ten bubble blips (kBubble0 + slot)
+    kThunder = kBubble0 + 10,     ///< the strike's crack and snap
+    kCloud,                       ///< the far claps and the rumble of the storm on its way (at the thundercloud)
+    kFlood,                       ///< the rush of the flood
+    kCricket0,                    ///< the forest's three crickets (kCricket0 + i), in a room
+    kDesertCricket0 = kCricket0 + 3,  ///< the desert's two crickets, in a room
+    kThud = kDesertCricket0 + 2,  ///< a meteorite's thud
+    kDebris,                      ///< the debris that patters down round it
+    kZap,                         ///< the alien's warble
+    kMeteor,                      ///< the big meteor's rumble as it falls
+    kPlaceCount = kMeteor + 1
+  };
+  /// A sound source placed in the room: its place (a direction, spread and bass send), the smoothed
+  /// gains towards every speaker, and whether it is sounding.
+  struct Place {
+    SpatialVoice v;      ///< the gains and the bass send
+    Source src;          ///< where it should be
+    bool on = false;     ///< sounding: the gains are stepped every sample and the sound is added
+  };
+  /// Points a place at a direction and marks it as sounding (a place that was silent starts in
+  /// position instead of gliding in).
+  void aim(int id, const Source& src);
+  /// `src` as it is used in the current layout: a layout without a bass channel gets no bass send, because
+  /// the full-range speakers already play the whole sound (the spatializer's fold-in would double its bass).
+  Source forLayout(Source src) const {
+    if (layout_.lfeIndex() < 0) src.lfeSend = 0;
+    return src;
+  }
+  /// Steps the gains of every sounding place by one sample.
+  void stepPlaces();
+  /// The weight of place `id` in bed chain `chain`: its gain towards the chain's speaker, scaled so
+  /// that a source straight ahead in stereo is 1, the level the synth has always had for mono sounds
+  /// (the sum of the squares of the weights over all chains is 2 in any layout). 0 if it is off.
+  float weight(int id, int chain) const;
+  /// Adds the sounds placed into `room_`, times `scale`, to the chain bus `bus` and their bass send, times
+  /// `scale`, to `bassExtra_`; then clears the room.
+  void flushRoom(float bus[kMaxChannels], float scale);
+  /// The direction of a stage position: the screen edges are +-45 degrees, +-1.5 is 110 degrees, 0 to 1 high is 0 to 60 degrees up.
+  static Source stageSource(float x, float y, float spread, float lfeSend);
+  /// Aims the city's places at the emitters of `p` (called once per render block).
+  void aimCity(const AmbientParams& p);
+  /// Aims the mountains' places (the avalanche, the yeti and the whistle) once per render block.
+  void aimMountains(const AmbientParams& p);
+  /// Aims the placed sounds of the desert (the tornado, the sandworm, the helicopter) at their emitters.
+  void aimDesert(const AmbientParams& p);
+  /// Aims the placed sounds of the forest (the storm's rumble and the flood) at their emitters.
+  void aimForest(const AmbientParams& p);
+  /// Aims the placed sounds of the moon (the alien's warble while it sounds, the big meteor) at their emitters.
+  void aimMoon(const AmbientParams& p);
+  /// Aims the placed sounds of the aquarium (the kraken's growl, the submarine, the whale while it sings) at their emitters.
+  void aimAquarium(const AmbientParams& p);
+
+  /// The random generator of bed chain `chain`: chains 0 and 1 (the stereo pair) draw from the shared
+  /// generator, as the synth always has; the others have their own, so that the stereo sound and
+  /// the timing of events are untouched by the layout.
+  Rng& chainRng(int chain) { return chain < 2 ? rng_ : bedRng_[chain]; }
+  /// True if bed chain `chain` is audible in the scene `kind` (its level there is not zero).
+  bool live(AmbientKind kind, int chain) const { return (liveMask_[static_cast<int>(kind)] >> chain) & 1u; }
+
+  /// Where an output channel gets its sound from: a bed chain (0 up to kMaxChannels - 1) or one of these.
+  enum Feed : int8_t {
+    kSilent = -1,  ///< nothing
+    kBoth = -2,    ///< the mean of chains 0 and 1 (a layout with a single speaker)
+    kBass = -3     ///< the low-frequency channel: the low-passed sum of all chains
+  };
+
+  Layout layout_;                               ///< the speakers to render for
+  int8_t feed_[kMaxChannels];                   ///< what each output channel plays (a Feed or a chain index)
+  int speakerOf_[kMaxChannels];                 ///< the output channel that each bed chain plays on (-1 if none)
+  Place place_[kPlaceCount];                    ///< the placed sources
+  float room_[kMaxChannels] = {};               ///< what the placed sounds add in this sample, by output channel
+  float voiceOut_[kMaxChannels] = {};           ///< the placed sounds of the scenes in this sample, by chain (scaled by the scene's presence)
+  float menaceBus_[kMaxChannels] = {};          ///< the placed sounds of the second catastrophe in this sample, by chain
+  float bassExtra_ = 0;                         ///< the bass sends of the placed sounds in this sample
+  Source squealAt_;                             ///< where the latest squeal event happened (the next squeal starts there)
+  Source crushAt_;                              ///< where the latest crush event happened (the next chewing starts there)
+  Source shotAt_;                               ///< where the latest shot event happened (the next shot starts there)
+  float stereoRef_ = 1.41421356f;               ///< what a placed mono sound is scaled by to keep the level of the old dual-mono sound (1 for a single speaker)
+  Source impactAt_;                             ///< where the latest meteorite struck (the next thud and its debris come from there)
+  Source flashAt_;                              ///< where the latest lightning flash struck (the next strike's crack comes from there)
+  Source stormAt_;                              ///< where the thundercloud is (the far claps come from there)
+  float rainShape_[kMaxChannels];               ///< how much of the forest's rain each chain plays: the rain is overhead
+  Source nibbleAt_;                             ///< where the latest nibble event happened (the next blip starts there)
+  bool nibbleFresh_ = false;                    ///< a nibble event came in that no blip has used yet (else a blip rises at a random place)
+  Rng fxRng_;                                   ///< the dice of the surround effects (where bubbles rise in a room): never the stereo sound's
+  /// One speaker's own tiny bubble: the glints of the water around the listener (surround layouts only).
+  struct Micro {
+    float phase = 0, inc = 0;  ///< phase and phase step of its tone
+    float env = 0, decay = 0;  ///< its level, and how fast it dies away
+  };
+  Micro micro_[kMaxChannels];                   ///< the tiny bubble of each chain
+  Rng microRng_[kMaxChannels];                  ///< when each chain's next tiny bubble comes
+  bool shotFresh_ = false;                      ///< a shot event came in that no shot has used yet (else a shot is placed by its random pan)
+  SoundEvent pending_[kMaxPendingEvents];       ///< events handed in since the last render call
+  int pendingCount_ = 0;                        ///< how many of them
+  int chains_ = 2;                              ///< how many bed chains run: one per directional speaker, at least two
+  Rng bedRng_[kMaxChannels];                    ///< generators of the chains from 2 up (0 and 1 use rng_)
+  float trim_[kAmbientKinds][kMaxChannels];     ///< level of each chain in each scene (1 for the stereo pair)
+  float bedGain_[kAmbientKinds][kMaxChannels];  ///< trim_ with the slow drift applied
+  uint32_t liveMask_[kAmbientKinds] = {};       ///< bit c set: chain c is audible in the scene
+  float driftDepth_[kAmbientKinds] = {};        ///< how far the chains of a scene drift in level (0 to 1)
+  unsigned driftTick_ = 0;                      ///< counts samples, to update the drift every few
+  float bassLow_[2] = {};                       ///< the two low-pass stages of the bass channel
+  float bassK_ = 0;                             ///< their coefficient
+  double padCos_[kMaxChannels] = {}, padSin_[kMaxChannels] = {};  ///< phase offset of each chain's moon pad, as cosine and sine
+  float routeGain_[kMaxChannels] = {};          ///< smoothed gain of each output channel
+  float routeTarget_[kMaxChannels] = {};        ///< gain each output channel glides to (1 or 0)
   int rate_;
   float noiseScale_;  ///< keeps the noise density per Hz the same at every sample rate
   Rng rng_;
@@ -126,12 +299,12 @@ class Ambience {
   float mix_[kAmbientKinds] = {};  ///< how present each kind of scene is; they crossfade
   float rain_ = 0, night_ = 0, volume_ = 0;  ///< smoothed parameters
   float gust_ = 0;  ///< current gust strength, 0 to 1, shared by the wind-like sounds
-  float windLow_[2][2] = {};  ///< two low-pass stages of the wind, per channel
+  float windLow_[kMaxChannels][2] = {};  ///< two low-pass stages of the wind, per channel
   double gustPhaseA_ = 0, gustPhaseB_ = 0;  ///< phases of the two slow gust swells (they speed up with rain)
   float wander_ = 0;          ///< slow random drift that keeps gusts irregular
-  float rainLow_[2] = {};
-  float snapLow_[2] = {}, snapBand_[2] = {};  ///< resonator that the crack's clicks ring, per channel
-  float crackLow_[2] = {}, rumbleLow_[2][2] = {};  ///< thunder filter state, per channel
+  float rainLow_[kMaxChannels] = {};
+  float snapLow_[kMaxChannels] = {}, snapBand_[kMaxChannels] = {};  ///< resonator that the crack's clicks ring, per channel
+  float crackLow_[kMaxChannels] = {}, rumbleLow_[kMaxChannels][2] = {};  ///< thunder filter state, per channel
   Thunder thunder_[3];                              ///< claps under way or waiting (start 0 = free)
   float storm_ = 0, roll_ = 0;  ///< smoothed storm proximity; slow random roll of the distant rumble
   double nextFarClap_ = 0;      ///< when the next far-off clap comes (0 = none planned)
@@ -146,8 +319,8 @@ class Ambience {
   Bubble bubbles_[10];
   float lowHum_, lowMuffle_, lowDeep_;              ///< aquarium filter coefficients
   double nextBubble_ = 0;                           ///< when the next random bubble rises
-  float waterLow_[2][2] = {}, muffleLow_[2] = {};   ///< the deep hum and the muffled flow, per ear
-  float deepLow_[2][2] = {};                        ///< the growl of something huge, per ear
+  float waterLow_[kMaxChannels][2] = {}, muffleLow_[kMaxChannels] = {};   ///< the deep hum and the muffled flow, per ear
+  float deepLow_[kMaxChannels][2] = {};                        ///< the growl of something huge, per ear
   float whale_ = 0;                                 ///< smoothed whale proximity
   double nextSong_ = 0;                             ///< when the whale sings next (0 = not planned)
   /// A whale phrase: a long, gliding moan with a faint overtone.
@@ -159,9 +332,9 @@ class Ambience {
   unsigned seenNibbles_ = 0;
   bool nibblesSynced_ = false;
 
-  float desertLow_[2][2] = {};  ///< two low-pass stages of the desert wind, per ear
-  float sandLow_[2][2] = {};    ///< band limits of the hiss of blown sand (low cut, high cut), per ear
-  float tornadoLow_[2][2] = {}; ///< the roar of a tornado, per ear
+  float desertLow_[kMaxChannels][2] = {};  ///< two low-pass stages of the desert wind, per ear
+  float sandLow_[kMaxChannels][2] = {};    ///< band limits of the hiss of blown sand (low cut, high cut), per ear
+  float tornadoLow_[kMaxChannels][2] = {}; ///< the roar of a tornado, per ear
   float tornado_ = 0;           ///< smoothed tornado proximity
   double tornadoPhase_ = 0;     ///< phase of the roar's rotation
   float lowSandCut_, lowSandTop_, lowTornado_;  ///< desert filter coefficients
@@ -174,15 +347,15 @@ class Ambience {
   Impact impacts_[3];
   double zapStart_ = 0;         ///< when the alien's warble began (0 = none yet)
   double zapPhase_ = 0;         ///< phase of the warble
-  float moonLow_[2][2] = {};    ///< the dull rumble of an impact, per ear
-  float debrisBand_[2] = {}, debrisLow_[2] = {};  ///< resonator that rings the pattering debris, per ear
+  float moonLow_[kMaxChannels][2] = {};    ///< the dull rumble of an impact, per ear
+  float debrisBand_[kMaxChannels] = {}, debrisLow_[kMaxChannels] = {};  ///< resonator that rings the pattering debris, per ear
   float lowMoon_;               ///< moon filter coefficient
 
-  float mountLow_[2][2] = {};   ///< two low-pass stages of the thin mountain wind, per ear
-  float iceLow_[2] = {};        ///< low end of the hiss of ice crystals, per ear
-  float streamLow_[2][2] = {};  ///< band limits of the stream (high cut, low cut), per ear
-  float slideLow_[2][2] = {};   ///< the deep rumble of an avalanche, per ear
-  float slideMid_[2] = {};      ///< the roar and crackle of tumbling snow and rock, per ear
+  float mountLow_[kMaxChannels][2] = {};   ///< two low-pass stages of the thin mountain wind, per ear
+  float iceLow_[kMaxChannels] = {};        ///< low end of the hiss of ice crystals, per ear
+  float streamLow_[kMaxChannels][2] = {};  ///< band limits of the stream (high cut, low cut), per ear
+  float slideLow_[kMaxChannels][2] = {};   ///< the deep rumble of an avalanche, per ear
+  float slideMid_[kMaxChannels] = {};      ///< the roar and crackle of tumbling snow and rock, per ear
   float avalanche_ = 0;         ///< smoothed avalanche level
   double whistlePhase_ = 0;     ///< phase of the whistle of an icy wind
   float crackLowAv_[2] = {}, crackBandAv_[2] = {};  ///< resonator that the clicks of tumbling rock ring, per ear
@@ -215,7 +388,7 @@ class Ambience {
     float bite[kBites] = {}, force[kBites] = {};
   };
   Crunch crunches_[4];
-  float crunchLow_[2][2] = {};        ///< two low-pass stages of the crunch, per ear
+  float crunchLow_[kMaxChannels][2] = {};  ///< two low-pass stages of the crunch, per chain
   float lowCrunch_;                   ///< filter coefficient of the crunch
   /// A muffled gulp of the kraken swallowing something: two glugs in a row.
   struct Gulp {
@@ -236,7 +409,7 @@ class Ambience {
     bool used = false;
   };
   Squeal squealVoices_[3];
-  float squealLow_[2] = {};           ///< two low-pass stages that muffle the squeal
+  float squealLow_[3][2] = {};        ///< two low-pass stages that muffle each squeal
   float lowSqueal_;                   ///< filter coefficient of the squeal
   unsigned seenSqueals_ = 0;
   bool squealsSynced_ = false;
@@ -247,9 +420,9 @@ class Ambience {
   };
   Pass passes_[4];
   double nextPass_ = 0;             ///< when the next car passes (0 = not planned)
-  float carLow_[2][2] = {};         ///< traffic rumble, two low-pass stages per ear
-  float carMid_[2][2] = {};         ///< the hiss of tyres: band limits per ear
-  float engineLow_[2] = {};         ///< low-pass over the passing engines, per ear
+  float carLow_[kMaxChannels][2] = {};         ///< traffic rumble, two low-pass stages per ear
+  float carMid_[kMaxChannels][2] = {};         ///< the hiss of tyres: band limits per ear
+  float engineLow_[4] = {};         ///< low-pass over each passing engine
   float lowCar_, lowCarMid_, lowCarTop_, lowEngine_;  ///< city filter coefficients
   /// A car horn: one or two honks.
   struct Honk {
@@ -259,7 +432,7 @@ class Ambience {
   };
   Honk honks_[3];
   double nextHonk_ = 0;             ///< when the next horn sounds (0 = not planned)
-  float hornLow_[2] = {};           ///< takes the edge off the horns, per ear
+  float hornLow_ = 0;              ///< takes the edge off the horns
   float lowHorn_;                   ///< filter coefficient of the horns
   float sirenNear_ = 0, sirenFreq_ = 700;  ///< smoothed siren proximity, and the pitch it glides to
   double sirenPhase_ = 0;
@@ -267,20 +440,23 @@ class Ambience {
   double wailPhase_ = 0;            ///< phase of the wail's tone
   float trainNear_ = 0, planeNear_ = 0, fireNear_ = 0;  ///< smoothed proximity of train and plane, fire level
   double trainClock_ = 0;           ///< seconds into the current "klack-klack" of the wheels
+  float trainMove_ = 1, trainBrake_ = 0, trainHiss_ = 0;  ///< smoothed motion, braking and air hiss of the train
+  double trainSquealPhase_ = 0;     ///< phase of the brakes' squeal
+  float trainHissLow_[kMaxChannels] = {};  ///< low-pass state that is taken off the noise to leave the hiss, per chain
   static constexpr double kKlackPeriod = 0.64;  ///< seconds from one "klack-klack" to the next
   double trainHornStart_ = -10, trainHornPhase_ = 0;  ///< the train's horn
   bool trainHorned_ = false;        ///< this train has sounded its horn already
-  float trainLow_[2][2] = {}, trainBand_[2][2] = {};  ///< rumble and clatter filters, per ear
-  float fireLow_[2][2] = {}, fireCrack_[2] = {}, planeLow_[2][2] = {};  ///< fire and jet filters
+  float trainLow_[kMaxChannels][2] = {}, trainBand_[kMaxChannels][2] = {};  ///< rumble and clatter filters, per chain
+  float fireLow_[kMaxChannels][2] = {}, fireCrack_ = 0, planeLow_[kMaxChannels][2] = {};  ///< fire and jet filters
   float lowTrain_, lowTrainBand_, lowKlack_, lowFire_, lowJet_;  ///< their coefficients
   float menace_ = 0;                ///< smoothed strength of the second catastrophe
   float flames_ = 0, wingedNear_ = 0;  ///< smoothed strength of the fire streams, and proximity of the winged monster
-  float flameLo_[2] = {}, flameHi_[2] = {};  ///< the two low-pass stages whose difference is the roar of fire, per ear
+  float flameLo_[kMaxChannels] = {}, flameHi_[kMaxChannels] = {};  ///< the two low-pass stages whose difference is the roar of fire, per ear
   float lowFlameTop_, lowFlameBottom_;       ///< their coefficients
   float flameWander_ = 0;                    ///< slow, uneven swelling of the roar
   double menacePhase_[2] = {};      ///< phases of its tones (the roar, the whine)
-  float menaceLow_[2][2] = {};      ///< low-pass stages of its noise, per ear
-  float menaceHigh_[2] = {};        ///< what the hiss and the rush take away, per ear
+  float menaceLow_[kMaxChannels][2] = {};      ///< low-pass stages of its noise, per ear
+  float menaceHigh_[kMaxChannels] = {};        ///< what the hiss and the rush take away, per ear
   float lowHiss_, lowThump_;        ///< coefficients of the hiss and of the low stages
   float lowFlood_, lowFloodTop_;    ///< coefficients of the flood's rush
   float lowChop_;                   ///< coefficient of the rotor's chop

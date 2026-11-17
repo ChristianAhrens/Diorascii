@@ -23,11 +23,15 @@ the changelog. Severity: **H** wrong or risky now, **M** should be decided befor
 | F-15 | L | No sanitizer, lint or `build.ps1` evidence in CI | todo |
 | F-16 | L | Documentation drift risks | todo |
 | F-18 | M | Unverified art and sound of the 2026-11-09 work | open |
-| F-19 | M | Audio parameters are copied by hand in two backends | open |
+| F-19 | M | Audio parameters are copied by hand in two backends | resolved 2026-11-14: one seqlock copy of the whole struct (plan phase 4) |
 | F-20 | L | Real-time mode: time zones, DST, tvOS | open |
 | F-21 | L | More scene logic in the generic core; fragile fixed-seed tests | open |
 | F-22 | M | The City scene was never heard by the assistant, only seen in recordings; page and README now show it | open |
 | F-23 | M | The second catastrophes: unseen, unheard; monster names and likeness; simplifications | open |
+| F-24 | M | Spatial audio phase-0 spike: first miniaudio facts; hardware still unmeasured | open |
+| F-25 | M | The forest's sound chain ran in every scene; per-speaker beds would multiply it | resolved 2026-11-13: gated (owner said yes) |
+| F-26 | H | Multichannel sound: everything measured, nothing heard in a room; the Apple backend only on macOS and in the tvOS simulator | open |
+| F-27 | M | The user manual and the Linux arm64 packages are unverified in CI and in a browser | open |
 
 ## F-01 Attribution rule vs. harness default (H)
 The owner's rule is no `Co-Authored-By`/"Generated with" lines. The original session stored it as
@@ -194,6 +198,8 @@ sun and moon in each scene; the larger clouds. Tunables are single values: `stri
 `strike-lashes`, `lash-color`, `mouth-row` in the sprites; gains and filters in `src/core/ambience.cpp`.
 
 ## F-19 Audio parameters are copied by hand in two backends (M)
+**Resolved 2026-11-14** (phase 4 of the spatial-audio plan): both backends now hold a `Seqlock<AmbientParams>` and copy the whole struct; the per-field atomics and both field lists are gone, and a test fills every byte of the struct with its own value
+and checks it arrives. The `audio_apple.mm` change was **not compiled** (no Apple toolchain here). Original finding:
 `src/audio/audio.cpp` and `audio_apple.mm` each copy every `AmbientParams` field into atomics and back.
 A new field that is forgotten in either backend is silent in the real program while the synthesis tests
 pass; this happened on 2026-11-09 (sandworm, crush and squeal sounds). Noted in `ambience.h` and
@@ -240,3 +246,71 @@ engine; the winged monster only dies, there is no wreck. (6) A screen under 28 r
 cancels the monster fight silently (no room); the yeti is 17 rows tall, so it fills most of a 24-row screen.
 (7) `World::clashStep`, `maulStep` and the others are special-purpose code in the generic core (adds to F-08, F-21).
 Fixed-seed tests of the first catastrophes now call `triggerRare(RarePick::Common)`.
+
+## F-24 Spatial audio, phase-0 spike (M)
+Added 2026-11-13. A throwaway program (not committed; it lived in the assistant's scratchpad) queried and opened miniaudio
+devices to replace some **[verify]** marks in `docs/ai/spatial-audio-plan.md`. **Measured** on Linux (a ThinkPad with
+PipeWire, reached through miniaudio's PulseAudio backend), one playback device, native format 2 channels at 48 kHz:
+(1) `channels = 0` opens with the native 2 channels and the map FL FR. (2) The same device also opened with 6, 8, 12 and 16
+channels (the sound server remaps), so **a successful open does not show that the speakers exist**; `auto` must start from
+the native count. (3) miniaudio's default maps above 8 channels are 7.1 plus `AUX_0..` with **no height positions**; an
+explicit 7.1.4 `pChannelMap` with `TOP_FRONT_*` and `TOP_BACK_*` was accepted and reported back unchanged. (4) By reading
+the header: miniaudio has **no wide pair and no top-middle pair**, only `TOP_CENTER` and `AUX` channels, so Lw/Rw and
+Ltm/Rtm (needed for 9.1.4, 9.1.6, 5.1.2, 7.1.2) can only be routed as `AUX`. The plan (section 5.2) was corrected accordingly.
+**Not verified:** anything on CoreAudio, WASAPI or ALSA; the HDMI outputs (they were not listed as separate devices
+by this PulseAudio setup); any real surround or Atmos-capable device; whether `channels = 0` means "native" on every
+backend; how drivers route `AUX` channels; all of the Apple side (tvOS, AirPods), which is still the gate of phase 0. **Heard by the owner (2026-11-13, same stereo device):** `identify` played left, right, left (the expected order; the 2.2 s run
+wraps the cycle) and `sweep` moved from left to right, so the stereo channel order and the map-based positions work
+there; the assistant could not hear either. Not tested: any device with more than 2 real speakers, so side, rear,
+height and LFE routing remain unheard. **Phase 7a (2026-11-14):** `AudioOutput::start(choice)` now opens with 0 channels, negotiates and (for a named layout) reopens with our own map; on this stereo PulseAudio device `auto` gives 2.0 and every explicit layout opens and is labelled downmixed, as measured above. Still unmeasured: any real multichannel device. **Next:** run the spike on the Mac and on the Apple TV
+and receiver setups and record the native formats here.
+
+## F-26 Multichannel sound: what is unverified (H)
+Phases 3 to 8 of `spatial-audio-plan.md` are implemented and tested by measurement (levels, directions, determinism, golden stereo values, mutations), on one Linux machine with a stereo PulseAudio device. **Not verified, needs the owner**: (1) how any of it sounds, above all the placed sounds in a real room (strike, siren, flood, meteor), the rising bubble strings, the tiny bubbles and the rain overhead, whose levels were chosen by measurement and are single constants in `src/core/ambience.cpp`; (2) any device with more than two real speakers, on any backend (CoreAudio, WASAPI, ALSA, HDMI), route changes, and whether drivers route `AUX` channels; (3) **the Apple backend (`src/audio/audio_apple.mm`) was written without a compiler**: the Atmos layout tag names, the channel order of each tag, the audio session calls, the mixer path and whether the OS spatializes the stream for AirPods; (4) the tvOS view controller's edits (`takeLayoutChange`, `soundLayout`, `update`); (5) the macOS and Windows builds of the whole history (macOS: see the update below; Windows: only the CI). **Next:** build on macOS and Windows, run `scripts/bench-audio.sh`, listen with a 5.1 or better system and with headphones, and compile the tvOS target (simulator first, then the Apple TV with a receiver), then record the results here.
+
+**Update 2026-11-17: first run on macOS (release build, 16-channel loopback device "BlackHole 16ch", set to 7.1.4 in Audio MIDI Setup).** Measured by recording the device's loopback input and taking the RMS of each channel, not by listening. The app is stable (menu, scene switches, actions, the live Speakers entry, a clean quit). **Found: the heights of 7.1.4 did not reach the device.** CoreAudio does report the layout (`kAudioDevicePropertyPreferredChannelLayout`, output scope: 12 labelled channels L R C LFE LeftSurround RightSurround RearSurroundLeft RearSurroundRight LeftTopFront RightTopFront LeftTopRear RightTopRear, then four "unknown"; Apple Music Atmos plays all twelve), but miniaudio's CoreAudio backend asks the AudioUnit for `kAudioUnitProperty_AudioChannelLayout` on the input scope, which a playback device does not have (error -10879 in a probe; not confirmed inside miniaudio's own setup), and then assumes a default map (7.1 and eight AUX channels). So `auto` showed "custom map on 16 channels" with sound on channels 1 to 8 only, and an explicit 7.1.4 asked the device for `TOP_*` positions that the assumed map lacks, so channels 9 to 12 stayed silent. **Fixed:** `src/audio/coreaudio_layout.*` reads the device's own layout (labels, or the labels of a layout tag) and `positionForCoreAudioLabel()` (`core/negotiate.*`, tested) turns them into positions (`DevicePosition` gained the wide and top-middle pairs, which no library names); `DeviceReport::exact` marks such a map. `auto` now finds the named layout when the channels that have a position (unused ones are ignored, in the middle or at the end) are exactly those of a named layout, in any order, and then **routes** it (`Negotiation::routed`, `routeChannels()`): the device stays open as it is and layout channel `i` is written to the device channel of the same position, no remapping by the library. A named choice on an `exact` device that has a place for each of its channels is routed the same way. **Tested interactively on 2026-11-17** by setting the device to each layout in Audio MIDI Setup and recording the loopback (RMS per channel, forest at night; the menu text is what the app said):
+| device set to | what CoreAudio reports | auto | sound on channels (auto) |
+|---|---|---|---|
+| 9.1.6 | L R C LFE Ls Rs Lrs Rrs, Ltf Rtf Ltr Rtr, Lw Rw, Ltm Rtm (wides and top-middles last) | 9.1.6, routed through the permutation | 1 to 16 |
+| 7.1.4 | the 7.1.4 above, then four unused | 7.1.4 | 1 to 12 |
+| 5.1.2 | 5.1, six unused, the heights as top-middle on 13 and 14 | 5.1.2, routed across the gap | 1 to 6 and 13, 14 |
+| 7.1 (variant 1) | L R C LFE Ls Rs **Lc Rc** (label 7, 8 are left/right *centre*), eight unused | "custom map" (its own angles) | 1 to 8 |
+| 7.1 (variant 2) | 5.1, two unused, rear surrounds on **9 and 10** | 7.1, routed across the gap | 1 to 6 and 9, 10 |
+| 6.1 | 5.1 and a back-centre (9) on channel 7 | "custom map" | 1 to 7 |
+| 5.1 | 1 to 6, ten unused | 5.1 | 1 to 6 |
+| 2.0 | 1, 2, fourteen unused | 2.0 | 1, 2 |
+An explicit layout that the device has a place for plays on exactly the same channels as auto (explicit 7.1.4 on 7.1.4, 5.1.4 on 7.1.4: front, sides and heights, rear pair silent, 9.1.4 on 9.1.6: top-middles silent). **Resolved the same day (owner: yes):** a layout the device has no place for **steps down** to the richest layout it has, which is routed; the old path (the library mixing it into its assumed map) played on channels the device marks as unused and missed the real ones (7.1.4 on the 5.1 or 7.1 devices above played on channels 7 and 8, 5.1 and 7.1.4 on the 2.0 device on 3 to 8). Measured on the device set to 2.0: 5.1, 7.1.4 and 9.1.6 all give "2.0" (the menu shows `5.1 > 2.0`) with sound on channels 1 and 2 only. A device of one or two channels is left to the system (opened with the layout's map, mixed down, "(mixed down)"). The gaps in some of the maps above (unused channels between the speakers) come from the channel map Audio MIDI Setup defaults to for a channel count above what the layout needs; they are handled but not a design goal. **Still open:** (a) the reader and the routing are macOS-only, and only the default output device is read (the one miniaudio opens); (b) a layout given as a bitmap is not read (the library's assumed map is used); (c) nothing here says how it sounds, only levels per channel, and Windows and Linux are untouched (their maps stay the library's, `exact` is false); (d) the same gap affects any app built on miniaudio on macOS, which could be reported upstream (vendored version 0.11.21); (e) `a_seqlock_reader_never_sees_a_torn_value_while_the_writer_keeps_writing` (`reads > 100`) failed in about one of three full runs on this machine while a build ran next to it: the writer finished its 400000 writes in a few milliseconds before the reader thread was scheduled. **Fixed 2026-11-17**: every 2000 writes the writer waits (at most a second) until the reader has read something new; with the reader started 50 ms late the old test failed 5 of 6 runs, the new one 0 of 6 (checked in a standalone copy of the logic, not under real build load).
+
+**Update 2026-11-17 (later): macOS, tvOS and iOS play through `AVSampleBufferAudioRenderer`; the CoreAudio reader, the routing code and (briefly) an `AVAudioEngine` backend are gone.** What decided it, measured on a MacBook with AirPods Pro and a 16-channel loopback device: (1) the system's "3D audio" (Control Center, head tracking) is offered only for content that comes through `AVPlayerItem` or `AVSampleBufferAudioRenderer` (Apple's WWDC21 session names those two); a plain CoreAudio app (miniaudio) and an `AVAudioEngine` source tagged 7.1.4 with the mixer connected to the output both showed "3D unavailable" (the listener saw it, and the engine run was the probe, not the app); (2) a tagged 7.1.4 and a tagged 9.1.6 sample-buffer stream played through the renderer showed "3D audio available and active" and the 7.1.4 tone moved around the listener (9.1.6: the listener confirmed the indicator, not the placement of the last four channels), and the app's own forest as 7.1.4 did the same. On speaker devices the renderer behaves exactly as the engine's mixer did: with each source channel at its own amplitude on the loopback device set to 9.1.6, 7.1.4 and 5.1, a 5.1, 7.1.4 or 9.1.6 source lands on the right channels by label (including the wides and top-middles, last on the 9.1.6 device), a richer source is mixed into the channels the device has, and the others stay silent. The app plays a layout the device has as it is, steps down for one it has not, and on a one- or two-channel route that spatializes (Bluetooth on macOS: the SDK has no query there; `spatialAudioEnabled` on tvOS and iOS) renders 7.1.4 for `auto`. Of the open items above, (a), (b) and (d) no longer apply to Apple platforms; (c) still does for Windows and Linux. **Not verified:** how any of it sounds; the app on the speaker devices with the final backend beyond the numbers above; the delay of sounds that an action starts (designed at 0.2 to 0.3 s, not measured); whether the AirPods spatializer takes 9.1.6 as 9.1.6 or folds it; tvOS and iOS hardware (the simulator's route is stereo, so `spatialAudioEnabled` and an HDMI receiver are untried); a Bluetooth speaker or other Bluetooth device on macOS; changing the device while running; head tracking and the personalized profile (needs the entitlements, not used).
+
+**Update 2026-11-17 (last): the menu's *Sound* entry is off / stereo / immersive (default immersive); the *Speakers* entry is gone.** The small print says what plays, with `(spatialized)` for AirPods. Tested in `Session` and negotiation tests; seen in the app on a speaker device only (menu text with the BlackHole device); on AirPods Pro (macOS) the small print shows `Output: 7.1.4 on 2 channels (spatialized)` in immersive and the system reports 3D audio available and active; in stereo it shows `Output: 2.0 on 2 channels` and the system reports 3D audio unavailable (both reported by the owner from the system's menu, not heard by me).
+
+## F-25 The forest chain runs in every scene (M)
+Added 2026-11-13, from the profile in `spatial-audio-plan.md` section 2.4. In `Ambience::render`, the forest's wind (two noise-driven filters per ear), rain, thunder
+(when active), crickets (three `sin`-heavy oscillators), the gust and wander state, and `thunderLevels()` run **for every scene**; the result is multiplied by
+`mix_[Forest]`, which is 0 except in the forest. The other scenes' own functions are skipped below a presence of 0.001, the forest chain is not. Measured with `perf`
+(i3-4010U, all sounds active): `render()` itself takes 49 % of the time in the aquarium, 42 % in the desert, 34 % on the moon, 27 % in the mountains and 24 % in the city (the forest: 96 %);
+part of that is legitimately shared (the mix, `softClip`, event handling), but the forest chain is a large part. With one chain per speaker it would be multiplied by up to 7.5.
+**Resolved 2026-11-13 (owner: yes, gate it).** `Ambience::render` now makes the forest's wind, rain, thunder and crickets only while its presence is above 0.001, like the other
+scenes. The gust and wander state keep running (the desert and mountains use the gust), and a silent forest **still advances the random generator exactly as before** (two draws per
+channel per sample, a third while a clap rings), so the noise and events of every other scene are unchanged. Result: ten of the twelve golden cases stay bit-identical (`cmp`); the two
+forest cases differ by at most 1.3e-6, only in the first 10 ms of the fade-in (the filters start cold when the gate opens). In a forest storm that is left while thunder rumbles
+and re-entered 15 s later, the largest difference to the old synth is 4.5e-4 (-67 dBFS) at the moment the gate closes (about 4 s after the scene change, when the presence falls
+below 0.001; the same kind of step the other scenes have at their own gates), then it decays; a recorded golden case from the old synth pins the scene-change scenario. CPU on the
+development machine (release preset, % of one core, 2.0, before / after): aquarium 3.65 / 2.43, desert 4.96 / 3.87, moon 4.20 / 3.05, mountains 6.75 / 5.61, city 8.85 / 7.64, forest 2.43 / 2.51 (unchanged).
+
+## F-27 User manual and Linux arm64 (2026-11-14)
+
+Added on `feature/UserManual`. **Not verified:** (1) the `ubuntu-24.04-arm` runner and the arm64 builds, `.deb`/`.rpm` and
+tests have never run (the first push of the workflow is the proof; the manual's dump check deliberately runs on x64
+only). (2) The generated pages were built locally with pandoc 3.9 and, after the rebase onto `develop` (2026-11-17), with
+pandoc 3.14 on macOS (5 pages, no broken link; `manual-dumps.sh --check` passes there with the dev binary, so the dump
+output is the same on macOS arm64 and the Linux box), but never opened in a browser, so the layout (sidebar, light/dark,
+phone width) is unseen. (3) `docs.yml` was not run; it installs pandoc from apt (the
+version of the runner image). (4) The release workflow's last step (`gh workflow run docs.yml --ref main`) needs the
+`actions: write` permission and a `workflow_dispatch` trigger, which `docs.yml` has; never run. (5) The manual's claims about
+the menu keys, the sound modes and the per-platform sound table (written from the README and the source; only macOS with AirPods and a loopback device was checked), `--fps`, the Windows/macOS terminals and the troubleshooting advice were written from
+the README and the source, not tried on each platform. (6) The "pictures" are plain-text `--dump` output, no screenshots
+of the menu, the info line, the styles or the Linux console; the owner may replace them. (7) Until a release with the
+new asset names is tagged, the manual's Linux links for 1.3.0 point at `...-Linux-x64.*` files that only exist from the
+next release. (8) The README Usage section and the manual overlap on purpose; they can drift (adds to F-16).

@@ -255,7 +255,7 @@ void seekFood(Entity& e, World& w, double dt) {
   const double dx = f->x - mouthX, dy = f->y - mouthY;
   if (std::fabs(dx) <= 1.5 && std::fabs(dy) <= 1.0) {
     f->dead = true;
-    w.noteFoodEaten();
+    w.noteFoodEaten(mouthX, mouthY, e.z);
     return;
   }
   if (std::fabs(dx) > 1.5 && (dx > 0) != right && e.vx != 0) {
@@ -309,10 +309,10 @@ void catastrophe(Entity& e, World& w, double dt) {
     // A cell of leeway each way, so that a victim walking towards it is not stepped over.
     const size_t taken = w.wipeOut(e.wipes, e.strikeEffect, &e, std::min(e.lastPoint, now) - 1, std::max(e.lastPoint, now) + 1,
                                    devour);
-    if (devour) w.noteCrushed(taken);
+    if (devour) w.noteCrushed(taken, now, e.y + e.height() / 2.0, e.z);
     e.lastPoint = now;
     if (taken > 0) {
-      if (e.flashTime > 0) w.flash(e.flashTime);
+      if (e.flashTime > 0) w.flash(e.flashTime, now);
       e.struck = true;
     }
     return;
@@ -330,7 +330,7 @@ void catastrophe(Entity& e, World& w, double dt) {
     }
   }
   w.wipeOut(e.wipes, e.strikeEffect, &e);
-  if (e.flashTime > 0) w.flash(e.flashTime);
+  if (e.flashTime > 0) w.flash(e.flashTime, middle);
 }
 
 /// Hunts the closest prey in sight: turns towards it, changes lane to line up with it and closes
@@ -430,6 +430,12 @@ void engine(Entity& e, World& w, double dt) { w.engineStep(e, dt); }
 /// A vehicle of the city: drives along the main road, may turn into a side street (see World::driveStep).
 void drive(Entity& e, World& w, double dt) { w.driveStep(e, dt); }
 
+/// A train: runs along the railway and stops at the station (see World::trainStep).
+void train(Entity& e, World& w, double dt) { w.trainStep(e, dt); }
+
+/// A passenger who has got off a train: walks to the station and leaves it by the stairs (see World::commuteStep).
+void commute(Entity& e, World& w, double dt) { w.commuteStep(e, dt); }
+
 /// A fire in the city: the skyscraper burns, then is renovated (see World::blazeStep).
 void blaze(Entity& e, World& w, double dt) { w.blazeStep(e, dt); }
 
@@ -463,7 +469,7 @@ BehaviorFn findBehavior(const std::string& name) {
       {"wander", wander}, {"hop", hop},                {"rain", rain},
       {"chase", chase},   {"twister", twister},        {"emit_dust", emitDust},
       {"catastrophe", catastrophe}, {"ledge", ledge},      {"soar", soar},
-      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine},
+      {"avalanche", avalanche}, {"blaze", blaze}, {"drive", drive}, {"engine", engine}, {"train", train}, {"commute", commute},
       {"leak", leak}, {"flood", flood}, {"poach", poach}, {"maul", maul}, {"clash", clash}, {"asteroid", asteroid}};
   auto it = table.find(name);
   return it == table.end() ? nullptr : it->second;
@@ -619,8 +625,10 @@ void World::populate() {
       else spawnCreature(sprite, true);
     }
   }
+  decorAnchor_ = {};
   for (const auto& d : scene_->decor) spawnDecor(d);
   flushIncoming();
+  if (scene_->city) placeCrossings();  // after the station: one of them lies at its foot
 }
 
 double World::habitatY(const Props& p, int spriteHeight) {
@@ -747,42 +755,88 @@ void World::spawnCreature(const std::shared_ptr<const Sprite>& sprite, bool init
 }
 
 void World::spawnDecor(const SceneDef::Decor& d) {
-  auto sprite = pack_->find(d.sprite);
+  if (d.perCols > 0) {  // as many as the width allows, each somewhere else
+    const double want = static_cast<double>(w_) / d.perCols;
+    int n = static_cast<int>(want);
+    if (rng_.chance(want - n)) ++n;
+    for (int i = 0; i < n; ++i) placeDecor(d);
+  } else {
+    placeDecor(d);
+  }
+}
+
+void World::placeDecor(const SceneDef::Decor& d, const DecorAnchor* fixed) {
+  if (d.chance < 1.0 && !rng_.chance(d.chance)) return;
+  // One of the sprites separated by `|` (trees of different sizes).
+  std::vector<std::string> names;
+  for (size_t from = 0; from <= d.sprite.size();) {
+    const size_t bar = std::min(d.sprite.find('|', from), d.sprite.size());
+    names.push_back(d.sprite.substr(from, bar - from));
+    from = bar + 1;
+  }
+  auto sprite = pack_->find(names[static_cast<size_t>(rng_.rangeInt(0, static_cast<int>(names.size()) - 1))]);
   if (!sprite) return;
   const Props& p = sprite->props();
-  if (p.str("habitat", "ground") == "rail" && railY_ < 0) return;  // no railway on this screen
+  const bool onRail = p.str("habitat", "ground") == "rail";
+  if (onRail && railY_ < 0) return;  // no railway on this screen
   auto e = std::make_unique<Entity>();
   e->sprite = sprite;
   applyProps(*e, p, rng_);
   e->z = static_cast<int>(p.range("depth", {20, 20}).first);
+  e->decor = true;
 
-  if (d.align == "left") e->x = d.margin;
-  else if (d.align == "right") e->x = w_ - e->width() - d.margin;
-  else if (d.align == "center") e->x = (w_ - e->width()) / 2 + d.margin;
-  else e->x = rng_.rangeInt(0, std::max(w_ - e->width(), 0));
-  // Things that stand on the sidewalk make room for the side streets: they move aside, or are left out.
-  if (!avenues_.empty() && e->grounded && p.str("habitat", "ground") == "ground") {
-    for (int pass = 0; pass < 4; ++pass) {
+  // Decorations in the far distance (the pyramids, z >= 30) are a backdrop: things may stand in front of them.
+  constexpr int kBackdropZ = 30;
+  const bool onSidewalk = !avenues_.empty() && e->grounded;
+  // Whether a column is free: not in a side street (a station's foot may not be either) and, for
+  // things that stand on the ground, not on top of another decoration of any size.
+  auto blocked = [&](double x) {
+    if (!avenues_.empty() && (onSidewalk || onRail)) {
       for (const Avenue& a : avenues_) {
-        const double lo = a.cx - a.halfW - 3, hi = a.cx + a.halfW + 3;
-        if (e->x + e->width() <= lo || e->x >= hi) continue;
-        const double left = lo - e->width(), right = hi;
-        const bool leftOk = left >= 0, rightOk = right + e->width() <= w_;
-        if (!leftOk && !rightOk) return;
-        e->x = (!rightOk || (leftOk && e->x - left < right - e->x)) ? left : right;
+        if (x + e->width() > a.cx - a.halfW - 3 && x < a.cx + a.halfW + 3) return true;
       }
     }
-    for (const Avenue& a : avenues_) {
-      if (e->x + e->width() > a.cx - a.halfW - 3 && e->x < a.cx + a.halfW + 3) return;  // still in the way
+    if (e->grounded && e->height() > 3) {
+      auto overlaps = [&](const std::unique_ptr<Entity>& o) {
+        return !o->dead && o->decor && o->grounded && o->height() > 3 && (o->z < kBackdropZ || e->z >= kBackdropZ) && x + e->width() > o->x - 1 && x < o->x + o->width() + 1;
+      };
+      if (std::any_of(entities_.begin(), entities_.end(), overlaps) || std::any_of(incoming_.begin(), incoming_.end(), overlaps)) return true;
     }
+    return false;
+  };
+  const DecorAnchor anchor = fixed ? *fixed : decorAnchor_;
+  const int span = std::max(w_ - e->width(), 0);
+  auto pick = [&]() {
+    double x;
+    if (d.align == "left") x = d.margin;
+    else if (d.align == "right") x = w_ - e->width() - d.margin;
+    else if (d.align == "center") x = (w_ - e->width()) / 2 + d.margin;
+    else if (d.align == "from-left" && anchor.valid) x = anchor.x + d.margin;
+    else if (d.align == "from-right" && anchor.valid) x = anchor.x + anchor.width + d.margin;
+    else if (d.align == "from-center" && anchor.valid) x = anchor.x + (anchor.width - e->width()) / 2.0 + d.margin;
+    else if (d.align.rfind("from-", 0) == 0) x = (w_ - e->width()) / 2 + d.margin;  // no anchor: the middle
+    else x = rng_.rangeInt(0, span);
+    if (d.jitter > 0) x += rng_.rangeInt(-d.jitter, d.jitter);
+    return std::clamp(x, 0.0, static_cast<double>(span));
+  };
+  // Several tries: a thing that finds no free place is left out (the station is the exception, it
+  // stays and the avenues are ignored once nothing else works).
+  bool placed = false;
+  for (int attempt = 0; attempt < 24 && !placed; ++attempt) {
+    e->x = pick();
+    placed = !blocked(e->x);
   }
+  if (!placed && !onRail) return;
+  if (!placed) e->x = pick();
 
   if (d.hasY) e->y = d.y >= 0 ? d.y : h_ + d.y;
   else if (p.str("habitat", "ground") == "sky") e->y = 1;
   else e->y = habitatY(p, e->height());
   e->anchorY = e->y;
   if (e->zone != Zone::None && d.align == "random" && !ridge_.empty()) placeInZone(*e, false, false, true);
-  e->restock = [d](World& w) { w.spawnDecor(d); };  // planted again after a catastrophe
+  if (d.anchor) decorAnchor_ = {true, e->x, e->width()};
+  // Planted again after a catastrophe, where the thing it is aligned to stood.
+  e->restock = [d, anchor](World& w) { w.placeDecor(d, &anchor); };
   spawn(std::move(e));
 }
 
@@ -874,9 +928,15 @@ void World::spawnRare(RarePick pick) {
     if (auto sprite = pack_->find(ev.sprite)) {
       spawnCreature(sprite, false, true);
       if (!incoming_.empty()) incoming_.back()->isRare = true;
+      ++raresStarted_;
     }
     return;
   }
+}
+
+bool World::rareActive() const {
+  const auto live = [](const auto& e) { return e->isRare && !e->dead; };
+  return std::any_of(entities_.begin(), entities_.end(), live) || std::any_of(incoming_.begin(), incoming_.end(), live);
 }
 
 bool World::triggerRare(RarePick pick) {
@@ -935,8 +995,7 @@ Entity* World::findEntity(uint64_t id) {
 
 bool World::lash(const Entity& a) {
   if (time_ < nextLash_ || a.strikeReach <= 0) return false;
-  int out = 0;
-  for (const Tongue& t : tongues_) out += t.attacker == a.id ? 1 : 0;
+  const auto out = std::count_if(tongues_.begin(), tongues_.end(), [&](const Tongue& t) { return t.attacker == a.id; });
   if (out >= a.strikeLashes) return false;
   const bool all = a.wipes == "life";
   const std::vector<std::string> names = all ? std::vector<std::string>{} : splitWs(a.wipes);
@@ -949,9 +1008,8 @@ bool World::lash(const Entity& a) {
     const Entity& o = *other;
     if (&o == &a || o.dead || o.isRare || isAsleep(o)) continue;
     if (!(all ? o.life : std::find(names.begin(), names.end(), o.sprite->name()) != names.end())) continue;
-    bool taken = false;  // another tongue is already after it
-    for (const Tongue& t : tongues_) taken |= t.victim == o.id;
-    if (taken) continue;
+    // another tongue is already after it
+    if (std::any_of(tongues_.begin(), tongues_.end(), [&](const Tongue& t) { return t.victim == o.id; })) continue;
     const double cx = o.x + o.width() / 2.0, cy = o.y + o.height() / 2.0;
     double d, baseX;
     if (a.strikeAround) {  // from the underside of the body, straight above the victim if it can
@@ -978,6 +1036,7 @@ bool World::lash(const Entity& a) {
     t.reach = 0.1;
     t.dur = 0.3;
     ++shots_;
+    emit(EventKind::Shot, bestX, baseY, a.z);  // from the muzzle
   }
   t.ox = bestX - a.x;
   t.x0 = bestX;
@@ -1020,7 +1079,7 @@ void World::stepTongues(double dt) {
       t.hit = true;
       if (alive && !t.harmless) {
         claim(*v, t.effect);
-        if (!t.shot) noteCrushed(1);
+        if (!t.shot) noteCrushed(1, v->x + v->width() / 2.0, v->y + v->height() / 2.0, v->z);
       }
     }
     if (t.age >= t.dur) {
@@ -1095,10 +1154,11 @@ double World::trafficLevel() const {
   return std::clamp(std::max({day, morning, evening}), 0.0, 1.0);
 }
 
-void World::flash(double seconds) {
+void World::flash(double seconds, double cx) {
   flashLen_ = seconds;
   flashElapsed_ = 0;
   ++flashCount_;
+  emit(EventKind::Flash, cx < -1e8 ? w_ / 2.0 : cx, 0, 0);  // the bolt comes down from the top of the sky
 }
 
 bool World::flashing() const {
@@ -1163,9 +1223,7 @@ int World::interact() {
 }
 
 size_t World::countSprite(const std::string& name) const {
-  size_t n = 0;
-  for (const auto& e : entities_) n += (!e->dead && e->sprite->name() == name) ? 1 : 0;
-  return n;
+  return static_cast<size_t>(std::count_if(entities_.begin(), entities_.end(), [&](const auto& e) { return !e->dead && e->sprite->name() == name; }));
 }
 
 void World::setPhase(double phase) {
@@ -1254,6 +1312,7 @@ double World::deepestCrater() const {
 
 void World::impactAt(double cx) {
   ++impacts_;
+  emit(EventKind::Impact, cx, seabedY_, 8);
   const int c = static_cast<int>(std::lround(cx));
   const int hw = craterHalfWidth();
   const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
@@ -1310,6 +1369,94 @@ double World::nearness(const std::string& key) const {
 
 double World::stormProximity() const { return nearness("gloom"); }
 
+void World::stagePoint(double cx, double cy, int z, float& x, float& y, float& depth) const {
+  const double half = std::max(w_ / 2.0, 1.0);
+  x = static_cast<float>(std::clamp((cx - w_ / 2.0) / half, -static_cast<double>(kStageReach), static_cast<double>(kStageReach)));
+  const double ground = std::max(seabedY_, 1);  // the first ground row: the horizon of the stage
+  y = static_cast<float>(std::clamp((ground - cy) / ground, 0.0, 1.0));
+  depth = static_cast<float>(std::clamp(static_cast<double>(z) / kStageDepthLayers, 0.0, 1.0));
+}
+
+Emitter World::emitter(EmitterKey key) const {
+  if (key == EmitterKey::Avalanche) {  // the head of the avalanche, which moves down the slope
+    Emitter out;
+    out.level = static_cast<float>(slideLevel_);
+    if (slideLevel_ > 0) stagePoint(slideX_, slideY_, 12, out.x, out.y, out.depth);
+    return out;
+  }
+  if (key == EmitterKey::Flood) {  // the front of the wall of water, which runs in from one side
+    Emitter out;
+    out.level = static_cast<float>(floodLevel_);
+    if (floodLevel_ > 0) {  // (the level lingers for the last step after the water is gone)
+      stagePoint(floodFront(), std::max(seabedY_, 1), 8, out.x, out.y, out.depth);  // on the ground
+    }
+    return out;
+  }
+  if (key == EmitterKey::Meteor) {  // the big meteor: its level is how far it has fallen, its place the asteroid's sprite
+    Emitter out;
+    out.level = static_cast<float>(asteroidLevel_);
+    if (asteroidLevel_ > 0) {
+      for (const auto& e : entities_) {
+        if (e->dead || e->sprite->name() != "asteroid") continue;
+        stagePoint(e->x + e->width() / 2.0, e->y + e->height() / 2.0, e->z, out.x, out.y, out.depth);
+        break;
+      }
+    }
+    return out;
+  }
+  if (key == EmitterKey::Fire) {  // the building that burns hardest
+    Emitter out;
+    out.level = static_cast<float>(fireLevel_);
+    if (fireLevel_ > 0) stagePoint(fireX_, fireY_, fireZ_, out.x, out.y, out.depth);
+    return out;
+  }
+  if (key == EmitterKey::Flames) {  // the middle of the streams of fire, held by the monsters
+    Emitter out;
+    out.level = static_cast<float>(flameLevel());
+    double sx = 0, sy = 0;
+    int n = 0;
+    for (const Tongue& t : tongues_) {
+      if (!t.fire) continue;
+      sx += (t.x0 + t.x1) / 2.0;
+      sy += (t.y0 + t.y1) / 2.0;
+      ++n;
+    }
+    if (n > 0) stagePoint(sx / n, sy / n, 8, out.x, out.y, out.depth);  // the monsters fight in the middle layers
+    return out;
+  }
+  return emitter(std::string(emitterTag(key)));
+}
+
+Emitter World::emitter(const std::string& key) const {
+  Emitter out;
+  const Entity* best = nullptr;
+  double bestLevel = 0;
+  for (const auto& e : entities_) {
+    if (e->dead || (e->tag != key && e->sprite->name() != key)) continue;
+    const double cx = e->x + e->width() / 2.0;
+    const double reach = w_ / 2.0 + e->width() / 2.0 + w_ * 0.25;  // starts before it is in view
+    const double level = std::clamp(1.0 - std::fabs(cx - w_ / 2.0) / reach, 0.0, 1.0);
+    if (level > bestLevel) { bestLevel = level; best = e.get(); }
+  }
+  out.level = static_cast<float>(bestLevel);
+  if (best) stagePoint(best->x + best->width() / 2.0, best->y + best->height() / 2.0, best->z, out.x, out.y, out.depth);
+  return out;
+}
+
+void World::emit(EventKind kind, double cx, double cy, int z, float strength) {
+  SoundEvent e;
+  e.kind = kind;
+  e.strength = strength;
+  stagePoint(cx, cy, z, e.x, e.y, e.depth);
+  if (events_.size() >= kMaxPendingEvents) events_.erase(events_.begin());
+  events_.push_back(e);
+}
+
+void World::takeEvents(std::vector<SoundEvent>& out) {
+  out.insert(out.end(), events_.begin(), events_.end());
+  events_.clear();
+}
+
 Entity* World::nearest(const std::string& tag, double x, double y, double maxDist) {
   Entity* best = nullptr;
   double bestD = maxDist * maxDist;
@@ -1340,7 +1487,10 @@ void World::step(double dt) {
     rainLeft_ = std::max(0.0, rainLeft_ - dt);
     spawnWeather(dt);
   }
-  if (scene_->dayNight && timeMode_ == TimeMode::Cycle) phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
+  if (scene_->dayNight && timeMode_ == TimeMode::Cycle) {
+    phase_ = std::fmod(phase_ + dt / scene_->dayLength, 1.0);
+    daysElapsed_ += dt / scene_->dayLength;
+  }
   const double cloudTarget =
       (rainLeft_ > 0 || countTag("tornado") > 0 || countTag("gloom") > 0) ? 1.0 : 0.0;
   flashElapsed_ += dt;
@@ -1620,6 +1770,8 @@ void World::slideStep(Entity& e, double dt) {
     slideLevel_ = 0.15 + 0.35 * e.age / kWarn;
     e.x = slide_.x0 - e.width() / 2.0;
     e.y = slide_.y0 - e.height() / 2.0;
+    slideX_ = slide_.x0;
+    slideY_ = slide_.y0;
     slide_.puffs += 6 * dt;
     for (; slide_.puffs >= 1; slide_.puffs -= 1) {
       spawnEffect("snowpuff", slide_.x0 + rng_.range(-3, 3), slide_.y0 + rng_.range(0, 2), 1,
@@ -1631,6 +1783,8 @@ void World::slideStep(Entity& e, double dt) {
     const double speed = std::min(3.5 + 2.5 * (e.age - kWarn), 11.0);
     slide_.head = std::min(bottom, slide_.head + speed * dt);
     const double cx = middle(slide_.head), hw = halfWidth(slide_.head);
+    slideX_ = cx;
+    slideY_ = slide_.head;
     // The swath: every row the head has passed is covered with snow and rubble.
     for (int row = static_cast<int>(std::floor(slide_.lastHead)); row <= static_cast<int>(std::floor(slide_.head)); ++row) {
       if (row < 0 || row >= h_) continue;
@@ -1647,7 +1801,10 @@ void World::slideStep(Entity& e, double dt) {
       if (o.dead || o.isRare || !o.destructible || isAirZone(o.zone)) continue;
       if (!o.life && o.zone == Zone::None && !o.grounded) continue;  // effects
       if (o.x + o.width() <= x0 || o.x >= x1 || o.y + o.height() <= top || o.y >= bot) continue;
-      if (o.life && !isAsleep(o)) ++squeals_;  // an animal under the snow cries out
+      if (o.life && !isAsleep(o)) {  // an animal under the snow cries out
+        ++squeals_;
+        emit(EventKind::Squeal, o.x + o.width() / 2.0, o.y + o.height() / 2.0, o.z);
+      }
       claim(o, "snowpuff");
     }
     // Powder billows up around the head, and rock and uprooted trees tumble out of the forest.

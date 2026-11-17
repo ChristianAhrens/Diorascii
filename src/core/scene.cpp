@@ -76,20 +76,24 @@ std::shared_ptr<const SceneDef> SceneDef::parse(std::string_view text, std::stri
       if (pop.n <= 0) { err = at(lineNo, "population number must be > 0"); return nullptr; }
       sc->population.push_back(pop);
     } else if (sec == Sec::Decor) {
-      // <sprite> left|right|center|random <margin> [y <row>]
-      if (t.size() != 3 && t.size() != 5) { err = at(lineNo, "expected '<sprite> <align> <margin> [y <row>]'"); return nullptr; }
+      // <sprite>[|<sprite>...] left|right|center|random <margin> [y <row>] [jitter <n>] [chance <p>] [per-cols <n>] [anchor yes]
+      if (t.size() < 3 || t.size() % 2 == 0) { err = at(lineNo, "expected '<sprite> <align> <margin> [y <row>] [jitter <n>] [chance <p>] [per-cols <n>] [anchor yes]'"); return nullptr; }
       Decor d;
       d.sprite = t[0];
       d.align = t[1];
-      if (d.align != "left" && d.align != "right" && d.align != "center" && d.align != "random") {
+      if (d.align != "left" && d.align != "right" && d.align != "center" && d.align != "random" &&
+          d.align != "from-left" && d.align != "from-right" && d.align != "from-center") {
         err = at(lineNo, "unknown alignment '" + d.align + "'");
         return nullptr;
       }
       d.margin = std::atoi(t[2].c_str());
-      if (t.size() == 5) {
-        if (t[3] != "y") { err = at(lineNo, "expected 'y <row>'"); return nullptr; }
-        d.hasY = true;
-        d.y = std::atoi(t[4].c_str());
+      for (size_t k = 3; k + 1 < t.size(); k += 2) {
+        if (t[k] == "y") { d.hasY = true; d.y = std::atoi(t[k + 1].c_str()); }
+        else if (t[k] == "jitter") d.jitter = std::max(0, std::atoi(t[k + 1].c_str()));
+        else if (t[k] == "chance") d.chance = std::clamp(std::atof(t[k + 1].c_str()), 0.0, 1.0);
+        else if (t[k] == "per-cols") d.perCols = std::max(0, std::atoi(t[k + 1].c_str()));
+        else if (t[k] == "anchor") d.anchor = t[k + 1] == "yes";
+        else { err = at(lineNo, "unknown decor option '" + t[k] + "'"); return nullptr; }
       }
       sc->decor.push_back(d);
     } else {

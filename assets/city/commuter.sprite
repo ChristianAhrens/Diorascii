@@ -1,0 +1,27 @@
+name: commuter
+facing: right
+habitat: rail
+behaviors: commute
+life: yes
+solid: yes
+pool: any
+depth: 17
+speed: 2..3
+fps: 4
+backing: 0.6
+--- art
+ o
+/|\
+/ \
+--- mask
+ t
+222
+kkk
+--- art
+ o
+/|\
+ |
+--- mask
+ t
+222
+ k

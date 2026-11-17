@@ -175,6 +175,11 @@ void World::floodStep(Entity& e, double dt) {
   (void)dt;
 }
 
+double World::floodFront() const {
+  const double front = std::clamp(flood_.age * kFloodSpeed, 0.0, static_cast<double>(w_ - 1));
+  return flood_.dir > 0 ? front : w_ - 1 - front;
+}
+
 double World::floodDepth(int x) const {
   if (!flood_.active) return 0;
   const double dist = flood_.dir > 0 ? x : w_ - 1 - x;
@@ -602,6 +607,7 @@ void World::asteroidStep(Entity& e, double dt) {
 
 void World::bigImpactAt(double cx) {
   impacts_ += 1;
+  emit(EventKind::Impact, cx, seabedY_, 8, 2.0f);
   const int bank = (riverRows_ > 0 ? riverTopY_ : h_) - seabedY_;
   const int maxDepth = std::clamp(bank - 1, 1, 3);  // always leave some ground
   for (int x = 0; x < w_; ++x) {  // a crater across the whole width: deepest where it hit
@@ -619,7 +625,7 @@ void World::bigImpactAt(double cx) {
   for (auto& o : entities_) wreck(*o);
   for (size_t i = 0; i < incoming_.size(); ++i) wreck(*incoming_[i]);
   for (auto& r : restock_) r.left = std::max(r.left, rng_.range(12.0, 40.0));  // nothing is replaced for a while
-  flash(1.6);
+  flash(1.6, w_ / 2.0);
   if (auto bang = pack_->find("flash")) {
     for (int x = 0; x < w_; x += std::max(bang->width(), 1)) {
       spawnEffect("flash", x, seabedY_ - bang->height(), 1, 0, 0);

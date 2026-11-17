@@ -114,7 +114,12 @@ static NSString* const kHintCountKey = @"menuHintCount";
   static int ticks = 0;
   if (++ticks % 100 == 1) DIO_INPUT_LOG(@"grid focused=%d window key=%d", _grid.isFocused, self.view.window.isKeyWindow);
   [self syncSound];
-  if (_audio.running()) _audio.setParams(_session->ambient());
+  std::vector<dio::SoundEvent> soundEvents;
+  _session->takeSoundEvents(soundEvents);  // also while muted, so that they do not pile up
+  if (_audio.running()) {
+    for (const dio::SoundEvent& e : soundEvents) _audio.pushEvent(e);  // first, so that a sound that the counters start finds its place
+    _audio.setParams(_session->ambient());
+  }
   _session->render(_frame);
   _session->takeRepaint();  // the view redraws every cell each frame anyway
   [_grid showFrame:_frame];
@@ -122,8 +127,15 @@ static NSString* const kHintCountKey = @"menuHintCount";
 
 /// Opens or closes the sound device to match what the session wants.
 - (void)syncSound {
-  if (_session->soundWanted() && !_audio.running() && !_audio.start()) _session->soundUnavailable();
+  if (_session->takeLayoutChange() && _audio.running()) _audio.stop();  // reopened below with the new choice
+  bool reported = false;
+  if (_session->soundWanted() && !_audio.running()) {
+    if (_audio.start(_session->layoutChoice())) reported = true;
+    else _session->soundUnavailable();
+  }
   if (!_session->soundWanted() && _audio.running()) _audio.stop();
+  if (_audio.running() && _audio.update()) reported = true;  // follows a change of route (the layout follows the new route)
+  if (reported && _audio.running()) _session->soundLayout(_audio.layout().name(), _audio.deviceChannels(), _audio.downmixed(), _audio.spatialized());
 }
 
 /// True while the ASCII menu is open and takes the navigation.

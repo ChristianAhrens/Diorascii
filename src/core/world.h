@@ -15,6 +15,7 @@
 #include "core/frame.h"
 #include "core/rng.h"
 #include "core/scene.h"
+#include "core/soundstage.h"
 
 namespace dio {
 
@@ -62,6 +63,8 @@ struct Entity {
   bool destructible = true;   ///< can be wrecked by an impact
   /// A living thing: catastrophes that wipe out life take it (animals have `life: yes`).
   bool life = false;
+  /// A scene decoration (see World::placeDecor): they keep clear of one another.
+  bool decor = false;
   /// A rare catastrophe (kraken, thunderstorm...): at most one exists at a time.
   bool isRare = false;
   /// For catastrophes: how far across the scene (0 to 1) it is when it strikes.
@@ -190,6 +193,10 @@ struct Entity {
   double driveT = 0, driveX0 = 0, driveY0 = 0;
   /// Draw order it takes up again on the main road.
   int driveZ = 10;
+  /// A train: 0 at speed, 1 braking for the station, 2 standing at the platform, 3 pulling out.
+  int stopPhase = 0;
+  /// Passengers a stopped train still has to let out.
+  int unload = 0;
   /// Behaviors, run in order every step.
   std::vector<BehaviorFn> behaviors;
   /// Called after removal, for example to spawn a replacement.
@@ -282,6 +289,14 @@ class World {
   const std::vector<Avenue>& avenues() const { return avenues_; }
   /// Side streets seen between the buildings of the front row (cars do not drive there).
   const std::vector<Avenue>& glimpses() const { return glimpses_; }
+  /// Runs a train along the railway: it brakes, stops at the station for a while, lets its passengers
+  /// out and pulls out again. Called by the `train` behavior.
+  void trainStep(Entity& e, double dt);
+  /// Walks a passenger along the platform to the station; there it is gone, and comes out on the
+  /// street at the foot of the station as a pedestrian. Called by the `commute` behavior.
+  void commuteStep(Entity& e, double dt);
+  /// Column of the middle of the station, or -1 when there is none.
+  double stationColumn() const;
   /// Moves a vehicle that may turn off the main road into a side street, or comes down one.
   /// Called by the `drive` behavior.
   void driveStep(Entity& e, double dt);
@@ -407,8 +422,12 @@ class World {
   size_t tongueCount() const { return tongues_.size(); }
   /// How many things devouring catastrophes (the sandworm, the kraken) have crushed so far; sound follows each.
   unsigned crushCount() const { return crushes_; }
-  /// Counts things crushed by a devouring catastrophe. Called by the `catastrophe` behavior.
-  void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
+  /// Counts things crushed by a devouring catastrophe, and records the sound at the point `cx`, `cy`
+  /// (cells) of layer `z`. Called by the `catastrophe` behavior and by tongues.
+  void noteCrushed(size_t n, double cx, double cy, int z) {
+    crushes_ += static_cast<unsigned>(n);
+    if (n > 0) emit(EventKind::Crush, cx, cy, z, static_cast<float>(n));
+  }
   /// How many animals an avalanche has buried so far; each lets out a muffled squeal.
   unsigned squealCount() const { return squeals_; }
   /// How many rifle shots the poachers have fired so far; sound follows each.
@@ -428,8 +447,9 @@ class World {
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.
   size_t restockPending() const { return restock_.size(); }
-  /// Starts a screen flash of the given length (lightning).
-  void flash(double seconds);
+  /// Starts a screen flash of the given length (lightning). `cx` is the column it strikes (in cells;
+  /// by default the middle of the scene), for the sound of the thunder.
+  void flash(double seconds, double cx = -1e9);
   /// How many flashes have been started so far; sound follows each one as thunder.
   unsigned flashCount() const { return flashCount_; }
   /// True while the screen is lit up by a flash (two quick flashes, then dark again).
@@ -443,6 +463,13 @@ class World {
   void setHour(double hour) { setPhase(hour / 24.0); }
   /// Time of day as a fraction of a day, see setPhase().
   double phase() const { return phase_; }
+  /// Days the clock has run on its own (in the cycle time mode) since the world was built: 1.0 is
+  /// one full day and night. Setting the time by hand does not count.
+  double daysElapsed() const { return daysElapsed_; }
+  /// How many rare events (catastrophes) have started since the world was built, scheduled or summoned.
+  unsigned raresStarted() const { return raresStarted_; }
+  /// True while a rare event is under way (or about to appear).
+  bool rareActive() const;
   /// True if the scene has a day and night cycle.
   bool hasDayNight() const { return scene_->dayNight; }
   /// True if the entity is asleep right now: it sleeps (see Entity::sleepBelow), the scene has a day
@@ -457,6 +484,31 @@ class World {
   double stormProximity() const;
   /// Like stormProximity() for any creature whose tag or sprite name is `key` (a whale, a tornado).
   double nearness(const std::string& key) const;
+  /// How the train nearest to the middle of the screen moves, for the sound.
+  struct TrainSound {
+    double motion = 1;  ///< its speed as a share of the cruising speed: 0 standing, 1 at full speed
+    double brake = 0;   ///< how hard it brakes (rolling into the station), 0 to 1
+    double hiss = 0;    ///< the air let out in the first moments of standing at the platform, 0 to 1
+  };
+  /// The sound state of the train nearest to the middle of the screen (all zero but `motion` = 1 if none).
+  TrainSound trainSound() const;
+  /// The strongest creature whose tag or sprite name is `key` (the one nearness() reports), with
+  /// where it stands: x from -1 to 1 across the screen (up to +-1.5 off-screen), y from the ground
+  /// (0) to the top of the screen (1), depth from its layer. `level` is exactly nearness(key); the
+  /// position is zero if there is no such creature. Does not change the world.
+  Emitter emitter(const std::string& key) const;
+  /// emitter() for one of the known sound sources.
+  Emitter emitter(EmitterKey key) const;
+  /// Where a point of the world is on the stage: `cx` and `cy` in cells, `z` the layer.
+  /// @param[out] x, y, depth the stage position (see Emitter)
+  void stagePoint(double cx, double cy, int z, float& x, float& y, float& depth) const;
+  /// Records a one-off sound at a point of the world (cells and layer). The queue keeps the latest
+  /// kMaxPendingEvents; older ones are dropped if nobody takes them.
+  void emit(EventKind kind, double cx, double cy, int z, float strength = 1.0f);
+  /// Moves the sound events since the last call to the end of `out` (and empties the queue).
+  void takeEvents(std::vector<SoundEvent>& out);
+  /// The most sound events kept for a frontend that does not take them.
+  static constexpr size_t kMaxPendingEvents = 64;
   /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
   double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.
@@ -500,8 +552,12 @@ class World {
   Entity* spawnEffect(const std::string& spriteName, double x, double y, int z, double vx, double vy);
   /// Counts a catch. Called by predator behaviors.
   void noteEaten() { ++eaten_; }
-  /// Counts an eaten food flake. Called by feeding behaviors.
-  void noteFoodEaten() { ++foodEaten_; }
+  /// Counts an eaten food flake and records the sound at the point `cx`, `cy` (cells) of layer `z`.
+  /// Called by feeding behaviors.
+  void noteFoodEaten(double cx, double cy, int z) {
+    ++foodEaten_;
+    emit(EventKind::Nibble, cx, cy, z);
+  }
 
  private:
   /// A skyscraper of the city's skyline.
@@ -521,6 +577,15 @@ class World {
     bool hold = false;         ///< a ruin that is not rebuilt until it is released (the monster fight's)
     double timer = 0;          ///< seconds in the state
   };
+  /// Chooses where the zebra crossings of the main street go: one at the foot of the station, the
+  /// others spread over the street, clear of the side streets (which have their own).
+  void placeCrossings();
+  /// Where a zebra crossing starts (it is 3 columns wide).
+  std::vector<int> crossings_;
+ public:
+  /// Where the zebra crossings of the main street start (each is 3 columns wide).
+  const std::vector<int>& crossings() const { return crossings_; }
+ private:
   /// Chooses where the side streets go, clear of the shops and trees on the sidewalk.
   void placeAvenues();
   /// Lets cars come down the side streets now and then.
@@ -551,8 +616,20 @@ class World {
   void buildTerrain();
   /// Takes an entity out of the world after a catastrophe and brings it back some seconds later.
   void claim(Entity& o, const std::string& effect);
-  /// Places one decoration.
+  /// Where the decoration marked `anchor` stands: the others may be placed relative to it.
+  struct DecorAnchor {
+    bool valid = false;  ///< whether one has been placed
+    double x = 0;        ///< its left edge
+    int width = 0;       ///< its width
+  };
+  /// Places a decoration: as many as its `per-cols` asks for, or one.
   void spawnDecor(const SceneDef::Decor& d);
+  /// Places one decoration (or leaves it out, by chance or for lack of room). A decoration that is
+  /// aligned to the anchor uses `fixed` (where it stood when it was first planted) if given,
+  /// otherwise the anchor placed last.
+  void placeDecor(const SceneDef::Decor& d, const DecorAnchor* fixed = nullptr);
+  /// The last decoration placed with `anchor yes` in the scene file.
+  DecorAnchor decorAnchor_;
   /// Grows one procedural seaweed plant.
   void spawnSeaweed();
   /// Sends one weighted-random scene event.
@@ -629,7 +706,10 @@ class World {
   /// Puts barriers at both ends of the cordoned site, and takes them away again.
   void raiseBarriers();
   void liftBarriers();
+  double slideX_ = 0, slideY_ = 0;  ///< where the avalanche is (the slab that is about to let go, then its head), in cells
   double fireLevel_ = 0;
+  double fireX_ = 0, fireY_ = 0;  ///< centre of the building whose fire is strongest, in cells (for the sound)
+  int fireZ_ = 0;                  ///< its layer
   double smokePuffs_ = 0;
   /// Fading trace of the avalanche over every cell, row by row.
   std::vector<float> scar_;
@@ -663,6 +743,7 @@ class World {
   uint64_t nextId_ = 0;
   /// Counters behind crushCount() and squealCount().
   unsigned crushes_ = 0, squeals_ = 0, shots_ = 0;
+  std::vector<SoundEvent> events_;  ///< sound events not yet taken (see emit())
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
   /// The poison trail of the submarine: a puff is left behind it every column or so, and every
@@ -731,6 +812,8 @@ class World {
   } clash_;
   /// How muddy each column is (1 right after the water has been over it, fading in time).
   std::vector<float> mud_;
+  /// The column the front of the flood has reached (from the side it comes from).
+  double floodFront() const;
   /// Depth of the flood water at column x, in rows from the bottom of the screen.
   double floodDepth(int x) const;
   /// Advances the flood, tears off what it reaches and lets the mud dry.
@@ -764,6 +847,9 @@ class World {
   double overcast_ = 0;
   /// Time of day as a fraction of a day.
   double phase_ = 0.4;
+  /// Days the clock has run on its own, and rare events started (see daysElapsed(), raresStarted()).
+  double daysElapsed_ = 0;
+  unsigned raresStarted_ = 0;
   /// Whether the time of day runs or stands still.
   TimeMode timeMode_ = TimeMode::Cycle;
   /// True if the scene has a medium and there is room for it.

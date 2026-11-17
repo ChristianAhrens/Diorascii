@@ -15,6 +15,27 @@ the GitHub release (see "Releasing" in the README).
 
 ### Fixed
 
+## [1.4.0] 2026-11-17
+### Added
+- Immersive multichannel sound: on 5.1, 7.1 and Atmos-style layouts up to 9.1.6 (with height speakers) every scene's sound plays on all the speakers of your output, and each sound comes from where it happens: sirens move with their vehicles, lightning cracks where it strikes, bubbles rise all round you, an avalanche rolls down the slope. Stereo sounds as before. A layout your output cannot open steps down to a smaller one, and the sound follows a change of output while the app runs.
+- 3D audio on AirPods and proper speaker layouts on macOS and Apple TV: the sound is handed to the system's audio renderer, which places the channels on the layout of your device (on macOS the one set in Audio MIDI Setup, 7.1.4 included) and gives AirPods the system's 3D audio. Checked on a Mac with AirPods Pro; not yet tried on a real Apple TV.
+- A Sound menu entry with off, stereo and immersive (the default) in place of the on/off switch; the a key goes round the three. The menu's small print says what is playing, for example "Audio output: 7.1.4 on 2 channels (spatialized)". The option --audio-layout names the immersive layout for a test.
+- The cycle mode, now the default: all scenes one after the other, each for one full day and night with a rare and a regular event, and a two-second crossfade (sound included) between them. Choosing the time of day or an event by hand, --user, the o key or the Mode entry end it.
+- Passengers in the City: a train stops at the station and people get off and walk out.
+- A user manual on the project page: installation first, then usage, the sound on each platform, the scenes and troubleshooting.
+- Linux arm64 packages (.deb, .rpm, .tar.gz); the x64 files are now named Diorascii-x.y.z-Linux-x64.*.
+- For custom scenes: the decor options jitter, chance and per-cols, alternative sprites (oak|oak_small|oak_tall) and two more sizes of tree for the City.
+
+### Changed
+- The City's trains fall silent while they stand at the station: the rumble follows their speed, the brakes squeal and the air hisses.
+- The desert's oasis is different every time: the pond is small, medium or big and lies anywhere in the middle, with palms and reeds on its shore.
+- The Linux text console starts in the terminal style, which it can show; an explicit --style still wins.
+- The ambient sound uses 14 to 33 percent less CPU outside the forest, and a change of scene is never heard half applied.
+
+### Fixed
+- The whale of the aquarium missed its tail fin.
+- The City always looked the same: the station, trees, bushes, flowers and zebra crossings now differ every time the scene is built.
+
 ## [1.3.0] 2026-11-11
 ### Added
 - Added the City scene: skyscrapers in three rows up to 70% of the sky, with lit windows at night, a street with lamps, zebra crossings and traffic (cars, taxis, buses, trucks, cyclists) with rush hours at about 8:00 and 17:30, people, shops, a park, an elevated railway with a station and trains, planes coming in to land, and side streets where cars turn off the main road and others come in. `f` calls an ambulance through the streets, and `x` sets a skyscraper alight: a fire engine comes, and the burnt-out building is wrapped in scaffolding and renovated, or, when the fire gets out of hand, it spreads to a few more buildings that burn down and are rebuilt from the rubble
@@ -41,7 +62,7 @@ the GitHub release (see "Releasing" in the README).
 
 ## [1.2.0] 2026-11-08
 ### Added
-- Added a first tvOS app: the five scenes on the Apple TV, steered with the Siri Remote (swipe left and right to switch scene, up for the time of day, down for the sound, click for the scene's action, hold the click for the menu, Play/Pause to pause), with the sound synthesized through AVAudioEngine, a hint about the menu on the first launches and a menu without a Quit entry. A keyboard works as well. It is generated entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`, see the README) and is not part of the release archives
+- Added a first tvOS app: the five scenes on the Apple TV, steered with the Siri Remote (swipe left and right to switch scene, up for the time of day, down for the sound, click for the scene's action, hold the click for the menu, Play/Pause to pause), with the sound synthesized and played through AVSampleBufferAudioRenderer, a hint about the menu on the first launches and a menu without a Quit entry. A keyboard works as well. It is generated entirely by CMake (`-G Xcode -DCMAKE_SYSTEM_NAME=tvOS`, see the README) and is not part of the release archives
 - Added `scripts/package-tvos.sh`, which builds, signs, validates and uploads the tvOS app to App Store Connect
 - Added the draft app icon art and Top Shelf images for tvOS in `Resources/Icon`, and `tvOS/make_rasters.sh` to render them
 - Added `--mute` to start the terminal program without sound

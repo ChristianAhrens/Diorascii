@@ -1,0 +1,30 @@
+name: oak_tall
+facing: right
+habitat: ground
+solid: yes
+speed: 0..0
+depth: 10..18
+--- art
+    _.-"-._
+  .'       '.
+ (           )
+(             )
+(             )
+ (           )
+  `.       .'
+    `-._.-'
+       |
+       |
+       |
+--- mask
+    GGGGGGG
+  GGgggggggGG
+ GgggggggggggG
+GgggggggggggggG
+GgggggggggggggG
+ GgggggggggggG
+  GGgggggggGG
+    GGGGGGG
+       o
+       o
+       o

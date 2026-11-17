@@ -200,7 +200,7 @@ of day you had chosen before. When the cycle mode moves on to the next scene, th
 Scene changes by hand are instant.
 
 Ambient sound is synthesized at run time (no recordings) and on by default: `--mute` starts without it, and the `a`
-key or the menu's Sound entry switch it. Without a sound device the app simply stays silent.
+key or the menu's *Sound* entry switch it between *off*, *stereo* and *immersive* (the default; the `a` key goes round the three). Without a sound device the app simply stays silent.
 Every scene has its own soundscape, and the sound follows what happens on screen:
 
 | Scene | What you hear |
@@ -219,15 +219,17 @@ device what it has: on a stereo device it plays stereo, on a device with more ch
 multichannel interface, the tvOS audio route) it renders to them, from 5.1 up to 7.1.4 and 9.1.6 with height speakers. Sounds are
 placed where they happen: a siren moves with its vehicle, a lightning strike cracks where it struck, a
 shot comes from the helicopter, bubbles rise round you, and what is far off or off-screen comes from the sides.
-The menu's *Speakers* entry (and `--audio-layout 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6`) picks a layout
-yourself; the menu's small print always says what is playing now (`Output: 7.1 on 8 channels`, or `Output: sound off`), and the Speakers entry shows what was found (`auto: 7.1`), that a layout is `(mixed down)` if the device has fewer channels than
-it, or that it stepped down (`7.1.4 > 5.1`) if the device would not open with it. Good to know:
+There is no speaker setting in the menu: *Sound: immersive* is that, and *Sound: stereo* plays a plain stereo pair on any
+output. The menu's small print always says what is playing now (`Audio output: 7.1 on 8 channels`, `Audio output: 7.1.4 on 2 channels (mixed down)` if
+the output has fewer channels than the layout, `Audio output: 7.1.4 on 2 channels (spatialized)` if the headphones' own spatializer makes the
+sound from it (AirPods), or `Audio output: sound off`). `--audio-layout 2.0 | 5.1 | 7.1 | 5.1.2 | 5.1.4 | 7.1.2 | 7.1.4 | 9.1.4 | 9.1.6`
+names the layout of the immersive sound for a test (`2.0` starts the sound as stereo); a layout the device would not open with steps down (the small print says what was used). Good to know:
 
 - Plain PCM over HDMI is usually limited to eight channels (7.1), so 7.1.4 and 9.1.6 reach a receiver only through a
   multichannel interface or an Atmos-capable path; over normal HDMI `auto` gives what the device reports, typically 7.1.
 - Choosing a layout above what the device has is allowed, and the operating system or the sound server mixes it down
   (the menu says so). On Linux a stereo device behind PulseAudio or PipeWire accepts every layout this way.
-- On macOS the layout set for the device in Audio MIDI Setup (stereo, 5.1, 7.1.4, ...) is what `auto` finds, and a layout you choose is played on the device's channels of the same positions (the system places each channel by its label), so the height speakers of a 7.1.4 device are used. A layout the device has no speakers for steps down to the richest one it has (7.1.4 on a 5.1 device plays as 5.1; the menu shows `7.1.4 > 5.1`), except on a device with just one or two channels, where the system mixes it down. macOS, tvOS and iOS hand the sound to the system as tagged multichannel PCM (AVSampleBufferAudioRenderer, the way Apple's own players do). On AirPods the system's spatial audio ("3D audio", with head tracking and its Control Center switch) then works on it: `auto` renders 7.1.4 for them. This was checked with AirPods Pro on macOS only; on tvOS and iOS, where the system says whether the route spatializes, it is not yet tried. Sound that an action starts plays about a quarter of a second late on these platforms.
+- On macOS the layout set for the device in Audio MIDI Setup (stereo, 5.1, 7.1.4, ...) is what `auto` finds, and a layout you choose is played on the device's channels of the same positions (the system places each channel by its label), so the height speakers of a 7.1.4 device are used. A layout the device has no speakers for steps down to the richest one it has (7.1.4 on a 5.1 device plays as 5.1; the small print says `Audio output: 5.1 ...`), except on a device with just one or two channels, where the system mixes it down. macOS, tvOS and iOS hand the sound to the system as tagged multichannel PCM (AVSampleBufferAudioRenderer, the way Apple's own players do). On AirPods the system's spatial audio ("3D audio", with head tracking and its Control Center switch) then works on it: `auto` renders 7.1.4 for them. This was checked with AirPods Pro on macOS only; on tvOS and iOS, where the system says whether the route spatializes, it is not yet tried. Sound that an action starts plays about a quarter of a second late on these platforms.
 - Plain ALSA `default` is often stereo; a surround device has to be selected in the system's sound settings.
 - The layout follows a change of output while the app runs (headphones plugged in, another output chosen) where the
   sound system reports it. The layouts were tested with measurements, not with a surround system; how it sounds in a room is
@@ -293,8 +295,8 @@ hand-made Xcode project.
 
 The generated project serves both the simulator and devices (pick the destination in Xcode);
 configure with `-DCMAKE_OSX_SYSROOT=appletvos -DDIORASCII_APPLE_TEAM=<team id>` to sign for a device. Siri Remote: swipe left/right
-changes the scene, swipe up the time of day, swipe down the sound, click runs the scene's action,
-Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it; its *Speakers* entry picks the speaker layout), Menu closes
+changes the scene, swipe up the time of day, swipe down the sound (off, stereo, immersive), click runs the scene's action,
+Play/Pause pauses, holding the click opens the menu (swipes and click then navigate it; its *Sound* entry picks off, stereo or immersive), Menu closes
 the menu or leaves the app.
 
 With GCC the C++ runtime is linked statically for a single-file binary when the static library

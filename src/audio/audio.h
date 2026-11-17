@@ -45,6 +45,8 @@ class AudioOutput {
   int deviceChannels() const;
   /// True if the layout has more channels than the device has, so that the sound server or the driver mixes it down.
   bool downmixed() const;
+  /// True if the route's own spatializer makes the sound from the multichannel layout (AirPods; Apple platforms only).
+  bool spatialized() const;
   /// Sets what the sound reflects; takes effect smoothly.
   void setParams(const AmbientParams& p);
   /// Hands a one-off sound to the synth (see SoundEvent). Safe to call from the main loop; events

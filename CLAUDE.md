@@ -2,7 +2,7 @@
 
 Diorascii is a C++20 ASCII-art scene app for the terminal (aquarium, forest, desert, mountains, city, moon):
 MIT licensed, all code and art original, zero runtime dependencies. Read this file first; the detail
-is in [docs/ai/](docs/ai/README.md).
+is in [docs/ai/](docs/ai/README.md). For how the Apple sound path (immersive multichannel, AirPods 3D audio) came to be and what to reuse, read [docs/ai/apple-immersive-audio.md](docs/ai/apple-immersive-audio.md).
 
 ## Non-negotiable rules
 

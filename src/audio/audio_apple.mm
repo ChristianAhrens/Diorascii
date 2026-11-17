@@ -158,6 +158,7 @@ struct AudioOutput::Impl {
   Layout layout;                          ///< what the synth renders to
   int deviceChannels = 2;                 ///< channels of the route
   bool downmixed = false;                 ///< the layout has more channels than the route
+  bool spatialized = false;               ///< the route's own spatializer makes the sound from the layout (AirPods)
   std::atomic<bool> routeChanged{false};  ///< the route or the renderer changed (set from a notification)
   id<NSObject> routeObserver = nil;       ///< observer of the audio session's route changes (tvOS, iOS)
   id<NSObject> spatialObserver = nil;     ///< observer of the user switching spatial audio on or off for the route (tvOS, iOS)
@@ -318,9 +319,11 @@ bool AudioOutput::start(const LayoutChoice& choice) {
       id = lower;
       n.layout = Layout::named(id);
       n.downmixed = n.layout.channels() > report.channels;
+      n.spatialized = report.spatializes && n.layout.channels() > 2 && report.channels <= 2;
     }
     if (!ok) return false;
     impl.downmixed = n.downmixed;
+    impl.spatialized = n.spatialized;
   }
   Impl* p = impl_.get();
 #if TARGET_OS_OSX  // (no audio session: the default device is what changes; the system flushes the renderer for the rest)
@@ -382,6 +385,8 @@ const Layout& AudioOutput::layout() const { return impl_->layout; }
 int AudioOutput::deviceChannels() const { return impl_->deviceChannels; }
 
 bool AudioOutput::downmixed() const { return impl_->downmixed; }
+
+bool AudioOutput::spatialized() const { return impl_->spatialized; }
 
 void AudioOutput::setParams(const AmbientParams& p) { impl_->shared.store(p); }
 

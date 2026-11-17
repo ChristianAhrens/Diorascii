@@ -3214,58 +3214,60 @@ TEST(session_pause_freezes_the_world_and_mutes_the_sound_and_style_changes_ask_f
   CHECK(s.style() == before);  // three styles, then back
 }
 
-TEST(session_speaker_layout_comes_from_the_command_line_and_the_menu_and_shows_what_was_found) {
+TEST(session_sound_is_off_stereo_or_immersive_and_the_menu_shows_what_is_playing) {
   AssetPack pack = AssetPack::embedded();
-  Session::Config config;
-  CHECK(LayoutChoice::parse("5.1", config.audioLayout));
-  Session s = makeSession(pack, config);
-  CHECK(!s.layoutChoice().automatic && std::string(s.layoutChoice().name()) == "5.1");
-  CHECK(s.menu().footer().size() == 3 && s.menu().footer()[0] == "Output: sound off");  // the layout in use is in the menu's small print
-  CHECK(!s.takeLayoutChange());  // the command line's choice is where it starts, not a change
-  CHECK(s.menu().optionText("layout") == "5.1");
-  // The menu cycles through auto and the named layouts, in order, and reports each change once.
+  Session s = makeSession(pack);
+  CHECK(s.soundMode() == Session::SoundMode::Off && s.menu().optionText("audio") == "off");
+  CHECK(s.menu().footer().size() == 3 && s.menu().footer()[0] == "Audio output: sound off");  // what plays is in the menu's small print
+  CHECK(s.layoutChoice().automatic);  // immersive asks for the richest layout the route has
+  CHECK(s.menu().optionText("layout").empty());  // there is no speaker entry any more
+  // The key goes round: off, stereo, immersive, off.
+  s.handle(Action::Audio);
+  CHECK(s.soundMode() == Session::SoundMode::Stereo && s.soundWanted() && s.menu().optionText("audio") == "stereo");
+  CHECK(!s.layoutChoice().automatic && std::string(s.layoutChoice().name()) == "2.0");
+  s.handle(Action::Audio);
+  CHECK(s.soundMode() == Session::SoundMode::Immersive && s.menu().optionText("audio") == "immersive" && s.layoutChoice().automatic);
+  CHECK(s.takeLayoutChange() && !s.takeLayoutChange());  // stereo to immersive: the output is opened again, once
+  s.handle(Action::Audio);
+  CHECK(s.soundMode() == Session::SoundMode::Off && !s.soundWanted());
+  CHECK(!s.takeLayoutChange());  // switching on or off is not a change of layout
+  // The menu's entry sets the mode as well.
   s.handle(Action::Menu);
-  for (int i = 0; i < 6; ++i) s.handle(Action::Down);  // scene, style, mode, time, info, sound, then speakers
+  for (int i = 0; i < 5; ++i) s.handle(Action::Down);  // scene, style, mode, time, info, then sound
   s.handle(Action::Right);
-  CHECK(std::string(s.layoutChoice().name()) == "7.1" && s.takeLayoutChange() && !s.takeLayoutChange());
-  std::string seen;
-  Session fresh = makeSession(pack);
-  CHECK(fresh.layoutChoice().automatic && fresh.menu().optionText("layout") == "auto");
-  fresh.handle(Action::Menu);
-  for (int i = 0; i < 6; ++i) fresh.handle(Action::Down);
-  for (int i = 0; i < 10; ++i) {  // all ten, and back to auto
-    seen += std::string(fresh.layoutChoice().name()) + " ";
-    fresh.handle(Action::Right);
-    CHECK(fresh.takeLayoutChange());
-  }
-  CHECK(seen == "auto 2.0 5.1 7.1 5.1.2 5.1.4 7.1.2 7.1.4 9.1.4 9.1.6 ");
-  CHECK(fresh.layoutChoice().automatic);
-  fresh.handle(Action::Left);  // and backwards
-  CHECK(std::string(fresh.layoutChoice().name()) == "9.1.6");
-  // What the sound output found is shown in the menu text.
-  fresh.handle(Action::Menu);  // closes the menu
-  fresh.handle(Action::Audio);  // sound on
-  fresh.soundLayout("9.1.6", 16, false);
-  CHECK(fresh.menu().optionText("layout") == "9.1.6");
-  CHECK(fresh.menu().footer()[0] == "Output: 9.1.6 on 16 channels");
-  fresh.soundLayout("9.1.6", 2, true);
-  CHECK(fresh.menu().optionText("layout") == "9.1.6 (mixed down)");
-  CHECK(fresh.menu().footer()[0] == "Output: 9.1.6 on 2 channels (mixed down)");
-  fresh.soundLayout("7.1.4", 12, false);
-  CHECK(fresh.menu().optionText("layout") == "9.1.6 > 7.1.4");  // it stepped down
-  CHECK(fresh.menu().footer()[0] == "Output: 7.1.4 on 12 channels");  // and the line says what is playing
-  fresh.handle(Action::Audio);  // sound off: nothing is found any more
-  CHECK(fresh.menu().optionText("layout") == "9.1.6");
-  CHECK(fresh.menu().footer()[0] == "Output: sound off" && fresh.menu().footer().size() == 3);
-  Session automatic = makeSession(pack);
-  automatic.handle(Action::Audio);
-  automatic.soundLayout("7.1", 8, false);
-  CHECK(automatic.menu().optionText("layout") == "auto: 7.1");
-  automatic.soundLayout("custom", 3, false);
-  CHECK(automatic.menu().optionText("layout") == "auto: 3 channels");
-  CHECK(automatic.menu().footer()[0] == "Output: custom map on 3 channels");
-  automatic.soundLayout("2.0", 1, false);
-  CHECK(automatic.menu().footer()[0] == "Output: 2.0 on 1 channel");
+  CHECK(s.soundMode() == Session::SoundMode::Stereo);
+  s.handle(Action::Right);
+  CHECK(s.soundMode() == Session::SoundMode::Immersive && s.takeLayoutChange());
+  s.handle(Action::Menu);  // closes the menu
+  // What the sound output found is in the small print: the layout, the channels, and mixed down or spatialized.
+  s.soundLayout("9.1.6", 16, false);
+  CHECK(s.menu().footer()[0] == "Audio output: 9.1.6 on 16 channels");
+  s.soundLayout("9.1.6", 2, true);
+  CHECK(s.menu().footer()[0] == "Audio output: 9.1.6 on 2 channels (mixed down)");
+  s.soundLayout("7.1.4", 2, true, true);  // AirPods: the system makes the pair from the layout
+  CHECK(s.menu().footer()[0] == "Audio output: 7.1.4 on 2 channels (spatialized)");
+  s.soundLayout("custom", 3, false);
+  CHECK(s.menu().footer()[0] == "Audio output: custom map on 3 channels");
+  s.soundLayout("2.0", 1, false);
+  CHECK(s.menu().footer()[0] == "Audio output: 2.0 on 1 channel");
+  s.handle(Action::Audio);  // off: nothing is found any more
+  CHECK(s.menu().footer()[0] == "Audio output: sound off" && s.menu().footer().size() == 3);
+
+  // The command line's layout is the immersive one; 2.0 starts the sound as stereo.
+  Session::Config config;
+  config.sound = true;
+  CHECK(LayoutChoice::parse("5.1", config.audioLayout));
+  Session five = makeSession(pack, config);
+  CHECK(five.soundMode() == Session::SoundMode::Immersive && std::string(five.layoutChoice().name()) == "5.1");
+  CHECK(!five.takeLayoutChange());  // the command line's choice is where it starts, not a change
+  CHECK(LayoutChoice::parse("2.0", config.audioLayout));
+  Session two = makeSession(pack, config);
+  CHECK(two.soundMode() == Session::SoundMode::Stereo && two.menu().optionText("audio") == "stereo");
+  two.handle(Action::Audio);  // immersive is then the automatic choice
+  CHECK(two.soundMode() == Session::SoundMode::Immersive && two.layoutChoice().automatic);
+  config.audioLayout = LayoutChoice{};
+  Session started = makeSession(pack, config);  // sound on without a layout: immersive, the default
+  CHECK(started.soundMode() == Session::SoundMode::Immersive);
 }
 
 TEST(session_sound_is_a_request_the_frontend_can_refuse) {
@@ -3279,6 +3281,7 @@ TEST(session_sound_is_a_request_the_frontend_can_refuse) {
   Frame f;
   s.render(f);
   CHECK(f.toText().find("No audio device") != std::string::npos);
+  s.handle(Action::Audio);
   s.handle(Action::Audio);
   s.handle(Action::Audio);
   CHECK(!s.soundWanted());
@@ -6763,18 +6766,24 @@ TEST(a_two_channel_route_that_spatializes_gets_7_1_4_in_automatic_and_a_named_ch
   airpods.spatializes = true;
   Negotiation n = negotiate(LayoutChoice{}, airpods);
   CHECK(std::string(n.layout.name()) == "7.1.4" && n.deviceChannels == 2 && n.downmixed && !n.reopen);
+  CHECK(n.spatialized);  // the menu says so
   LayoutChoice c;
   CHECK(LayoutChoice::parse("2.0", c));
   n = negotiate(c, airpods);
-  CHECK(std::string(n.layout.name()) == "2.0");  // a stereo pair is asked for: it stays one
+  CHECK(std::string(n.layout.name()) == "2.0" && !n.spatialized);  // a stereo pair is asked for: it stays one
+  CHECK(LayoutChoice::parse("5.1", c));
+  n = negotiate(c, airpods);
+  CHECK(std::string(n.layout.name()) == "5.1" && n.downmixed && n.spatialized);  // a named multichannel layout is spatialized too
   airpods.spatializes = false;  // plain stereo headphones or speakers
   n = negotiate(LayoutChoice{}, airpods);
-  CHECK(std::string(n.layout.name()) == "2.0");
+  CHECK(std::string(n.layout.name()) == "2.0" && !n.spatialized);
+  n = negotiate(c, airpods);
+  CHECK(n.downmixed && !n.spatialized);  // 5.1 on a plain pair is a mix-down
   DeviceReport receiver;  // more than two channels: the device's own layout, whatever spatializes
   receiver.channels = 6;
   receiver.spatializes = true;
   n = negotiate(LayoutChoice{}, receiver);
-  CHECK(std::string(n.layout.name()) == "5.1");
+  CHECK(std::string(n.layout.name()) == "5.1" && !n.spatialized);
 }
 
 TEST(a_named_layout_on_a_device_with_an_exact_map_is_routed_to_the_channels_of_its_positions) {

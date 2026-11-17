@@ -101,6 +101,9 @@ struct Negotiation {
   /// system the layout as tagged PCM) uses the layout alone; `route` is the placement it makes. Only on a device
   /// whose positions are `exact` and that has a channel for every channel of the layout (see negotiate()).
   bool routed = false;
+  /// The route's own spatializer makes the sound from the multichannel layout (AirPods and other headphones that
+  /// spatialize): the layout has more than two channels and the route a pair. Shown as such in the menu.
+  bool spatialized = false;
   int route[kMaxChannels] = {};  ///< for routed: the device channel of each layout channel
 };
 

@@ -206,12 +206,14 @@ Negotiation negotiate(const LayoutChoice& choice, const DeviceReport& report) {
     // More channels than the device has; or a device whose own map is known and has no speaker for one of the
     // layout's channels (a stereo device asked for 7.1.4), so that the system has to mix it into the others.
     n.downmixed = n.layout.channels() > deviceChannels || (report.hasMap && report.exact);
+    n.spatialized = report.spatializes && n.layout.channels() > 2 && deviceChannels <= 2;  // a named multichannel layout on such a route
     return n;
   }
   if (report.spatializes && deviceChannels <= 2) {  // headphones whose system spatializer wants more than a pair
     n.layout = Layout::named(LayoutId::S7_1_4);
     n.deviceChannels = deviceChannels;  // the route stays as it is; the system makes the pair from the layout
     n.downmixed = true;
+    n.spatialized = true;
     return n;
   }
   int used = std::min(deviceChannels, kMaxChannels);

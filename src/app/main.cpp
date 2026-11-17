@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
     }
     if (!session.soundWanted() && audio.running()) audio.stop();
     if (audio.running() && audio.update()) reported = true;  // follows a change of route (the layout follows the new device)
-    if (reported && audio.running()) session.soundLayout(audio.layout().name(), audio.deviceChannels(), audio.downmixed());
+    if (reported && audio.running()) session.soundLayout(audio.layout().name(), audio.deviceChannels(), audio.downmixed(), audio.spatialized());
     startup = false;
   };
   syncSound();

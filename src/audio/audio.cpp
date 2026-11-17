@@ -236,6 +236,7 @@ const Layout& AudioOutput::layout() const { return impl_->layout; }
 int AudioOutput::deviceChannels() const { return impl_->deviceChannels; }
 
 bool AudioOutput::downmixed() const { return impl_->downmixed; }
+bool AudioOutput::spatialized() const { return false; }  // no route here has a system spatializer that the library knows of
 
 void AudioOutput::setParams(const AmbientParams& p) { impl_->shared.store(p); }
 

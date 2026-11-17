@@ -15,6 +15,9 @@ namespace dio {
 
 namespace {
 
+/// True if the command line's layout is plain stereo, which starts the sound in the stereo mode.
+bool isStereo(const LayoutChoice& c) { return !c.automatic && c.id == LayoutId::Stereo; }
+
 /// Menu text for a render style.
 const char* styleName(Style s) {
   return s == Style::Full ? "Full color" : s == Style::Terminal ? "Terminal colors" : "Monochrome";
@@ -58,7 +61,8 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
       carriedPhase_(config.hour >= 0 ? config.hour / 24.0 : -1),
       rng_(config.seed ^ 0x5eed5eedULL),
       menu_("DIORASCII"),
-      info_(config.info) {
+      info_(config.info),
+      immersive_(isStereo(config.audioLayout) ? LayoutChoice{} : config.audioLayout) {
   std::vector<std::string> titles;
   titles.reserve(scenes_.size());
   std::transform(scenes_.begin(), scenes_.end(), std::back_inserter(titles), [](const auto& sc) { return sc->title; });
@@ -70,16 +74,16 @@ Session::Session(const AssetPack& pack, std::vector<std::shared_ptr<const SceneD
   menu_.addChoice("time", "Time of day", timeOptions(scenes_[sceneIdx_]->dayNight),
                   scenes_[sceneIdx_]->dayNight ? static_cast<size_t>(timeMode_) : 0);
   menu_.addChoice("info", "Info line", {"off", "on"}, info_ ? 1 : 0);
-  menu_.addChoice("audio", "Sound", {"off", "on"}, 0);
+  menu_.addChoice("audio", "Sound", {"off", "stereo", "immersive"}, 0);
   menu_.addButton("action", scenes_[sceneIdx_]->action.label);
   menu_.addButton("rare", "Rare event");
   menu_.addButton("rare2", "Other rare event");
   menu_.addButton("resume", "Resume");
   if (config.quitEntry) menu_.addButton("quit", "Quit");
-  menu_.setFooter({"diorascii " DIORASCII_VERSION, "Copyright (c) 2026 Christian Ahrens"});
+  updateFooter();
   rebuild();
   toast(scenes_[sceneIdx_]->title, 2.0);
-  if (config.sound) setSound(true);
+  if (config.sound) setSound(isStereo(config.audioLayout) ? SoundMode::Stereo : SoundMode::Immersive);
   if (config.cycle) setCycle(true);
 }
 
@@ -120,13 +124,48 @@ void Session::switchScene(size_t idx) {
   rebuildPending_ = true;
 }
 
-void Session::setSound(bool on) {
-  sound_ = on;
-  menu_.setValue("audio", on ? 1 : 0);
+void Session::setSound(SoundMode mode) {
+  if (mode != mode_ && mode != SoundMode::Off && mode_ != SoundMode::Off) layoutChanged_ = true;  // reopened for the other layout
+  mode_ = mode;
+  menu_.setValue("audio", static_cast<size_t>(mode));
+  if (mode == SoundMode::Off && !outputLine_.empty()) {  // with the sound off nothing has been found
+    outputLine_.clear();
+    updateFooter();
+  }
+}
+
+LayoutChoice Session::layoutChoice() const {
+  if (mode_ != SoundMode::Stereo) return immersive_;
+  LayoutChoice stereo;
+  stereo.automatic = false;
+  stereo.id = LayoutId::Stereo;
+  return stereo;
+}
+
+void Session::updateFooter() {
+  std::vector<std::string> lines;
+  lines.push_back(outputLine_.empty() ? "Audio output: sound off" : outputLine_);
+  lines.push_back("diorascii " DIORASCII_VERSION);
+  lines.push_back("Copyright (c) 2026 Christian Ahrens");
+  menu_.setFooter(std::move(lines));
+}
+
+bool Session::takeLayoutChange() {
+  const bool changed = layoutChanged_;
+  layoutChanged_ = false;
+  return changed;
+}
+
+void Session::soundLayout(const char* name, int deviceChannels, bool downmixed, bool spatialized) {
+  // The layout in use, whatever was asked for: for example "Audio output: 7.1 on 8 channels", "Audio output: 7.1.4 on 2 channels (mixed down)"
+  // or "Audio output: 7.1.4 on 2 channels (spatialized)". A spatializing route is not a plain mix-down, so it says only that.
+  outputLine_ = "Audio output: " + std::string(std::string(name) == "custom" ? "custom map" : name) + " on " + std::to_string(deviceChannels) +
+                (deviceChannels == 1 ? " channel" : " channels") + (spatialized ? " (spatialized)" : downmixed ? " (mixed down)" : "");
+  updateFooter();
 }
 
 void Session::soundUnavailable(bool announce) {
-  setSound(false);
+  setSound(SoundMode::Off);
   if (announce) toast("No audio device", 1.5);
 }
 
@@ -208,7 +247,13 @@ void Session::handle(Action a) {
     case Action::Rare: setCycle(false); flush(); world_->triggerRare(); break;
     case Action::RareOther: setCycle(false); flush(); world_->triggerRare(RarePick::Other); break;
     case Action::Mode: setCycle(!cycle_); break;
-    case Action::Audio: setSound(!sound_); break;
+    case Action::Audio: {  // off, stereo, immersive, and round
+      static const char* const names[] = {"off", "stereo", "immersive"};
+      const int next = (static_cast<int>(mode_) + 1) % 3;
+      setSound(static_cast<SoundMode>(next));
+      toast(std::string("Sound: ") + names[next], 1.2);
+      break;
+    }
     case Action::Redraw: rebuildPending_ = true; ++seed_; break;
     case Action::Style:
       style_ = static_cast<Style>((static_cast<int>(style_) + 1) % 3);
@@ -252,7 +297,7 @@ void Session::applyMenuEvents() {
       menu_.setValue("time", ev.value);  // leaving the cycle mode reset the entry
     }
     else if (ev.id == "info") info_ = ev.value == 1;
-    else if (ev.id == "audio") setSound(ev.value == 1);
+    else if (ev.id == "audio") setSound(static_cast<SoundMode>(ev.value));
     else if (ev.id == "action") { setCycle(false); flush(); runAction(); }
     else if (ev.id == "rare") { setCycle(false); flush(); world_->triggerRare(); }
     else if (ev.id == "rare2") { setCycle(false); flush(); world_->triggerRare(RarePick::Other); }
@@ -298,6 +343,8 @@ void Session::render(Frame& out) {
   if (toastLeft_ > 0 && !menu_.isOpen()) drawToast(out, toast_, style_);
   menu_.render(out, style_);
 }
+
+void Session::takeSoundEvents(std::vector<SoundEvent>& out) { world_->takeEvents(out); }
 
 AmbientParams Session::ambient() const {
   AmbientParams p = ambientFor(*world_);

@@ -36,6 +36,13 @@
 - Every scene is exercised at odd sizes down to 1x1 and at every hour; determinism per seed is
   asserted. A sprite lint test fails on colored blank cells without `solid: yes`.
 - Sound is tested by measured levels (RMS/peak) and structure, not by listening - see below.
+- **Golden sound values** (2026-11-13): `ambience_stereo_output_matches_the_golden_values_of_every_scene` pins the RMS of each channel in ten
+  0.2 s windows for all six scenes, calm and with their second catastrophe (12 cases, table in `tests/ambience_golden.inc`), compared with a
+  tolerance of 8 % (`kGoldenTolerance`) because libm and fused multiply-add differ between platforms: Linux/GCC matches to 0.2 %, but the macOS and Windows CI runs differ by up to 4.5 % in single windows (a bit-exact hash or a tight bound fails there; the loose bound was set from the CI logs, the platforms themselves were not run locally). Regenerate only for a change
+  that is meant to alter sound: `diorascii_tests --print-golden > tests/ambience_golden.inc`, and say so in the commit message. To prove a refactor
+  moved nothing on one machine, `diorascii_tests --dump-golden FILE` writes the raw samples; compare the files from before and after with `cmp`.
+  A second case, `leaving_and_re_entering_the_forest_...` (`tests/ambience_golden_switch.inc`, RMS per second over 24 s), pins a forest storm that is left while the thunder rumbles
+  and re-entered; its values were recorded from the synth *before* the forest chain was gated, so it proves the gate changed nothing audible and keeps the random draws in step.
 
 ## Art conventions
 
@@ -66,6 +73,11 @@ levels were only measured. Accumulated preferences from the forest iterations:
   (sounded like a cellphone); an eagle cry every 15-35 s and a woodpecker every 15-35 s, by day,
   silenced in a snowstorm; avalanche = roar plus crackle at the break and thumps/clicks while it
   rolls; a stream must not sound like "brushing" (low-passed, rippled).
+- Multichannel (2026-11-13): positions are azimuth in degrees (+ to the right) and elevation; a sound that
+  has a place goes through `Spatializer`/`SpatialVoice`, never through a hand-written pan. Gains are constant power; test levels and directions
+  (which speakers get the energy), not timbre. Bed sounds get one independent noise chain per full-range speaker (see the plan, section 3.6; applied since
+  2026-11-14, see `architecture.md`): a new continuous sound runs `for ch < chains_` with `chainRng(ch)`, skips chains that are not `live`, and is classed as bed; a discrete event or tone
+  is a voice and plays on chains 0 and 1 until it is placed. Never draw a chain-0/1 noise from anywhere but `rng_`, and never from `rng_` for chain 2 and up.
 - Noise level is sample-rate independent (`noiseScale_`); quote levels at 48 kHz.
 - Thunder/flash counters must not trigger on world rebuild or when sound is switched on mid-storm
   (the first counter value is the baseline).
@@ -79,8 +91,14 @@ levels were only measured. Accumulated preferences from the forest iterations:
 - Second catastrophes (2026-11-10, measured only): `menace` sets the level of the hiss, rush, rotor and roars; keep it
   below about 0.3 RMS (the storms), and the calm-to-menace ratio at least 1.5 at 48 kHz (the hiss does not exist at
   8 kHz). Event cracks (shots) are noise bursts of 12 ms over a 150 Hz thump, no sharper than the thunder snap.
-- A new `AmbientParams` field must also be copied in the audio backends (`audio.cpp`,
-  `audio_apple.mm`). Forgetting it passes every test and is silent in the real program.
+- A sound that has a place gets it from the world, not from the synth's own dice: a continuous source is an `Emitter` (`World::emitter`), a one-off is a `SoundEvent` (`World::emit` at the place where the counter ticks). Positions are stage units (see `architecture.md`); never
+  re-derive them from cells in the audio code. Every new counter that triggers a sound gets an event with the causing entity's position, and a test that checks the position against that entity.
+- A converted scene's sounds come in two kinds: bed (per chain, trimmed, drifting) and placed (a `Place`: mono voice or weighted noise, from the world's emitter or event). A placed mono sound is scaled by `kStereoRef`; send bass only through a place's `lfeSend`
+  (the synth drops it in layouts without LFE). Prove a conversion keeps the stereo sound: with every emitter at the centre the golden values must hold (within the tolerance); a deliberate difference is re-baselined and said in the commit message.
+- A placed sound leaves the front pair of a room by design, so a test that compares a layout's front left and right, or a single speaker, with the stereo synth must use parameters with nothing placed (`placedFreeParams()`: the forest's wind and rain by day). The scale of a placed mono sound is `stereoRef_` (sqrt(2), but 1 for a single speaker).
+- Events before parameters: a frontend pushes the frame's sound events into the output **before** it stores the frame's parameters, because a sound that a counter starts takes its place from the latest event.
+- A new `AmbientParams` field needs nothing in the audio backends: they copy the whole struct through a `Seqlock`
+  (since 2026-11-14, finding F-19). Keep `AmbientParams` trivially copyable (no pointers, strings or containers).
 
 ## Changelog and commit messages
 

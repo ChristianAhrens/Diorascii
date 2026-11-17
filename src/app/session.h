@@ -13,6 +13,7 @@
 #include "core/menu.h"
 #include "core/rng.h"
 #include "core/world.h"
+#include "core/negotiate.h"
 
 namespace dio {
 
@@ -40,8 +41,11 @@ class Session {
     bool realtime = false;
     /// Show the info line from the start.
     bool info = false;
-    /// Ask for ambient sound from the start.
+    /// Ask for ambient sound from the start (immersive, or stereo if `audioLayout` is 2.0).
     bool sound = false;
+    /// The speaker layout of the immersive sound (auto: the richest one the route offers, see negotiate()); 2.0
+    /// starts the sound as stereo. The menu has no layout entry: the sound is off, stereo or immersive.
+    LayoutChoice audioLayout;
     /// Offer "Quit" in the menu. Frontends that are left another way (tvOS: the Menu button) turn it off.
     bool quitEntry = true;
   };
@@ -95,14 +99,34 @@ class Session {
   /// Frame rate shown on the info line; the frontend measures it.
   void setMeasuredFps(double fps) { fps_ = fps; }
 
-  /// True while the user wants ambient sound. The frontend opens or closes its sound device
+  /// What the menu's *Sound* entry says: no ambient sound, the sound in stereo, or the immersive sound (the
+  /// layout of the route: surround and height speakers, or the system's 3D audio on AirPods). Immersive is the default.
+  enum class SoundMode { Off, Stereo, Immersive };
+  /// The sound mode now.
+  SoundMode soundMode() const { return mode_; }
+  /// True while the user wants ambient sound (stereo or immersive). The frontend opens or closes its sound device
   /// to match and, if it cannot open one, calls soundUnavailable().
-  bool soundWanted() const { return sound_; }
+  bool soundWanted() const { return mode_ != SoundMode::Off; }
   /// Called by the frontend when ambient sound was requested but no device could be opened:
   /// switches the request off and, if `announce`, says so on screen.
   void soundUnavailable(bool announce = true);
+  /// The speaker layout to open the sound output with: 2.0 in the stereo mode, else the immersive layout (auto, unless
+  /// the command line named one).
+  LayoutChoice layoutChoice() const;
+  /// True once after the user switched between stereo and immersive in the menu: the frontend then opens its sound
+  /// device again with layoutChoice() (while the sound is on).
+  bool takeLayoutChange();
+  /// The frontend tells what its sound output rendered to after it opened (or reopened): the menu's small print
+  /// shows it, for example "Audio output: 7.1 on 8 channels", "Audio output: 7.1.4 on 2 channels (mixed down)" or, if the route's own
+  /// spatializer makes the sound (AirPods), "Audio output: 7.1.4 on 2 channels (spatialized)". Switching the sound off
+  /// clears it.
+  void soundLayout(const char* name, int deviceChannels, bool downmixed, bool spatialized = false);
   /// What the ambient sound should reflect now (muted while paused).
   AmbientParams ambient() const;
+  /// Moves the one-off sounds (with their places on the stage) that happened since the last call to the
+  /// end of `out`. The frontend calls this every frame, also while muted, and hands them to the
+  /// sound output.
+  void takeSoundEvents(std::vector<SoundEvent>& out);
 
  private:
   /// Builds a fresh world for the current scene, size and carried-over time of day.
@@ -113,8 +137,8 @@ class Session {
   void switchScene(size_t idx);
   /// In the real-time mode, sets the world's time of day from the host clock.
   void syncClock();
-  /// Turns the sound request on or off and keeps the menu in step.
-  void setSound(bool on);
+  /// Sets the sound mode and keeps the menu in step.
+  void setSound(SoundMode mode);
   /// Runs the scene's action and confirms it on screen. Returns true if something happened.
   bool runAction();
   /// Switches between the user and the cycle mode.
@@ -128,6 +152,8 @@ class Session {
   void markProgress();
   /// Ends a crossfade (drops the outgoing world).
   void endFade();
+  /// Sets the menu's small print: the layout the sound is rendered to now, the version and the copyright.
+  void updateFooter();
   /// Applies what the user changed in the open menu.
   void applyMenuEvents();
 
@@ -174,8 +200,14 @@ class Session {
   bool paused_ = false;
   /// Info line visible.
   bool info_;
-  /// Sound requested.
-  bool sound_ = false;
+  /// The sound mode (the menu's *Sound* entry).
+  SoundMode mode_ = SoundMode::Off;
+  /// The layout the immersive mode asks for (auto, or what the command line named).
+  LayoutChoice immersive_;
+  /// The sound switched between stereo and immersive and the frontend has not taken it yet.
+  bool layoutChanged_ = false;
+  /// The layout the sound is rendered to right now, as a line of the menu's small print (empty while there is no sound).
+  std::string outputLine_;
   /// Quit requested.
   bool quit_ = false;
   /// A scene switch, restart or resize wants a new world.

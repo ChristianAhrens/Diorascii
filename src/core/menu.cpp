@@ -60,6 +60,13 @@ void Menu::setEnabled(const std::string& id, bool enabled) {
   if (Item* it = find(id)) it->enabled = enabled;
 }
 
+std::string Menu::optionText(const std::string& id) const {
+  for (const auto& it : items_) {
+    if (it.id == id && it.value < it.options.size()) return it.options[it.value];
+  }
+  return {};
+}
+
 size_t Menu::value(const std::string& id) const {
   for (const auto& it : items_) {
     if (it.id == id) return it.value;

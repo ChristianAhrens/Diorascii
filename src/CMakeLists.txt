@@ -25,6 +25,9 @@ add_library(diorascii_core STATIC
   core/city.cpp
   core/disasters.cpp
   core/ambience.cpp
+  core/layout.cpp
+  core/negotiate.cpp
+  core/spatializer.cpp
   "${EMBED_CPP}")
 target_include_directories(diorascii_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -43,19 +46,21 @@ if(DIORASCII_TERMINAL)
   diorascii_warnings(diorascii_term)
 endif()
 
-# Ambient sound. Desktop builds play through the vendored miniaudio, built as its own library
-# without our warnings; tvOS and iOS use AVAudioEngine (miniaudio would need Objective-C there).
-if(CMAKE_SYSTEM_NAME MATCHES "^(tvOS|iOS)$")
+# Ambient sound. Windows and Linux play through the vendored miniaudio, built as its own library
+# without our warnings; macOS, tvOS and iOS use AVSampleBufferAudioRenderer, which hands the system tagged multichannel
+# layout to place on the device (and, on AirPods, to spatialize).
+if(APPLE)
   add_library(diorascii_audio STATIC audio/audio_apple.mm)
-  target_link_libraries(diorascii_audio PUBLIC diorascii_core "-framework AVFoundation")
+  target_link_libraries(diorascii_audio PUBLIC diorascii_core "-framework AVFoundation" "-framework CoreMedia" "-framework Foundation"
+    "-framework AudioToolbox" objc)
   target_compile_options(diorascii_audio PRIVATE -fobjc-arc)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")  # the default output device and its transport (macOS has no audio session)
+    target_link_libraries(diorascii_audio PUBLIC "-framework CoreAudio")
+  endif()
 else()
   add_library(diorascii_miniaudio STATIC audio/miniaudio_impl.cpp)
   target_include_directories(diorascii_miniaudio SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/third_party/miniaudio")
-  if(APPLE)
-    target_link_libraries(diorascii_miniaudio PUBLIC "-framework CoreFoundation"
-      "-framework CoreAudio" "-framework AudioToolbox")
-  elseif(UNIX)
+  if(UNIX)
     target_link_libraries(diorascii_miniaudio PUBLIC ${CMAKE_DL_LIBS} pthread m)
   endif()
 

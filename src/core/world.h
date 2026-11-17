@@ -15,6 +15,7 @@
 #include "core/frame.h"
 #include "core/rng.h"
 #include "core/scene.h"
+#include "core/soundstage.h"
 
 namespace dio {
 
@@ -421,8 +422,12 @@ class World {
   size_t tongueCount() const { return tongues_.size(); }
   /// How many things devouring catastrophes (the sandworm, the kraken) have crushed so far; sound follows each.
   unsigned crushCount() const { return crushes_; }
-  /// Counts things crushed by a devouring catastrophe. Called by the `catastrophe` behavior.
-  void noteCrushed(size_t n) { crushes_ += static_cast<unsigned>(n); }
+  /// Counts things crushed by a devouring catastrophe, and records the sound at the point `cx`, `cy`
+  /// (cells) of layer `z`. Called by the `catastrophe` behavior and by tongues.
+  void noteCrushed(size_t n, double cx, double cy, int z) {
+    crushes_ += static_cast<unsigned>(n);
+    if (n > 0) emit(EventKind::Crush, cx, cy, z, static_cast<float>(n));
+  }
   /// How many animals an avalanche has buried so far; each lets out a muffled squeal.
   unsigned squealCount() const { return squeals_; }
   /// How many rifle shots the poachers have fired so far; sound follows each.
@@ -442,8 +447,9 @@ class World {
   size_t killedCount() const { return killed_; }
   /// How many wiped-out entities are still waiting to be brought back.
   size_t restockPending() const { return restock_.size(); }
-  /// Starts a screen flash of the given length (lightning).
-  void flash(double seconds);
+  /// Starts a screen flash of the given length (lightning). `cx` is the column it strikes (in cells;
+  /// by default the middle of the scene), for the sound of the thunder.
+  void flash(double seconds, double cx = -1e9);
   /// How many flashes have been started so far; sound follows each one as thunder.
   unsigned flashCount() const { return flashCount_; }
   /// True while the screen is lit up by a flash (two quick flashes, then dark again).
@@ -486,6 +492,23 @@ class World {
   };
   /// The sound state of the train nearest to the middle of the screen (all zero but `motion` = 1 if none).
   TrainSound trainSound() const;
+  /// The strongest creature whose tag or sprite name is `key` (the one nearness() reports), with
+  /// where it stands: x from -1 to 1 across the screen (up to +-1.5 off-screen), y from the ground
+  /// (0) to the top of the screen (1), depth from its layer. `level` is exactly nearness(key); the
+  /// position is zero if there is no such creature. Does not change the world.
+  Emitter emitter(const std::string& key) const;
+  /// emitter() for one of the known sound sources.
+  Emitter emitter(EmitterKey key) const;
+  /// Where a point of the world is on the stage: `cx` and `cy` in cells, `z` the layer.
+  /// @param[out] x, y, depth the stage position (see Emitter)
+  void stagePoint(double cx, double cy, int z, float& x, float& y, float& depth) const;
+  /// Records a one-off sound at a point of the world (cells and layer). The queue keeps the latest
+  /// kMaxPendingEvents; older ones are dropped if nobody takes them.
+  void emit(EventKind kind, double cx, double cy, int z, float strength = 1.0f);
+  /// Moves the sound events since the last call to the end of `out` (and empties the queue).
+  void takeEvents(std::vector<SoundEvent>& out);
+  /// The most sound events kept for a frontend that does not take them.
+  static constexpr size_t kMaxPendingEvents = 64;
   /// How overcast the sky is, from 0 (clear) to 1 (rain clouds).
   double overcast() const { return overcast_; }
   /// Gravity of the scene in cells per second squared.
@@ -529,8 +552,12 @@ class World {
   Entity* spawnEffect(const std::string& spriteName, double x, double y, int z, double vx, double vy);
   /// Counts a catch. Called by predator behaviors.
   void noteEaten() { ++eaten_; }
-  /// Counts an eaten food flake. Called by feeding behaviors.
-  void noteFoodEaten() { ++foodEaten_; }
+  /// Counts an eaten food flake and records the sound at the point `cx`, `cy` (cells) of layer `z`.
+  /// Called by feeding behaviors.
+  void noteFoodEaten(double cx, double cy, int z) {
+    ++foodEaten_;
+    emit(EventKind::Nibble, cx, cy, z);
+  }
 
  private:
   /// A skyscraper of the city's skyline.
@@ -679,7 +706,10 @@ class World {
   /// Puts barriers at both ends of the cordoned site, and takes them away again.
   void raiseBarriers();
   void liftBarriers();
+  double slideX_ = 0, slideY_ = 0;  ///< where the avalanche is (the slab that is about to let go, then its head), in cells
   double fireLevel_ = 0;
+  double fireX_ = 0, fireY_ = 0;  ///< centre of the building whose fire is strongest, in cells (for the sound)
+  int fireZ_ = 0;                  ///< its layer
   double smokePuffs_ = 0;
   /// Fading trace of the avalanche over every cell, row by row.
   std::vector<float> scar_;
@@ -713,6 +743,7 @@ class World {
   uint64_t nextId_ = 0;
   /// Counters behind crushCount() and squealCount().
   unsigned crushes_ = 0, squeals_ = 0, shots_ = 0;
+  std::vector<SoundEvent> events_;  ///< sound events not yet taken (see emit())
   /// How loud the avalanche is right now.
   double slideLevel_ = 0;
   /// The poison trail of the submarine: a puff is left behind it every column or so, and every
@@ -781,6 +812,8 @@ class World {
   } clash_;
   /// How muddy each column is (1 right after the water has been over it, fading in time).
   std::vector<float> mud_;
+  /// The column the front of the flood has reached (from the side it comes from).
+  double floodFront() const;
   /// Depth of the flood water at column x, in rows from the bottom of the screen.
   double floodDepth(int x) const;
   /// Advances the flood, tears off what it reaches and lets the mud dry.

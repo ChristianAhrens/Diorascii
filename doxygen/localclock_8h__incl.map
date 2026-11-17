@@ -1,0 +1,5 @@
+<map id="src/app/localclock.h" name="src/app/localclock.h">
+<area shape="rect" id="Node000001" title="The host&#39;s local time of day, for frontends that feed Session::setClockHour()." alt="" coords="5,5,155,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="51,81,109,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="82,32,83,66,77,65,78,36"/>
+</map>

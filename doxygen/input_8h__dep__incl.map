@@ -1,0 +1,21 @@
+<map id="src/core/input.h" name="src/core/input.h">
+<area shape="rect" id="Node000001" title="Abstract input actions every frontend translates its devices into." alt="" coords="152,5,274,33"/>
+<area shape="rect" id="Node000002" href="$session_8h.html" title="The interactive application state shared by every frontend." alt="" coords="13,157,146,184"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="180,45,140,83,110,123,89,158,84,155,106,120,136,79,183,40"/>
+<area shape="rect" id="Node000005" href="$menu_8h.html" title="Modal ASCII menu driven by abstract actions." alt="" coords="150,81,276,109"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="214,46,215,81,210,80,212,51"/>
+<area shape="rect" id="Node000007" href="$terminal_8h.html" title="Raw&#45;mode terminal session (input, size, output)." alt="" coords="302,81,449,109"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="256,37,349,80,344,81,256,42"/>
+<area shape="rect" id="Node000003" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="229,232,362,260"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="133,187,259,230,255,233,132,192"/>
+<area shape="rect" id="Node000004" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="5,232,154,260"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="81,198,82,233,77,231,78,202"/>
+<area shape="poly" id="edge5_Node000005_Node000002" title=" " alt="" coords="174,118,105,158,102,154,178,114"/>
+<area shape="rect" id="Node000006" href="$menu_8cpp.html" title="Menu navigation and rendering." alt="" coords="171,157,311,184"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="224,121,238,157,233,156,222,126"/>
+<area shape="poly" id="edge8_Node000007_Node000003" title=" " alt="" coords="364,121,304,234,301,230,359,123"/>
+<area shape="rect" id="Node000008" href="$terminal__posix_8cpp.html" title="Terminal backend for macOS and Linux (termios, poll, signals)." alt="" coords="386,157,589,184"/>
+<area shape="poly" id="edge9_Node000007_Node000008" title=" " alt="" coords="409,115,470,156,465,156,407,120"/>
+<area shape="rect" id="Node000009" href="$terminal__win_8cpp.html" title="Terminal backend for Windows (console virtual terminal mode)." alt="" coords="613,157,804,184"/>
+<area shape="poly" id="edge10_Node000007_Node000009" title=" " alt="" coords="450,110,651,155,646,157,450,115"/>
+</map>

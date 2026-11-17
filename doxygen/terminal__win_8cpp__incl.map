@@ -1,0 +1,30 @@
+<map id="src/term/terminal_win.cpp" name="src/term/terminal_win.cpp">
+<area shape="rect" id="Node000001" title="Terminal backend for Windows (console virtual terminal mode)." alt="" coords="58,5,249,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,81,96,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="134,36,83,73,79,70,136,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="120,81,186,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="154,31,156,66,151,65,153,36"/>
+<area shape="rect" id="Node000004" href="$terminal_8h.html" title="Raw&#45;mode terminal session (input, size, output)." alt="" coords="210,81,334,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="174,31,241,72,236,74,175,36"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="79,157,155,184"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="242,111,160,152,157,148,246,107"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="164,308,222,336"/>
+<area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="255,111,238,132,221,158,208,192,201,229,195,293,190,291,195,228,203,191,216,155,234,128,258,107"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="487,308,550,336"/>
+<area shape="poly" id="edge6_Node000004_Node000007" title=" " alt="" coords="334,102,393,121,422,135,448,155,475,187,494,224,508,260,516,294,511,291,503,262,489,226,470,190,445,159,420,140,391,126,334,108"/>
+<area shape="rect" id="Node000008" href="$input_8h.html" title="Abstract input actions every frontend translates its devices into." alt="" coords="336,157,434,184"/>
+<area shape="poly" id="edge7_Node000004_Node000008" title=" " alt="" coords="292,107,355,148,350,149,292,112"/>
+<area shape="rect" id="Node000009" href="$vt_8h.html" title="Encoding frames as VT/ANSI escape sequences." alt="" coords="231,157,312,184"/>
+<area shape="poly" id="edge8_Node000004_Node000009" title=" " alt="" coords="273,107,274,142,269,140,271,112"/>
+<area shape="poly" id="edge9_Node000009_Node000006" title=" " alt="" coords="267,183,209,295,205,292,263,186"/>
+<area shape="rect" id="Node000010" href="$frame_8h.html" title="Styled character cells and the frame buffer frontends render from." alt="" coords="281,232,385,260"/>
+<area shape="poly" id="edge10_Node000009_Node000010" title=" " alt="" coords="283,182,315,221,310,220,282,187"/>
+<area shape="poly" id="edge11_Node000010_Node000006" title=" " alt="" coords="311,259,233,303,230,298,306,262"/>
+<area shape="poly" id="edge13_Node000010_Node000007" title=" " alt="" coords="367,258,476,302,470,303,366,263"/>
+<area shape="rect" id="Node000011" title=" " alt="" coords="246,308,343,336"/>
+<area shape="poly" id="edge12_Node000010_Node000011" title=" " alt="" coords="328,259,310,296,307,292,324,262"/>
+<area shape="rect" id="Node000012" href="$color_8h.html" title="RGB colors and simple color math." alt="" coords="366,308,463,336"/>
+<area shape="poly" id="edge14_Node000010_Node000012" title=" " alt="" coords="348,258,392,298,386,297,347,263"/>
+<area shape="rect" id="Node000013" title=" " alt="" coords="382,384,447,411"/>
+<area shape="poly" id="edge15_Node000012_Node000013" title=" " alt="" coords="416,334,417,370,412,366,413,338"/>
+</map>

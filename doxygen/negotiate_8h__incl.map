@@ -1,0 +1,11 @@
+<map id="src/core/negotiate.h" name="src/core/negotiate.h">
+<area shape="rect" id="Node000001" title="Choosing the layout to render to: what the user asked for, what the device reports,..." alt="" coords="16,5,166,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,157,71,184"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="69,36,47,55,28,82,24,97,24,112,30,142,24,142,19,112,19,96,24,80,44,52,71,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="114,157,210,184"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="113,31,139,52,159,80,167,111,168,142,163,140,162,112,154,82,135,56,112,36"/>
+<area shape="rect" id="Node000004" href="$layout_8h.html" title="Speaker layouts: which channels an output has and where they stand around the listener." alt="" coords="38,81,144,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="92,31,94,66,89,65,90,36"/>
+<area shape="poly" id="edge4_Node000004_Node000002" title=" " alt="" coords="84,108,58,146,54,142,80,111"/>
+<area shape="poly" id="edge5_Node000004_Node000003" title=" " alt="" coords="105,107,142,145,136,146,103,112"/>
+</map>

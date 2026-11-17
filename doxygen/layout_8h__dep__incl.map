@@ -1,0 +1,32 @@
+<map id="src/core/layout.h" name="src/core/layout.h">
+<area shape="rect" id="Node000001" title="Speaker layouts: which channels an output has and where they stand around the listener." alt="" coords="429,5,558,33"/>
+<area shape="rect" id="Node000002" href="$ambience_8h.html" title="Procedurally synthesized ambient sound for a scene." alt="" coords="361,157,514,184"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="480,45,464,82,451,123,442,158,438,155,446,121,459,80,476,49"/>
+<area shape="rect" id="Node000009" href="$layout_8cpp.html" title="Speaker layout tables and the mapping of device channels onto the canonical ones." alt="" coords="652,81,796,109"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="549,35,685,80,680,81,549,41"/>
+<area shape="rect" id="Node000010" href="$negotiate_8h.html" title="Choosing the layout to render to: what the user asked for, what the device reports,..." alt="" coords="186,157,336,184"/>
+<area shape="poly" id="edge10_Node000001_Node000010" title=" " alt="" coords="458,43,283,158,280,154,463,40"/>
+<area shape="rect" id="Node000012" href="$spatializer_8h.html" title="Places a mono sound in a speaker layout: panning gains, spread, bass send, smoothing." alt="" coords="473,81,628,109"/>
+<area shape="poly" id="edge14_Node000001_Node000012" title=" " alt="" coords="514,43,543,81,538,80,512,48"/>
+<area shape="rect" id="Node000003" href="$session_8h.html" title="The interactive application state shared by every frontend." alt="" coords="352,232,485,260"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="432,198,424,234,420,230,428,201"/>
+<area shape="rect" id="Node000006" href="$audio_8h.html" title="Plays the synthesized ambience on the default sound device." alt="" coords="195,232,328,260"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="394,190,294,234,292,229,389,192"/>
+<area shape="rect" id="Node000008" href="$ambience_8cpp.html" title="Procedurally synthesized ambient sound." alt="" coords="510,232,677,260"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="479,189,568,232,563,232,478,194"/>
+<area shape="rect" id="Node000004" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="274,308,406,336"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="396,270,355,310,353,305,391,272"/>
+<area shape="rect" id="Node000005" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="430,308,578,336"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="447,268,491,308,486,307,445,273"/>
+<area shape="poly" id="edge6_Node000006_Node000004" title=" " alt="" coords="288,268,329,308,323,307,286,273"/>
+<area shape="rect" id="Node000007" href="$audio_8cpp.html" title="Playback device wrapper around miniaudio." alt="" coords="102,308,250,336"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="237,270,192,310,190,305,232,271"/>
+<area shape="poly" id="edge11_Node000010_Node000003" title=" " alt="" coords="304,189,393,232,388,232,303,194"/>
+<area shape="poly" id="edge12_Node000010_Node000006" title=" " alt="" coords="263,198,264,233,259,231,260,202"/>
+<area shape="rect" id="Node000011" href="$negotiate_8cpp.html" title="Layout negotiation: positions, ports, choices and the step&#45;down." alt="" coords="5,232,171,260"/>
+<area shape="poly" id="edge13_Node000010_Node000011" title=" " alt="" coords="215,193,120,234,118,230,218,189"/>
+<area shape="poly" id="edge16_Node000012_Node000002" title=" " alt="" coords="520,116,459,159,456,154,515,119"/>
+<area shape="poly" id="edge15_Node000012_Node000008" title=" " alt="" coords="560,121,592,233,587,231,557,126"/>
+<area shape="rect" id="Node000013" href="$spatializer_8cpp.html" title="Panning law (stereo sine/cosine, DBAP for everything else), spread and bass send." alt="" coords="588,157,758,184"/>
+<area shape="poly" id="edge17_Node000012_Node000013" title=" " alt="" coords="586,114,654,156,649,156,585,120"/>
+</map>

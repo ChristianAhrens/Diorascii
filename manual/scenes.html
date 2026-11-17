@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Diorascii user manual: installing and using the animated ASCII scenes for your terminal.">
+  <title>The scenes - Diorascii Manual</title>
+  <style>
+    :root {
+      --bg:          #060b17;
+      --surface:     #101826;
+      --surface-2:   #18233a;
+      --border:      #2a3a57;
+      --text:        #e6edf3;
+      --text-muted:  #8a98ad;
+      --accent:      #4cc9f0;
+      --accent-dim:  #17415a;
+      --code-bg:     #0a1120;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f8fb; --surface: #ffffff; --surface-2: #e9eff6; --border: #c9d5e3;
+        --text: #14202e; --text-muted: #55657a; --accent: #0b6e99; --accent-dim: #d3e8f3; --code-bg: #eef3f8;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .layout { display: flex; min-height: 100vh; }
+    nav.side {
+      flex: 0 0 15rem; padding: 1.5rem 1rem; background: var(--surface);
+      border-right: 1px solid var(--border); position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto;
+    }
+    nav.side .brand { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); text-decoration: none; display: block; margin-bottom: 0.25rem; }
+    nav.side .sub { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.25rem; }
+    nav.side a.chapter { display: block; padding: 0.35rem 0.6rem; border-radius: 6px; color: var(--text); text-decoration: none; font-weight: 600; }
+    nav.side a.chapter:hover { background: var(--surface-2); }
+    nav.side a.chapter[aria-current="page"] { background: var(--accent-dim); color: var(--accent); }
+    nav.side .back { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
+    nav.side .back a { display: block; padding: 0.2rem 0.6rem; text-decoration: none; color: var(--text-muted); }
+    nav.side .back a:hover { color: var(--accent); }
+    main { flex: 1; min-width: 0; padding: 2rem 2rem 4rem; }
+    article { max-width: 54rem; margin: 0 auto; }
+    h1 { font-size: 2.2rem; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 1rem; }
+    h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+    h3 { margin-top: 1.75rem; }
+    img { max-width: 100%; height: auto; }
+    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+    code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.3; }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+    table { border-collapse: collapse; display: block; overflow-x: auto; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.4rem 0.7rem; vertical-align: top; text-align: left; }
+    th { background: var(--surface-2); }
+    blockquote { margin: 1rem 0; padding: 0.1rem 1rem; border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; }
+    .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    footer { margin-top: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+    @media (max-width: 760px) {
+      .layout { flex-direction: column; }
+      nav.side { position: static; height: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side"><a class="brand" href="index.html">Diorascii</a><div class="sub">User manual</div><a class="chapter" href="index.html">Overview</a><a class="chapter" href="install.html">Installation</a><a class="chapter" href="usage.html">Using Diorascii</a><a class="chapter" href="scenes.html" aria-current="page">The scenes</a><a class="chapter" href="faq.html">Troubleshooting</a><div class="back"><a href="../index.html">Project page</a><a href="https://github.com/ChristianAhrens/Diorascii/releases/latest">Latest release</a><a href="https://github.com/ChristianAhrens/Diorascii">GitHub repository</a><a href="../doxygen/index.html">API documentation</a></div></nav>
+  <main>
+    <article>
+<h1 id="the-scenes">The scenes</h1>
+<p>Left and right arrow keys (or the menu) switch between the scenes; <code>--scene NAME</code> starts in one. Each scene has</p>
+<ul>
+<li>its <strong>inhabitants</strong>, who live their own lives: they swim, walk, fly, hunt, sleep at night and come back in the morning,</li>
+<li>an <strong>action</strong> on <code>f</code> (in the user mode; in the cycle mode it runs by itself), a small thing you can set off whenever you like,</li>
+<li>two <strong>rare events</strong> (catastrophes) on <code>x</code> and <code>X</code> (user mode), which also turn up on their own every few minutes.</li>
+</ul>
+<p>The pictures on this page are plain-text renderings made by <code>diorascii --dump</code> (see <a href="usage.html#looking-without-a-terminal">Using Diorascii</a>); in the terminal everything is in color and moves.</p>
+<h2 id="aquarium">Aquarium</h2>
+<p><img src="img/Diorascii_Sea_Night.png" alt="The aquarium by night" /></p>
+<p>A sea from the surface to the sandy bed: schools of fish, jellyfish, eels, crabs, a shark and a whale pass through water and weeds, with bubbles rising and a sunken wreck on the bed.</p>
+<!-- dump: --scene aquarium --seed 3 --dump 300 --size 78x20 -->
+
+<pre class="text"><code>                                      /    \
+                                     |      |
+                                      \    /
+                                       &#39;--&#39;
+----~~~~--_______---~~---____--~~~~~~~--____---~~---______--~~~~~----_---~~~~~
+    ..     .  ..    .. ..         .         .  _.-._   ..  .               ..
+._,                                 &lt;=={o&gt;    (_____)
+.&#39;/                                            |/|\|
+&#39;               .---.
+             &gt;&lt;=(  o )&gt;
+                `---&#39;
+                         \                 &lt;o&gt;=          |&gt;             |\
+                          \     \                       _|_    _   _  &lt;o}==&gt;
+           )               )     (                     | _ |__| |_| |__| _\|
+       ,  -. , .-.   .     /  ,  ,  ,                  |_|_|  ___ ___  |_|_/
+      \|&lt;o|/`-&#39;   `-&#39;     )  \|/\|/ |/                 | _ |  |  |  |  | _)|
+       \|/(\|/            (   \|/)\|/                  |   |\/(o_o)\/__|  (|
+        | ) |             )    | ( |                   |___|  // \\    |__)|
+&#39;,`.:, ,`, ,:.:,&#39;. ::&#39;.`.&#39;&#39;:. `,` :.:,... ::. .,:``: &#39;, :&#39;. ,,,`: `&#39;`&#39;:`...:&#39;&#39;
+. .:&#39;.`.&#39;`...,..  .. . : ,&#39;::,:.:. :., ..:``,`:.,.&#39;,,.``.&#39;: .,&#39;  :.`.`,&#39;.  .&#39;`</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, feed the fish</strong>: a clump of eight twinkling flakes of food sinks from the surface (at most 30 at once) and the fish swim over and eat them.</li>
+<li><strong>Kraken</strong> (<code>x</code>): a giant sea monster lumbers across the sea bed, the water darkens to violet and it lashes out with tentacles at whatever it can reach, which bursts into ink. Animals out of reach survive.</li>
+<li><strong>Leaking submarine</strong> (<code>X</code>, one time in five also on its own): a grey submarine leaves a trail of poison behind it that spreads until it fills the sea from top to bottom and every animal it reaches dies. The water turns sickly green; the cloud then lingers and thins out and the sea slowly fills with life again.</li>
+</ul>
+<h2 id="forest">Forest</h2>
+<p><img src="img/Diorascii_Forest_Day.png" alt="The forest by day" /></p>
+<p>Trees, bushes and flowers on a bank with a river, where deer, foxes, birds, butterflies and fireflies live (butterflies and birds by day, fireflies by night).</p>
+<!-- dump: --scene forest --seed 5 --dump 200 --size 78x20 -->
+
+<pre class="text"><code>                              .--.
+                             /    \                            _.---._
+                            |      |                         _(       )_
+                             \    /                       .-(           )
+                              &#39;--&#39;                           `-._____.-&#39;
+)                                                      _.-._
+ \_.-.v.-._/                                         _(     )                _
+    &#39;---&#39;    _.-&quot;-._                                (        }{^         _.-}{
+_          .&#39;       &#39;. ^               _.-&quot;-.)(&quot;-._           _.-&quot;-._  .`
+ )_^     ^(     ^    _.-&quot;-._         .`       `.   &#39;.      ^.`       `.      /
+  / \   / \    / \ .`       `.      (           )    )    / \          )  )(/
+./   \ /   \. /   (           )     (           )    )^  /   \         ).  /
+\     \     \/    (           )      `.       .&#39;   .&#39;/ \/     \^  ^  .&#39;  `/  ^
+ \     \    /      `.       .&#39;-,       `-._.-&#39;\|/\|//  /      / \/ \&#39;-,  /  /
+  \     \  /         `-._.-&#39;\ \ )      |  ,\--/,-(o&gt;--.      /   \  \, )|*-/
+| ,| (   |*) &#39;* |      ||| |&#39; ,  , |.,,*.-(o&gt;&lt;o)-./ *\| *  |/.- -,\ *\)&quot;(.- *,
+   |     || ,,| | .     |     .  | |/|||(__/||\__)  |\ .| .|(     ) |   (   |
+    .        ,    &#39;  &#39;     &#39;     |/| ||/| ||/| | ,              .,  ,    &quot;  &quot;
+   ---   .  -~~~~-.. . -~~-      .---- .  .-~~~~-  .. _o&gt;-    _o&gt;-~~~- .   -~~
+---       -~~~-    -~~~~-       --       -~~~-     `-===/  `-===&#39;--     -~~~-.</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, make it rain</strong>: it rains for about 18 seconds (press again to keep it going): drops streak down and splash on the bank and in the river, clouds roll in and the light dims, then it clears up again.</li>
+<li><strong>Thunderstorm</strong> (<code>x</code>): a dark cloud rolls across the sky, it pours, a lightning bolt hits the ground, the screen flashes twice and every animal dies.</li>
+<li><strong>Flood</strong> (<code>X</code>): the river bursts its banks and a wall of water runs across the land and rips off every tree, bush, flower and animal on the bank. It recedes, and leaves mud and bare ground that is only replanted slowly.</li>
+</ul>
+<h2 id="desert">Desert</h2>
+<p><img src="img/Diorascii_Desert_Night.png" alt="The desert at night" /></p>
+<p>Dunes with cacti, an oasis (its pond is small, medium or big and lies in a different place every time, with its palms and reeds on the shore), and animals such as camels, lizards and a lion; bats and the lion come out at night.</p>
+<!-- dump: --scene desert --seed 4 --dump 250 --size 78x20 -->
+
+<pre class="text"><code>                               .--.
+                              /    \
+                             |      |
+                              \    /
+                               &#39;--&#39;
+
+                                               \ | /          \ | /
+             ^                              ,-.-\|/-.-,    ,-.-\|/-.-,
+            / \                            &#39;  .-\|/-.  `  &#39;  .-\|/-.  `
+         \ | / \                                 |              |
+        -.\|/.- \                 ^              )              )
+     _   / |    .----------.     / \             |              |           _
+    | | /,\) /                \ / .------.       (, | ,    , | ,(  .------.| |
+   _| |.-(o&gt;                   /            \    || |/|    | |/||         _| |
+   | |/(.)()&gt;                /                \  ||/| |    |/|/||         | |
+  _| |_|| )||  `` _   . &#39; .  , : ,     .      .                    ` .&#39;_.--.__
+  :| |  ||  || , | |_  ,..    .  :         ,` , .                  .: /   | |\
+ : |_|    ..   , |_  |,   .   :,           `&#39;   `                   &#39;(________
+      &#39;          . |_| .     .   , : .    .,  . &#39;  : &#39;:  : :    .     :  : &#39;
+      :  `           &#39;  : `    ` ,.  . &#39; .&#39;  ,&#39;  .       ,  &#39;.  `   :   &#39;  .</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, sandstorm or tornado</strong> (a coin toss): a sandstorm blows grains across the whole screen for about 16 seconds while the sky turns ochre. A tornado crosses the scene instead, whirls up sand and throws every animal in its path into the air; they land dazed and walk on. Pressing again during a tornado adds the sandstorm.</li>
+<li><strong>Sandworm</strong> (<code>x</code>): a huge banded worm crawls through the dunes and lashes out a tongue at the animals on the ground ahead of it, swallowing each one it reaches (what flies is spared).</li>
+<li><strong>Poachers</strong> (<code>X</code>): a helicopter flies after the closest animal, hovers over it and shoots down everything alive, one animal after the other, with tracer lines and rifle cracks. When nothing is left it leaves, and the animals return later.</li>
+</ul>
+<h2 id="mountains">Mountains</h2>
+<p><img src="img/Diorascii_Mountains_Day.png" alt="The mountains by day" /></p>
+<p>The only scene that uses the <strong>whole height of the terminal</strong>: from the bottom up a meadow with a stream, a belt of forest, bare rock with crags, and snow and ice on the peaks. The tree line and the snow line are never straight, and every run has a different range.</p>
+<table>
+<thead>
+<tr>
+<th>Who</th>
+<th>Where</th>
+<th>What they do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eagles</td>
+<td>the sky</td>
+<td>soar across the screen and swoop down towards the rocks</td>
+</tr>
+<tr>
+<td>Goats</td>
+<td>rock and snow</td>
+<td>leap along the ledges</td>
+</tr>
+<tr>
+<td>Deer</td>
+<td>meadow and forest</td>
+<td>stroll about; they are the prey</td>
+</tr>
+<tr>
+<td>Bears</td>
+<td>meadow and forest</td>
+<td>stroll about and run a deer down</td>
+</tr>
+<tr>
+<td>Small birds</td>
+<td>over forest and meadow</td>
+<td>flit about by day</td>
+</tr>
+</tbody>
+</table>
+<!-- dump: --scene mountains --seed 7 --dump 250 --size 78x24 -->
+
+<pre class="text"><code>                               .--.
+                              /    \
+                             |      |                           /,//\--\
+                              \    /            -._.-&quot;v&quot;-._    &lt;o)--.\**/\
+                               &#39;--&#39;                 `-&#39;  ^    //|/_|\_\/..\
+                                                        /   //.^./\_\\/\/\_\/-
+                                                   ^  /,./,\../\^.//\/. \_-._&#39;
+          .^.\                                    /:\&lt;o.--(o&gt;/ |\_//_\_/\_\  )
+         .^^^.\^\                             /\ /  ./|/||\|^\__/_____/\ \_
+           |.:/^\\                             /-,,.^^^..&#39;//^^\.:  :/_.^.._\ .
+         //.,/^^^\\-------------^------------//^  &#39;^,|/,.^/^/^\\._.-^.^^^..,:.
+   /----/. &#39;/^^^^^\^^^&#39;&#39;.. \&#39; ^/^\&#39;\:,::^&#39;,:_//^\_/^\/.^./^/^^^\&#39;  /^\ ||. .&quot;&#39;
+--.^.&#39;^^,^&#39;^&#39; ^|^ ^&#39;^&quot;^^,^ ,&quot;/^\^\\,  ^/^\&quot;/_/^^^//^^\^^^)/^^^^^\ /^^^\   )^ .
+^(^^^)/^^&quot;^&quot;^^ ^,&#39;&#39;^^\^\/^\&quot;/^^^\^\ ^&#39;/^^^\ ^^^^//^/^\-._&quot; ,&quot;|(   /^\  ^  ),(
+&quot;^&quot;^,/^/^\^&quot;&quot;^&quot;^^&#39;/^\\\/^^^\^/^\^\^\&#39;,  ^  /^\ |./^\^^\  `. ^,&quot;`./^^^\/^\&#39;&quot;&#39;(
+, ,&quot; ^/^^^\&#39;&quot;^^&#39;&quot;/^^^\\^^^^^/^^^\&#39;^ &#39;&quot;&quot;/^\/^^^\(/^^^\      )^^&quot;^/.^.^^\^^\ ^^`
+^^&quot;^,/^^^^^\\|/, &quot;,|| &#39;&quot;&quot;.^.^&quot;|^&quot;,&quot;&quot;,^/^^^\ |  /^^^^^\     )&quot;&#39;&#39;^(^^^)^^^^^\^,^
+ ,^,,^.-----(o&gt;&quot;^,^ ,^ ^(^^^)^^ &quot;&quot;^,^*^.--&quot;&quot;--..`.|      .&#39; &quot;^.^.*&quot;^|,,| *^, ,
+     &quot;|/|,\| | ,   * &#39;  *       .,   |(        )o&gt;`-._.-&#39;&#39;   (^^^),    &#39; |  ,
+ &quot;  *  /|  |\     *| &quot;  |            ,|||^.  ||  ,,  |        .     ,  &quot; *&#39;
+ ,  |    .    &#39;   | .    .   ,&quot;    _v_ \/^^).\/     .|  &quot; &#39;   ,          |
+   &quot;, |.,  &#39;,    &quot;, | ,  &quot;.  .   &quot;   &quot;     (^^^) , | ,     &#39;      ,   .      .
+ -~~| |/|   ----  | |/|~~~-      --- .     -~~~- | |/|~~~-.      ---   .  -~~~
+~~- |/| | --    . |/|~|~     --~-.       -~--    |/|~|~ .     ---     .-~~~~-</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, snowstorm</strong>: for about 22 seconds an icy wind sweeps snow across the screen, the peaks vanish in a pale whiteout, the birds fall silent and the wind howls.</li>
+<li><strong>Avalanche</strong> (<code>x</code>): high on a snowy flank the snow creaks, the slab lets go and a powder cloud rips down the mountain through rock and forest, burying trees, bushes and animals in its path. The swath fades after about 40 seconds.</li>
+<li><strong>Yeti</strong> (<code>X</code>): an abnormally large, white-furred yeti climbs over the highest ridge and hunts down the animals on the ground, which it has to walk right up to; it roars and its steps thud. Then it goes back up and over.</li>
+</ul>
+<h2 id="city">City</h2>
+<p><img src="img/Diorascii_City_Night.png" alt="The city at night" /></p>
+<p>Skyscrapers in three rows behind a main street with sidewalks, lamps, zebra crossings, shops and a park. Cars, taxis, buses, trucks and cyclists keep to their lane, and <strong>the traffic follows the rush hours</strong> (about 8:00 and 17:30). An elevated railway with a station somewhere along it (a different place every time) carries trains, which stop at the station (the rumble and the klack-klack of the wheels stop with them; the brakes squeal as they roll in and the air hisses as they halt): passengers get off, walk along the platform and come out into the street. Planes come in to land in the background, and on wide screens side streets branch off the main street. The number, size and place of the trees, bushes and flowers and of the zebra crossings change with every start, so no two cities look the same. At night the windows light up and the lamps switch on. The buildings are generated to the height of your terminal; the scene needs a tall enough sky for all of it.</p>
+<!-- dump: --scene city --seed 6 --dump 250 --size 100x30 -->
+
+<pre class="text"><code>               &lt;|=( o o o o o o o o )=====&gt;-.
+                 \_____________________,-&#39;   \
+                          /::::::/     |      |                  _.---._                           _
+                         /______/       \    /                _.(       )-.__.--._
+                                         &#39;--&#39;                (               )_   )_
+                                                            (                  )    )
+                                                             `-.__        __.-&#39;__.-&#39;
+                         *                                        `-....-&#39;
+                                                                                            *
+                                                                                            |
+                                                                                            |
+                                                                        H
+- -|- - - - - - -|- - - - - - -|- - - - - - -|- - - - - - -|- - - - - - -|- - - - - - -|- - - - - -
+   |             |             |             |            H|        ______________________
+   |             |             |             |             |       |   S T A T I O N   |  |
+   |             |             |             |             |       |______________________|
+   |             |             |             |             |       /======================\
+   |           * |             |             |             |      |    []|[]     [] [] |  |
+   |           | |             |             |             |      |______________________|
+====================================================================================================
+____________________________________________________________________________________________________
+   [  CAFE  ]   \[ BAKERY ]                                  [ BOOKS  ]
+  /vvvvvvvvvv\  /vvvvvvvvvv\            O    /    :    \    /vvvvvvvvvv\  O.------.        O
+  |[]  ..  []|  |()  ()  ()|   o  o     |   /           \   |||||  |||||  / NEWS   \       |
+____________o.-----. []  []|   |__|_ *. |   /   o :     \  o|[]  []  []|  |  [__]  |o      |
+[]o&lt;[][][][/|\[][][]\_|  __|   [||||]| )|  /= =/|\= = =o=\/|\__  ||  __|  |________/|\     |
+▄▄&#39;▄ o▄▄▄*|▄|▄▄▄▄▄▄▄▄|#| _  _/_[][][] \_|  /    |      /\\/ \    _    _   |_       / \    _|   _.
+--(O/|\---`-(O)---(O)-`  o #o▄o▄▄▄▄▄▄▄▄▄▄|*                        ===       ===           ===
+___o-o-===  ___   ___   \|//|/|\----(O)-&#39; ___   ___   ___   ___   _===  ___  ===_   ___   _===  ___/
+_.   _    _    _..      / \ | |    _    _    _    _    _    _    _    _    _    _    _    _    _   /</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, call an ambulance</strong>: it drives through the streets with its lights flashing and its siren.</li>
+<li><strong>Fire</strong> (<code>x</code>): a skyscraper catches fire, a fire engine races in, parks in front of it and sprays it with blue water. Most of the time the fire is beaten and the building is renovated under scaffolding; sometimes it wins, spreads to a few more buildings, which burn down and are rebuilt from the rubble after a minute and a half. While the engine is there the site is cordoned off and traffic and people wait.</li>
+<li><strong>Monster fight</strong> (<code>X</code>): a giant lizard and a winged monster fight with streams of fire, fire spreads from where they stand, everybody flees the streets, and dozens of buildings are left as ruins before the rebuilding starts.</li>
+</ul>
+<h2 id="moon">Moon</h2>
+<p><img src="img/Diorascii_Moon_Day.png" alt="The moon by lunar day" /></p>
+<p>No atmosphere: the sky is black with its stars all the time. By lunar day a large sun stands high over a lighter grey ground, by night the earth rises over a darker one. Rovers drive about, a flag stands by the lander, and the sound is only what you could feel through the ground.</p>
+<!-- dump: --scene moon --seed 2 --dump 200 --hour 22 --size 78x20 -->
+
+<pre class="text"><code>*        .        .          .---.
+      .                     /     \  .      *                  *
+                           /       \
+             *            |         |                                 .
+     *                     \       /
+            *               \     /
+                             `---&#39;             *                    .
+  .    *
+     *                                       .                      .     *
+                           .                    .
+              .-^-.                                                  .   .
+            ./_____\
+    .       |_|___|_|                           * |&gt;           *
+             /|   |\                 .          *.|             .      ___
+         .-./ | . | \.*   .  .-.           .-.    |   *            .-_/_|_\_
+        (___) `   &#39; &#39;&#39;      (___)        *(___)   |        *     *(_(x)---(x)
+ O          o `&#39;  &#39;           &#39;     .                   . &#39;    `  ,        .
+    &#39;        o   ..       ,   .                        O        o` O  .
+      .&#39;       . &#39;.  .  ,       o  ,            ,            &#39;    &#39;    `    oO
+              O         ,           ,o                 O,    &#39;oO      ,     o</code></pre>
+<!-- /dump -->
+
+<ul>
+<li><strong>Action <code>f</code>, meteor strike</strong>: a meteorite streaks down and hits the ground, wrecks what stands there and digs a crater; debris drifts back down slowly in the low gravity, and dust gradually fills the crater again.</li>
+<li><strong>Alien</strong> (<code>x</code>): an alien walks across the surface and destroys the flagpole and the rover as it passes them.</li>
+<li><strong>Big meteor</strong> (<code>X</code>): a speck in the sky grows bigger as it falls and hits with an impact that spans the entire width of the screen: a flash, a crater across the full width and a wave of dust and rock to both edges.</li>
+</ul>
+<h2 id="about-the-rare-events">About the rare events</h2>
+<p>A rare event turns up every few minutes (the first after two to five minutes). It announces itself by arriving: it crosses the scene, strikes halfway across and moves on. <code>x</code> picks like the timer does, so most of the time the first one; <code>X</code> always summons the second one, which on its own turns up one time in five. The dead do not stay dead: animals walk back in one by one over the next minute or so, the flagpole is planted again and the buildings are rebuilt. Sleeping animals die unseen.</p>
+<p>Seeing a catastrophe in the plain-text rendering, for example the avalanche, works like this:</p>
+<pre><code>diorascii --dump 400 --rare 60 --seed 7 --scene mountains --size 78x24</code></pre>
+<!-- dump: --dump 400 --rare 60 --seed 7 --scene mountains --size 78x24 -->
+
+<pre class="text"><code>                                    .--.           _.-._
+                                   /    \        _(     )
+                                  |      |      (        )        //,--\
+                                   \    /                      /-/&lt;o)--./\
+                                    &#39;--&#39;                 ^    *o//||\_||..\
+                                                        /   /*./_/\_\\/\/\_\/-
+                                                   ^     /\/../\*o//\/.,\_:-,&#39;
+          .^.\                                    /:\--_/.,\_/::\_//.--(o&gt;\.&#39;
+         .^^^.\^\                             /\ /   &#39;/______.^./___||/\||_::.
+           |.:/^\\                             /-,,  &#39; ..&#39;.o.^^^.o :/_.^.._\ .
+         //.,/^^^\\-------------^------------//\  &#39;&#39;,,/, .***.|::.::^.^^^..,:.
+&quot;v&quot;-._--/. &#39;/^^^^^\^^^&#39;&#39;.. \&#39; ^/^\&#39;\:,::^&#39;,:_/.,\_ ../&#39;&#39; :*..:.o:^^/^\ ||, .&quot;&#39;
+-&#39;\|/&#39;^^,^&#39;^&#39; ^|^ ^&#39;^&quot;^^,^ ,&quot;/^\^\\,  ^/^\&quot;/______\ /:,^.:......^&quot;/^^^\,^^&#39;^ .
+^(&lt;o)-----.&quot;^^ ^,&#39;&#39;^^\^\/^\&quot;/^^^\^\ ^&#39;/^^^\^^^^  &#39;&#39;&quot;,^^.o::.:*.o^^/^\ ^^&quot;&quot;^,(
+&quot;^&quot;^,|//^\|&quot;&quot;^&quot;^^&#39;/^\\\/^^^\^/^\^\^\&#39;,  ^,^/^\&quot;&#39;  &quot; ^ *o*::.*..&#39; /^^^\/^\&quot;&quot;&#39;(
+, ,&quot;/|/^|\\&#39;&quot;^^&#39;&quot;/^^^\\^^^^^/^^^\&#39;^ &#39;&quot;&quot;/^\/^^^\,&#39;^^^....*:*o.o&quot;^ .^.,/^^^\ ^^`
+^^&quot;^,/^^^^^\*^^, &quot;,|| &#39;&quot;&quot;.^.^&quot;|^&quot;,&quot;&quot;,^/^^^\ |  &quot;&#39;&#39;^.*..*o**o..&#39;^.--&quot;&quot;--.^^\^,^
+ ,^,,^^&quot;|&#39;&#39;&#39;|*^&quot;^,^ ,^\|/^^^)^^ &quot;&quot;^,^*^^|^,&quot;&quot;&quot;^ &#39;&#39;o*o*oo:::**^.(        )o&gt;, ,
+  _v_&quot; ,|, , | ,.-----(o&gt;       .,   |*&#39;  &#39; ,    o*.o**:*::.*(^^||,   || |  ,
+ &quot;  *   &quot;       |/*|\|  |            ,| .^.     o..::..**o.:  . \/  , \/ *&#39;
+ ,  |    .    &#39;  /| .|\  .   ,&quot;        (^^^) .  :.*ooo*::.:o  ,          |
+   &quot;, |.,  &#39;,    &quot;, | ,  &quot;.  .   &quot;   &quot;          *::.**:.*o:.o     ,   .      .
+~-  | |/|--   .   |~|/|   .-~~~~-    . ---      o:*:o.:.*..*:~--       ---
+    |/|-|       --|/| |  ~~~~-   .  ---       -~.o.:o*:.o*:***      ---      -</code></pre>
+<!-- /dump -->
+<div class="pager"><span><a href="usage.html">&larr; Using Diorascii</a></span><span><a href="faq.html">Troubleshooting &rarr;</a></span></div>
+      <footer>Diorascii 1.4.0 &middot; MIT licensed &middot; <a href="https://github.com/ChristianAhrens/Diorascii/tree/main/docs/manual">edit this page on GitHub</a></footer>
+    </article>
+  </main>
+</div>
+</body>
+</html>

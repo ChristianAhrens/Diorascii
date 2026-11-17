@@ -1,0 +1,28 @@
+<map id="src/audio/audio.h" name="src/audio/audio.h">
+<area shape="rect" id="Node000001" title="Plays the synthesized ambience on the default sound device." alt="" coords="193,5,326,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="95,81,171,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="235,36,170,75,166,71,239,32"/>
+<area shape="rect" id="Node000003" href="$ambience_8h.html" title="Procedurally synthesized ambient sound for a scene." alt="" coords="195,81,324,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="261,31,262,66,257,64,258,36"/>
+<area shape="rect" id="Node000010" href="$negotiate_8h.html" title="Choosing the layout to render to: what the user asked for, what the device reports,..." alt="" coords="478,157,606,184"/>
+<area shape="poly" id="edge13_Node000001_Node000010" title=" " alt="" coords="285,31,506,148,502,150,284,36"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="231,308,296,336"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="251,107,234,138,216,175,206,217,206,239,211,259,222,279,238,298,233,297,218,282,206,261,201,239,201,217,211,174,229,135,248,111"/>
+<area shape="rect" id="Node000005" href="$layout_8h.html" title="Speaker layouts: which channels an output has and where they stand around the listener." alt="" coords="336,232,442,260"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="266,107,285,143,312,183,334,203,358,224,353,223,330,207,308,186,281,146,264,112"/>
+<area shape="rect" id="Node000007" href="$rng_8h.html" title="Small deterministic random number generator." alt="" coords="220,232,307,260"/>
+<area shape="poly" id="edge7_Node000003_Node000007" title=" " alt="" coords="262,107,265,217,260,216,258,111"/>
+<area shape="rect" id="Node000008" href="$spatializer_8h.html" title="Places a mono sound in a speaker layout: panning gains, spread, bass send, smoothing." alt="" coords="323,157,455,184"/>
+<area shape="poly" id="edge9_Node000003_Node000008" title=" " alt="" coords="283,107,355,148,350,149,282,112"/>
+<area shape="rect" id="Node000009" href="$soundstage_8h.html" title="Where a sound comes from on the stage: emitters (continuous sources) and events (one&#45;offs)." alt="" coords="5,232,146,260"/>
+<area shape="poly" id="edge11_Node000003_Node000009" title=" " alt="" coords="234,111,166,159,130,191,99,223,95,219,126,187,163,155,238,107"/>
+<area shape="poly" id="edge5_Node000005_Node000004" title=" " alt="" coords="369,260,299,303,297,298,364,261"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="417,308,513,336"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="403,258,443,298,438,297,401,263"/>
+<area shape="poly" id="edge8_Node000007_Node000004" title=" " alt="" coords="265,259,266,294,261,291,262,262"/>
+<area shape="poly" id="edge10_Node000008_Node000005" title=" " alt="" coords="390,183,391,218,387,215,387,187"/>
+<area shape="poly" id="edge12_Node000009_Node000004" title=" " alt="" coords="110,258,218,301,214,304,109,263"/>
+<area shape="poly" id="edge14_Node000010_Node000004" title=" " alt="" coords="535,183,502,224,480,244,456,262,420,281,382,295,312,315,311,309,380,290,418,276,453,258,477,240,499,220,530,186"/>
+<area shape="poly" id="edge16_Node000010_Node000005" title=" " alt="" coords="517,184,431,228,429,223,512,186"/>
+<area shape="poly" id="edge15_Node000010_Node000006" title=" " alt="" coords="539,183,505,261,483,297,480,293,500,259,535,186"/>
+</map>

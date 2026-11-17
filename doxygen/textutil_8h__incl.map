@@ -1,0 +1,17 @@
+<map id="src/core/textutil.h" name="src/core/textutil.h">
+<area shape="rect" id="Node000001" title="Tiny text helpers shared by the file format parsers." alt="" coords="207,5,342,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,81,70,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="232,36,85,82,83,77,233,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="94,81,152,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="245,35,165,76,162,72,250,32"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="176,81,272,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="268,32,244,70,240,66,264,35"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="296,81,355,109"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="285,31,310,68,305,68,283,36"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="380,81,442,109"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="300,31,376,73,371,74,299,36"/>
+<area shape="rect" id="Node000007" href="$color_8h.html" title="RGB colors and simple color math." alt="" coords="467,81,563,109"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="318,31,460,75,455,77,317,36"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="482,157,548,184"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="517,107,517,143,513,139,513,111"/>
+</map>

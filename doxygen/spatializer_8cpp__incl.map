@@ -1,0 +1,15 @@
+<map id="src/core/spatializer.cpp" name="src/core/spatializer.cpp">
+<area shape="rect" id="Node000001" title="Panning law (stereo sine/cosine, DBAP for everything else), spread and bass send." alt="" coords="137,5,307,33"/>
+<area shape="rect" id="Node000002" href="$spatializer_8h.html" title="Places a mono sound in a speaker layout: panning gains, spread, bass send, smoothing." alt="" coords="24,81,156,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="197,36,128,75,125,71,200,32"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="180,81,264,109"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="223,31,225,66,219,64,221,36"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="288,81,350,109"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="240,31,293,71,288,72,239,36"/>
+<area shape="rect" id="Node000003" href="$layout_8h.html" title="Speaker layouts: which channels an output has and where they stand around the listener." alt="" coords="37,157,143,184"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="91,107,93,142,87,140,89,112"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="5,232,71,260"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="83,183,58,221,54,218,78,186"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="95,232,192,260"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="101,182,128,220,122,220,98,187"/>
+</map>

@@ -1,0 +1,19 @@
+<map id="src/core/sprite.h" name="src/core/sprite.h">
+<area shape="rect" id="Node000001" title="Sprites: art, color masks and header metadata." alt="" coords="249,5,374,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,81,56,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="253,36,71,83,70,78,254,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="80,81,157,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="275,35,168,78,166,73,279,32"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="181,81,240,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="296,32,242,74,239,69,291,35"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="264,81,360,109"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="313,31,314,67,310,64,310,36"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="384,81,443,109"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="331,31,386,72,380,72,329,36"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="467,81,530,109"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="346,31,456,75,451,76,345,36"/>
+<area shape="rect" id="Node000008" href="$color_8h.html" title="RGB colors and simple color math." alt="" coords="554,81,651,109"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="364,31,542,77,537,78,364,36"/>
+<area shape="rect" id="Node000009" title=" " alt="" coords="570,157,635,184"/>
+<area shape="poly" id="edge8_Node000008_Node000009" title=" " alt="" coords="604,107,605,143,600,139,601,111"/>
+</map>

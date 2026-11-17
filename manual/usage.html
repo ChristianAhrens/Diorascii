@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Diorascii user manual: installing and using the animated ASCII scenes for your terminal.">
+  <title>Using Diorascii - Diorascii Manual</title>
+  <style>
+    :root {
+      --bg:          #060b17;
+      --surface:     #101826;
+      --surface-2:   #18233a;
+      --border:      #2a3a57;
+      --text:        #e6edf3;
+      --text-muted:  #8a98ad;
+      --accent:      #4cc9f0;
+      --accent-dim:  #17415a;
+      --code-bg:     #0a1120;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f8fb; --surface: #ffffff; --surface-2: #e9eff6; --border: #c9d5e3;
+        --text: #14202e; --text-muted: #55657a; --accent: #0b6e99; --accent-dim: #d3e8f3; --code-bg: #eef3f8;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .layout { display: flex; min-height: 100vh; }
+    nav.side {
+      flex: 0 0 15rem; padding: 1.5rem 1rem; background: var(--surface);
+      border-right: 1px solid var(--border); position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto;
+    }
+    nav.side .brand { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); text-decoration: none; display: block; margin-bottom: 0.25rem; }
+    nav.side .sub { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.25rem; }
+    nav.side a.chapter { display: block; padding: 0.35rem 0.6rem; border-radius: 6px; color: var(--text); text-decoration: none; font-weight: 600; }
+    nav.side a.chapter:hover { background: var(--surface-2); }
+    nav.side a.chapter[aria-current="page"] { background: var(--accent-dim); color: var(--accent); }
+    nav.side .back { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
+    nav.side .back a { display: block; padding: 0.2rem 0.6rem; text-decoration: none; color: var(--text-muted); }
+    nav.side .back a:hover { color: var(--accent); }
+    main { flex: 1; min-width: 0; padding: 2rem 2rem 4rem; }
+    article { max-width: 54rem; margin: 0 auto; }
+    h1 { font-size: 2.2rem; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 1rem; }
+    h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+    h3 { margin-top: 1.75rem; }
+    img { max-width: 100%; height: auto; }
+    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+    code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.3; }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+    table { border-collapse: collapse; display: block; overflow-x: auto; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.4rem 0.7rem; vertical-align: top; text-align: left; }
+    th { background: var(--surface-2); }
+    blockquote { margin: 1rem 0; padding: 0.1rem 1rem; border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; }
+    .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    footer { margin-top: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+    @media (max-width: 760px) {
+      .layout { flex-direction: column; }
+      nav.side { position: static; height: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side"><a class="brand" href="index.html">Diorascii</a><div class="sub">User manual</div><a class="chapter" href="index.html">Overview</a><a class="chapter" href="install.html">Installation</a><a class="chapter" href="usage.html" aria-current="page">Using Diorascii</a><a class="chapter" href="scenes.html">The scenes</a><a class="chapter" href="faq.html">Troubleshooting</a><div class="back"><a href="../index.html">Project page</a><a href="https://github.com/ChristianAhrens/Diorascii/releases/latest">Latest release</a><a href="https://github.com/ChristianAhrens/Diorascii">GitHub repository</a><a href="../doxygen/index.html">API documentation</a></div></nav>
+  <main>
+    <article>
+<h1 id="using-diorascii">Using Diorascii</h1>
+<p>Start it with</p>
+<pre><code>diorascii</code></pre>
+<p>and the first scene appears. By default Diorascii runs in the <a href="#cycle-mode-and-user-mode">cycle mode</a>: it shows all scenes one after the other by itself. If you would rather choose the scene, the time of day and the events yourself, press <code>o</code> or start with <code>diorascii --user</code>. It runs until you press <code>q</code>. Resize the terminal at any time: the scene adapts to the new size. Everything below can also be set on the command line, so a favourite setup is one command.</p>
+<h2 id="keys">Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>m</code>, Enter or Esc</td>
+<td>open and close the <a href="#the-menu">menu</a></td>
+</tr>
+<tr>
+<td>Left / right arrow</td>
+<td>previous / next scene</td>
+</tr>
+<tr>
+<td><code>o</code></td>
+<td>switch between the <a href="#cycle-mode-and-user-mode">cycle mode and the user mode</a></td>
+</tr>
+<tr>
+<td><code>f</code></td>
+<td>the scene's <strong>action</strong>: feed the fish, make it rain, call an ambulance... (see <a href="scenes.html">The scenes</a>); user mode only</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>summon the scene's <strong>rare event</strong> right away, instead of waiting for it; user mode only</td>
+</tr>
+<tr>
+<td><code>X</code> (shift)</td>
+<td>summon the scene's <em>second</em>, less likely rare event; user mode only</td>
+</tr>
+<tr>
+<td><code>c</code></td>
+<td>change the <a href="#styles">style</a>: full, terminal, mono</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td>step through the <a href="#time-of-day">time of day</a>: cycle, dawn, day, dusk, night, real time; user mode only</td>
+</tr>
+<tr>
+<td><code>a</code></td>
+<td>sound: off, stereo, immersive, and round again (a message names the mode)</td>
+</tr>
+<tr>
+<td><code>i</code></td>
+<td>show or hide the info line on top: version, scene, size, number of entities, seed, frames per second and, in scenes with a day cycle, the time of day</td>
+</tr>
+<tr>
+<td><code>p</code></td>
+<td>pause</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>restart the scene with a new random landscape</td>
+</tr>
+<tr>
+<td><code>q</code></td>
+<td>quit</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cycle-mode-and-user-mode">Cycle mode and user mode</h2>
+<p>Diorascii has two overarching modes.</p>
+<p><strong>Cycle mode</strong> (the default) lets the program run by itself, like a screensaver. It goes through all the scenes in the order of the menu, and it only leaves a scene once that scene has shown</p>
+<ul>
+<li>one full day and night (on the moon: one lunar day),</li>
+<li>one <strong>rare event</strong>, which has to have come to an end (a late one is waited for, so a scene whose rare event is late stays on for more than a day until it has come), and</li>
+<li>one <strong>regular event</strong>, which is what <code>f</code> does by hand: it is triggered at random every 10 to 90 seconds.</li>
+</ul>
+<p>The time of day runs as a cycle in this mode. As soon as you choose something that the mode governs by hand (the time of day, the scene's action or a rare event, with <code>t</code>, <code>f</code>, <code>x</code>, <code>X</code> or the menu), the cycle mode ends, Diorascii switches to the user mode and does what you chose. You can still change the scene with the arrow keys, which starts that scene's round afresh. Switching from the user mode to the cycle mode sets the time of day to <em>Cycle</em>.</p>
+<p><strong>User mode</strong> (<code>--user</code>) is the way it worked before: you choose the scene, the time of day and the events yourself, and nothing happens that you did not ask for, apart from the life of the scene. Leaving the cycle mode with <code>o</code> or the <em>Mode</em> entry brings back the time of day you had chosen before.</p>
+<p>Press <code>o</code>, use <em>Mode</em> in the menu, or start with <code>--user</code> to change the mode.</p>
+<h2 id="the-menu">The menu</h2>
+<p><code>m</code>, Enter or Esc open a menu that is drawn right into the scene. Use the up and down arrows to move, left and right (or Enter) to change a value, and Esc to go back to the scene. It lists:</p>
+<ul>
+<li><strong>Scene</strong>, <strong>Mode</strong>, <strong>Style</strong>, <strong>Time of day</strong>, <strong>Sound</strong> and <strong>Info line</strong>: the same settings as the keys above</li>
+<li><strong>the scene's action</strong>, <strong>Rare event</strong> and <strong>Other rare event</strong>: the same as <code>f</code>, <code>x</code> and <code>X</code> (in the cycle mode they end it and switch to the user mode)</li>
+<li><strong>Resume</strong> and <strong>Quit</strong></li>
+</ul>
+<p>The version of Diorascii and its copyright are shown at the bottom. Everything the menu does can also be done with the keys; it exists so that nothing has to be remembered.</p>
+<h2 id="styles">Styles</h2>
+<table>
+<thead>
+<tr>
+<th>Style</th>
+<th>Look</th>
+<th>Use it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>full</code> (default)</td>
+<td>gradient backdrops and the scene's own colors</td>
+<td>you want the scenes at their best</td>
+</tr>
+<tr>
+<td><code>terminal</code></td>
+<td>no backdrop: your terminal's own background, sprites in the 16 named ANSI colors</td>
+<td>you want the scene to follow your terminal theme, or the terminal has no truecolor</td>
+</tr>
+<tr>
+<td><code>mono</code></td>
+<td>no color at all: only your terminal's foreground and background</td>
+<td>the terminal is monochrome, or you prefer it plain</td>
+</tr>
+</tbody>
+</table>
+<p>Switch with the <code>c</code> key, the menu, or <code>--style full|terminal|mono</code> at startup. On the Linux text console the default is <code>terminal</code>, because the console cannot show the backdrops.</p>
+<h2 id="time-of-day">Time of day</h2>
+<p>The aquarium, the forest, the desert and the mountains have a day and night cycle, and the moon has a lunar day with an earthrise. A full day takes four minutes. In the <a href="#cycle-mode-and-user-mode">user mode</a> press <code>t</code> (or use the menu) to choose (in the cycle mode the clock always runs):</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cycle</td>
+<td>the clock runs; day turns to dusk, night and dawn</td>
+</tr>
+<tr>
+<td>dawn, day, dusk, night</td>
+<td>the time of day is frozen there</td>
+</tr>
+<tr>
+<td>real time</td>
+<td>the scene follows the clock of your computer: when it is evening outside, it is evening in the scene</td>
+</tr>
+</tbody>
+</table>
+<p><code>--hour 22</code> starts at 22:00 and <code>--realtime</code> starts in real time. The choice carries over when you change scenes. At night most animals sleep, and some, like fireflies and the desert's bats, only come out then.</p>
+<h2 id="sound">Sound</h2>
+<p>Ambient sound is on by default. It is synthesized while the program runs (there are no recordings), and it follows what happens on screen: wind, water, traffic, the siren of an ambulance, the roar of a flood. Sounds come from where they happen: a siren moves with its vehicle, a lightning strike cracks where it struck, bubbles rise round you, and what is far off or off-screen comes from the sides.</p>
+<h3 id="off-stereo-immersive">Off, stereo, immersive</h3>
+<p>The menu's <strong>Sound</strong> entry has three settings, and the <code>a</code> key goes round them:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>off</strong></td>
+<td>no sound</td>
+</tr>
+<tr>
+<td><strong>stereo</strong></td>
+<td>a plain stereo pair on any output, whatever the output could do. On AirPods the system adds no 3D audio to it</td>
+</tr>
+<tr>
+<td><strong>immersive</strong> (the default)</td>
+<td>the sound is made for the speakers your output has. On a surround system it plays on all of them, with the height speakers if there are any (up to 9.1.6); on AirPods it is handed to the system as multichannel sound, so that the system's own 3D audio places it around you</td>
+</tr>
+</tbody>
+</table>
+<p>The small print at the bottom of the menu says what is really playing, so you do not have to guess:</p>
+<table>
+<thead>
+<tr>
+<th>It says</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Audio output: 7.1 on 8 channels</code></td>
+<td>the sound is made for the layout and played on the output's channels</td>
+</tr>
+<tr>
+<td><code>Audio output: 7.1.4 on 2 channels (mixed down)</code></td>
+<td>the output has fewer channels than the layout; the system or the sound library mixes it down</td>
+</tr>
+<tr>
+<td><code>Audio output: 7.1.4 on 2 channels (spatialized)</code></td>
+<td>the headphones' own spatializer makes the sound from the layout (AirPods)</td>
+</tr>
+<tr>
+<td><code>Audio output: 2.0 on 2 channels</code></td>
+<td>plain stereo</td>
+</tr>
+<tr>
+<td><code>Audio output: sound off</code></td>
+<td>no sound</td>
+</tr>
+</tbody>
+</table>
+<p><code>--mute</code> starts with the sound off. Without a sound device Diorascii simply stays silent; with <code>--audio</code> it tells you instead that the device is missing. <code>--audio-layout</code> names the layout of the immersive sound (see the <a href="#command-line">command line</a>); you normally never need it, because immersive finds the layout itself.</p>
+<h3 id="what-it-does-on-each-platform">What it does on each platform</h3>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Immersive</th>
+<th>Stereo</th>
+<th>Caveats</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>macOS</strong></td>
+<td>Plays through the system's AVSampleBufferAudioRenderer, which places each channel on the output channel of the same position. The layout you set for the device in <em>Audio MIDI Setup</em> (stereo, 5.1, 7.1.4...) is what is found, height speakers included; a layout the device has no speakers for steps down to the richest one it has (7.1.4 on a 5.1 device plays as 5.1). <strong>AirPods</strong> (and other Bluetooth headphones) get the system's <strong>3D audio</strong>: immersive sends them 7.1.4</td>
+<td>a stereo pair</td>
+<td>Spatial audio for AirPods is the system's own feature and is switched in the system (Control Center, <em>Sound</em>); while Diorascii plays immersive, the system's sound menu shows 3D audio as available and active. Sounds that an action starts (feeding the fish, a meteor...) play about a quarter of a second late. On a Bluetooth device that is <em>not</em> AirPods, immersive is treated the same way (not tried). Checked with AirPods Pro and a 16-channel virtual device, not yet by ear in a room</td>
+</tr>
+<tr>
+<td><strong>Apple TV (tvOS)</strong></td>
+<td>The same renderer. The audio route says how many channels it has, and whether it spatializes. On a receiver it plays on its layout, on AirPods the 3D audio. Swipe down on the Siri Remote goes round off, stereo, immersive</td>
+<td>a stereo pair</td>
+<td>Built from the source only (no release download). <strong>Not yet tried on a real Apple TV</strong>; the simulator has a stereo route</td>
+</tr>
+<tr>
+<td><strong>iOS</strong></td>
+<td>the sound code is ready for it, but there is no iPhone or iPad app</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Windows</strong></td>
+<td>the layout the system reports, through the bundled audio library: up to 7.1 (over HDMI, plain PCM is limited to eight channels, so 7.1.4 and 9.1.6 reach a receiver only through a multichannel interface or an Atmos-capable path)</td>
+<td>a stereo pair</td>
+<td>No system 3D audio for headphones. The surround layouts were never run on Windows</td>
+</tr>
+<tr>
+<td><strong>Linux</strong></td>
+<td>the layout the sound system (PulseAudio, PipeWire, ALSA) reports; choosing a layout above what a stereo device has is allowed and the sound server mixes it down</td>
+<td>a stereo pair</td>
+<td>Plain ALSA <code>default</code> is often stereo; select a surround device in the system's sound settings. No system 3D audio for headphones. Not tried on a surround system</td>
+</tr>
+</tbody>
+</table>
+<p>Everywhere the layout follows a change of output while Diorascii runs (headphones plugged in, another output chosen), where the system reports the change. How the surround layouts sound in a room has not been judged yet: they were checked by measuring what plays on every channel.</p>
+<h2 id="command-line">Command line</h2>
+<pre><code>diorascii [options]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--scene NAME</code></td>
+<td>start in this scene: <code>aquarium</code>, <code>forest</code>, <code>desert</code>, <code>mountains</code>, <code>city</code>, <code>moon</code> (<code>--list-scenes</code> prints them)</td>
+</tr>
+<tr>
+<td><code>--style NAME</code></td>
+<td><code>full</code> (default), <code>terminal</code> or <code>mono</code></td>
+</tr>
+<tr>
+<td><code>--user</code></td>
+<td>start in the user mode instead of the cycle mode (see <a href="#cycle-mode-and-user-mode">above</a>)</td>
+</tr>
+<tr>
+<td><code>--hour H</code></td>
+<td>start at this time of day, 0 to 24</td>
+</tr>
+<tr>
+<td><code>--realtime</code></td>
+<td>let the time of day follow this computer's clock</td>
+</tr>
+<tr>
+<td><code>--mute</code></td>
+<td>start with the sound off</td>
+</tr>
+<tr>
+<td><code>--audio</code></td>
+<td>report a missing sound device instead of staying silent</td>
+</tr>
+<tr>
+<td><code>--audio-layout L</code></td>
+<td>the layout of the immersive <a href="#sound">sound</a>, for a test: <code>auto</code> (the default), <code>2.0</code> (starts the sound as stereo), <code>5.1</code>, <code>7.1</code>, <code>5.1.2</code>, <code>5.1.4</code>, <code>7.1.2</code>, <code>7.1.4</code>, <code>9.1.4</code>, <code>9.1.6</code></td>
+</tr>
+<tr>
+<td><code>--fps N</code></td>
+<td>frame rate (default 20)</td>
+</tr>
+<tr>
+<td><code>--truecolor</code>, <code>--256</code></td>
+<td>force 24-bit or 256-color output when the detection guesses wrong</td>
+</tr>
+<tr>
+<td><code>--console</code></td>
+<td>force the Linux text console look (16 colors, dark backdrops)</td>
+</tr>
+<tr>
+<td><code>--seed N</code></td>
+<td>the same landscape and the same course of events every time</td>
+</tr>
+<tr>
+<td><code>--assets DIR</code></td>
+<td>add or replace sprites and scenes from a directory (see the README's <em>Extending</em> sections)</td>
+</tr>
+<tr>
+<td><code>--version</code>, <code>--help</code></td>
+<td>print the version, or the list of options</td>
+</tr>
+</tbody>
+</table>
+<p>Examples:</p>
+<pre><code>diorascii --user --scene city --hour 22          # the city at night
+diorascii --user --scene forest --style terminal # follow my terminal theme
+diorascii --user --realtime --mute               # a quiet window onto the current time of day</code></pre>
+<h2 id="looking-without-a-terminal">Looking without a terminal</h2>
+<p>For a quick look, for scripts, or to copy a scene into a text file or a chat, Diorascii can render a scene without a terminal and print it as plain text. <code>--dump N</code> runs the scene for N steps (20 steps are one second) and prints the last picture; <code>--size WxH</code> sets its size.</p>
+<pre><code>diorascii --dump 300 --seed 3 --scene aquarium --size 78x20</code></pre>
+<!-- dump: --dump 300 --seed 3 --scene aquarium --size 78x20 -->
+
+<pre class="text"><code>                                      /    \
+                                     |      |
+                                      \    /
+                                       &#39;--&#39;
+----~~~~--_______---~~---____--~~~~~~~--____---~~---______--~~~~~----_---~~~~~
+    ..     .  ..    .. ..         .         .  _.-._   ..  .               ..
+._,                                 &lt;=={o&gt;    (_____)
+.&#39;/                                            |/|\|
+&#39;               .---.
+             &gt;&lt;=(  o )&gt;
+                `---&#39;
+                         \                 &lt;o&gt;=          |&gt;             |\
+                          \     \                       _|_    _   _  &lt;o}==&gt;
+           )               )     (                     | _ |__| |_| |__| _\|
+       ,  -. , .-.   .     /  ,  ,  ,                  |_|_|  ___ ___  |_|_/
+      \|&lt;o|/`-&#39;   `-&#39;     )  \|/\|/ |/                 | _ |  |  |  |  | _)|
+       \|/(\|/            (   \|/)\|/                  |   |\/(o_o)\/__|  (|
+        | ) |             )    | ( |                   |___|  // \\    |__)|
+&#39;,`.:, ,`, ,:.:,&#39;. ::&#39;.`.&#39;&#39;:. `,` :.:,... ::. .,:``: &#39;, :&#39;. ,,,`: `&#39;`&#39;:`...:&#39;&#39;
+. .:&#39;.`.&#39;`...,..  .. . : ,&#39;::,:.:. :., ..:``,`:.,.&#39;,,.``.&#39;: .,&#39;  :.`.`,&#39;.  .&#39;`</code></pre>
+<!-- /dump -->
+
+<p><code>--act N</code>, <code>--rare N</code> and <code>--rare-other N</code> trigger the action, the rare event or the second one at step N of such a run, which is how the pictures in this manual were made:</p>
+<pre><code>diorascii --dump 120 --act 100 --seed 3 --scene aquarium --size 78x20</code></pre>
+<!-- dump: --dump 120 --act 100 --seed 3 --scene aquarium --size 78x20 -->
+
+<pre class="text"><code>                                /    \
+                               |      |
+                                \    /
+                                 &#39;--&#39; _.-._
+--____---~~~--_______--~~~~---__---~~(_____)_____---~---______--~~~~~~---_---~
+. .     .  .  .  .. .           ..    |\|/|.    .. ..         .         .
+                          &lt;=={o&gt;                     *      ++*+++
+
+
+                                                                   &lt;o&gt;=
+                                                 &lt;o}==&gt;
+--.                       \                              |&gt;             |&gt;/
+  )=&gt;&lt;                     (      /                     _|_    _   _   _|(
+--&#39;       \                /     (                     | _ |__| |_| |__| ) |
+       ,  ,( ,            (   ,  ,  ,                  |-._| .-._ _._  |_\_|
+      \|/\|/ |/           )  \|/\|/ |/                &lt;o _`-&#39; | `-&#39; |  | _)|
+_o)\/  \|/(\|/            (   \|/)\|/                  |   |__|  |  |__|  (|
+ //     | ) |             )    | ( |                   |___|     |     |__)|
+&#39;,`.:, ,`, ,:.:,&#39;. ::&#39;.`.&#39;&#39;:. `,` :.:,... ::. .,:``: &#39;, :&#39;. ,,,`: `&#39;`&#39;:`...:&#39;&#39;
+. .:&#39;.`.&#39;`...,..  .. . : ,&#39;::,:.:. :., ..:``,`:.,.&#39;,,.``.&#39;: .,&#39;  :.`.`,&#39;.  .&#39;`</code></pre>
+<!-- /dump -->
+
+<p>(The aquarium a second after the action at step 100: the flakes of fish food, drawn as <code>*</code> and <code>+</code>, are sinking from the surface.) <code>--gallery</code> prints every sprite the program knows.</p>
+<div class="pager"><span><a href="install.html">&larr; Installation</a></span><span><a href="scenes.html">The scenes &rarr;</a></span></div>
+      <footer>Diorascii 1.4.0 &middot; MIT licensed &middot; <a href="https://github.com/ChristianAhrens/Diorascii/tree/main/docs/manual">edit this page on GitHub</a></footer>
+    </article>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<map id="src/term/terminal.h" name="src/term/terminal.h">
+<area shape="rect" id="Node000001" title="Raw&#45;mode terminal session (input, size, output)." alt="" coords="190,5,337,33"/>
+<area shape="rect" id="Node000002" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="5,81,138,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="217,41,106,83,105,78,214,37"/>
+<area shape="rect" id="Node000003" href="$terminal__posix_8cpp.html" title="Terminal backend for macOS and Linux (termios, poll, signals)." alt="" coords="162,81,365,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="265,47,266,82,261,79,262,51"/>
+<area shape="rect" id="Node000004" href="$terminal__win_8cpp.html" title="Terminal backend for Windows (console virtual terminal mode)." alt="" coords="389,81,580,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="318,36,448,80,443,81,317,41"/>
+</map>

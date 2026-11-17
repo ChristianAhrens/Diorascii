@@ -1,0 +1,24 @@
+<map id="src/term/vt.cpp" name="src/term/vt.cpp">
+<area shape="rect" id="Node000001" title="VT/ANSI frame encoder and color quantization." alt="" coords="65,5,184,33"/>
+<area shape="rect" id="Node000002" href="$vt_8h.html" title="Encoding frames as VT/ANSI escape sequences." alt="" coords="5,81,87,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="109,36,73,72,69,69,112,31"/>
+<area shape="rect" id="Node000009" title=" " alt="" coords="162,81,226,109"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="137,31,174,69,169,70,137,36"/>
+<area shape="rect" id="Node000010" href="$utf8_8h.html" title="UTF&#45;8 encoding and decoding." alt="" coords="79,157,170,184"/>
+<area shape="poly" id="edge10_Node000001_Node000010" title=" " alt="" coords="126,31,127,141,122,140,123,36"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="13,232,71,260"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="47,107,45,217,40,216,44,111"/>
+<area shape="rect" id="Node000004" href="$frame_8h.html" title="Styled character cells and the frame buffer frontends render from." alt="" coords="194,157,298,184"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="82,107,198,149,194,153,82,112"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="209,187,87,232,85,227,210,182"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="95,232,192,260"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="230,183,175,225,172,221,225,186"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="216,232,278,260"/>
+<area shape="poly" id="edge6_Node000004_Node000006" title=" " alt="" coords="248,183,249,218,244,215,245,187"/>
+<area shape="rect" id="Node000007" href="$color_8h.html" title="RGB colors and simple color math." alt="" coords="303,232,400,260"/>
+<area shape="poly" id="edge7_Node000004_Node000007" title=" " alt="" coords="265,182,323,223,318,224,264,187"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="319,308,384,336"/>
+<area shape="poly" id="edge8_Node000007_Node000008" title=" " alt="" coords="353,259,353,294,349,291,349,262"/>
+<area shape="poly" id="edge11_Node000010_Node000003" title=" " alt="" coords="108,187,70,224,66,220,111,183"/>
+<area shape="poly" id="edge12_Node000010_Node000005" title=" " alt="" coords="129,182,139,217,134,217,127,187"/>
+</map>

@@ -1,0 +1,21 @@
+<map id="src/core/spatializer.h" name="src/core/spatializer.h">
+<area shape="rect" id="Node000001" title="Places a mono sound in a speaker layout: panning gains, spread, bass send, smoothing." alt="" coords="170,5,325,33"/>
+<area shape="rect" id="Node000002" href="$ambience_8cpp.html" title="Procedurally synthesized ambient sound." alt="" coords="5,157,173,184"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="210,43,161,83,126,122,100,158,95,155,122,119,158,79,214,40"/>
+<area shape="rect" id="Node000003" href="$ambience_8h.html" title="Procedurally synthesized ambient sound for a scene." alt="" coords="172,81,324,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="249,47,250,82,245,80,246,51"/>
+<area shape="rect" id="Node000009" href="$spatializer_8cpp.html" title="Panning law (stereo sine/cosine, DBAP for everything else), spread and bass send." alt="" coords="348,81,518,109"/>
+<area shape="poly" id="edge10_Node000001_Node000009" title=" " alt="" coords="295,36,403,80,398,81,295,42"/>
+<area shape="poly" id="edge9_Node000003_Node000002" title=" " alt="" coords="204,118,118,159,116,154,207,114"/>
+<area shape="rect" id="Node000004" href="$session_8h.html" title="The interactive application state shared by every frontend." alt="" coords="197,157,330,184"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="255,122,263,157,258,155,252,126"/>
+<area shape="rect" id="Node000007" href="$audio_8h.html" title="Plays the synthesized ambience on the default sound device." alt="" coords="355,157,487,184"/>
+<area shape="poly" id="edge6_Node000003_Node000007" title=" " alt="" coords="293,112,393,156,388,157,292,118"/>
+<area shape="rect" id="Node000005" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="276,232,408,260"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="290,193,331,232,326,231,288,198"/>
+<area shape="rect" id="Node000006" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="104,232,252,260"/>
+<area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="239,194,195,234,192,230,234,196"/>
+<area shape="poly" id="edge7_Node000007_Node000005" title=" " alt="" coords="398,194,358,234,355,230,393,196"/>
+<area shape="rect" id="Node000008" href="$audio_8cpp.html" title="Playback device wrapper around miniaudio." alt="" coords="433,232,580,260"/>
+<area shape="poly" id="edge8_Node000007_Node000008" title=" " alt="" coords="449,192,494,232,489,231,447,197"/>
+</map>

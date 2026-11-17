@@ -1,0 +1,34 @@
+<map id="src/core/scene.h" name="src/core/scene.h">
+<area shape="rect" id="Node000001" title="Scene definitions: the data that describes a whole world." alt="" coords="370,5,496,33"/>
+<area shape="rect" id="Node000002" href="$assets_8h.html" title="Loading and looking up sprites and scenes." alt="" coords="237,81,367,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="394,42,327,83,324,78,398,39"/>
+<area shape="rect" id="Node000007" href="$world_8h.html" title="The simulation: entities, behaviors, layout and rendering." alt="" coords="399,157,523,184"/>
+<area shape="poly" id="edge19_Node000001_Node000007" title=" " alt="" coords="440,46,461,157,456,155,436,50"/>
+<area shape="rect" id="Node000013" href="$scene_8cpp.html" title="Scene file parsing." alt="" coords="470,81,612,109"/>
+<area shape="poly" id="edge18_Node000001_Node000013" title=" " alt="" coords="465,39,524,80,519,81,464,45"/>
+<area shape="rect" id="Node000003" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="177,308,310,336"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="250,117,215,136,176,162,141,194,115,233,112,246,114,257,130,277,157,293,191,307,185,308,155,298,126,281,109,259,107,246,110,231,137,191,173,157,213,132,254,113"/>
+<area shape="rect" id="Node000004" href="$session_8h.html" title="The interactive application state shared by every frontend." alt="" coords="125,232,258,260"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="260,118,239,136,219,158,209,177,202,197,195,233,190,230,197,195,204,174,215,155,236,132,264,115"/>
+<area shape="rect" id="Node000006" href="$assets_8cpp.html" title="Asset pack loading and validation." alt="" coords="230,157,375,184"/>
+<area shape="poly" id="edge6_Node000002_Node000006" title=" " alt="" coords="304,122,305,157,300,155,301,127"/>
+<area shape="poly" id="edge7_Node000002_Node000007" title=" " alt="" coords="345,113,435,156,430,157,344,118"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="211,270,237,308,232,307,208,275"/>
+<area shape="rect" id="Node000005" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="5,308,154,336"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="162,268,101,310,98,305,156,269"/>
+<area shape="poly" id="edge8_Node000007_Node000003" title=" " alt="" coords="406,189,363,210,322,234,282,273,254,310,251,305,278,269,319,230,360,206,401,191"/>
+<area shape="poly" id="edge9_Node000007_Node000004" title=" " alt="" coords="396,190,240,234,239,229,401,188"/>
+<area shape="rect" id="Node000008" href="$ambience_8cpp.html" title="Procedurally synthesized ambient sound." alt="" coords="333,232,500,260"/>
+<area shape="poly" id="edge10_Node000007_Node000008" title=" " alt="" coords="447,196,426,234,423,230,443,199"/>
+<area shape="rect" id="Node000009" href="$city_8cpp.html" title="The city scene: skyline of skyscrapers, elevated railway, street and street lamps." alt="" coords="606,308,732,336"/>
+<area shape="poly" id="edge11_Node000007_Node000009" title=" " alt="" coords="538,176,594,184,650,195,698,210,716,220,728,231,734,241,735,253,726,274,709,294,689,310,687,305,705,290,721,271,729,252,729,243,724,234,713,224,696,215,649,200,593,189,538,182"/>
+<area shape="rect" id="Node000010" href="$disasters_8cpp.html" title="The second catastrophes of the scenes: the leaking submarine&#39;s poison cloud (aquarium),..." alt="" coords="756,308,918,336"/>
+<area shape="poly" id="edge12_Node000007_Node000010" title=" " alt="" coords="539,174,588,180,642,191,697,207,749,230,774,247,797,268,830,308,825,306,793,271,771,251,746,235,695,212,641,196,587,185,539,179"/>
+<area shape="rect" id="Node000011" href="$shading_8h.html" title="How the light of the time of day and the weather changes colors, shared by the renderers of the world..." alt="" coords="575,232,714,260"/>
+<area shape="poly" id="edge13_Node000007_Node000011" title=" " alt="" coords="508,188,615,232,610,232,508,193"/>
+<area shape="rect" id="Node000012" href="$world_8cpp.html" title="Simulation, behaviors and scene rendering." alt="" coords="443,308,582,336"/>
+<area shape="poly" id="edge17_Node000007_Node000012" title=" " alt="" coords="488,192,504,211,515,231,520,252,522,273,518,309,514,306,516,273,515,253,510,233,500,214,487,197"/>
+<area shape="poly" id="edge14_Node000011_Node000009" title=" " alt="" coords="655,273,667,309,662,306,652,277"/>
+<area shape="poly" id="edge15_Node000011_Node000010" title=" " alt="" coords="694,263,805,308,800,307,693,268"/>
+<area shape="poly" id="edge16_Node000011_Node000012" title=" " alt="" coords="610,267,537,310,535,305,605,269"/>
+</map>

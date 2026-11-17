@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Diorascii user manual: installing and using the animated ASCII scenes for your terminal.">
+  <title>Overview - Diorascii Manual</title>
+  <style>
+    :root {
+      --bg:          #060b17;
+      --surface:     #101826;
+      --surface-2:   #18233a;
+      --border:      #2a3a57;
+      --text:        #e6edf3;
+      --text-muted:  #8a98ad;
+      --accent:      #4cc9f0;
+      --accent-dim:  #17415a;
+      --code-bg:     #0a1120;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f8fb; --surface: #ffffff; --surface-2: #e9eff6; --border: #c9d5e3;
+        --text: #14202e; --text-muted: #55657a; --accent: #0b6e99; --accent-dim: #d3e8f3; --code-bg: #eef3f8;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .layout { display: flex; min-height: 100vh; }
+    nav.side {
+      flex: 0 0 15rem; padding: 1.5rem 1rem; background: var(--surface);
+      border-right: 1px solid var(--border); position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto;
+    }
+    nav.side .brand { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); text-decoration: none; display: block; margin-bottom: 0.25rem; }
+    nav.side .sub { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.25rem; }
+    nav.side a.chapter { display: block; padding: 0.35rem 0.6rem; border-radius: 6px; color: var(--text); text-decoration: none; font-weight: 600; }
+    nav.side a.chapter:hover { background: var(--surface-2); }
+    nav.side a.chapter[aria-current="page"] { background: var(--accent-dim); color: var(--accent); }
+    nav.side .back { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
+    nav.side .back a { display: block; padding: 0.2rem 0.6rem; text-decoration: none; color: var(--text-muted); }
+    nav.side .back a:hover { color: var(--accent); }
+    main { flex: 1; min-width: 0; padding: 2rem 2rem 4rem; }
+    article { max-width: 54rem; margin: 0 auto; }
+    h1 { font-size: 2.2rem; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 1rem; }
+    h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+    h3 { margin-top: 1.75rem; }
+    img { max-width: 100%; height: auto; }
+    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+    code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.3; }
+    pre code { background: none; padding: 0; font-size: 0.85rem; }
+    table { border-collapse: collapse; display: block; overflow-x: auto; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.4rem 0.7rem; vertical-align: top; text-align: left; }
+    th { background: var(--surface-2); }
+    blockquote { margin: 1rem 0; padding: 0.1rem 1rem; border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; }
+    .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    footer { margin-top: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+    @media (max-width: 760px) {
+      .layout { flex-direction: column; }
+      nav.side { position: static; height: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side"><a class="brand" href="index.html">Diorascii</a><div class="sub">User manual</div><a class="chapter" href="index.html" aria-current="page">Overview</a><a class="chapter" href="install.html">Installation</a><a class="chapter" href="usage.html">Using Diorascii</a><a class="chapter" href="scenes.html">The scenes</a><a class="chapter" href="faq.html">Troubleshooting</a><div class="back"><a href="../index.html">Project page</a><a href="https://github.com/ChristianAhrens/Diorascii/releases/latest">Latest release</a><a href="https://github.com/ChristianAhrens/Diorascii">GitHub repository</a><a href="../doxygen/index.html">API documentation</a></div></nav>
+  <main>
+    <article>
+<h1 id="diorascii-user-manual">Diorascii user manual</h1>
+<p>Diorascii fills your terminal with a living, animated ASCII-art scene: fish drifting through an aquarium, rain falling on a forest, a sandworm crossing the desert, traffic and trains in a city, rovers on the moon. It is one small program with nothing else to install, it runs on macOS, Windows and Linux (x64 and arm64), and it is made to be left running in a corner of your screen, or to be played with: you can feed the fish, make it rain, call an ambulance, and now and then something terrible happens to everybody.</p>
+<h2 id="install-it">Install it</h2>
+<p>Every release has an installer for each platform, and nothing else needs to be installed:</p>
+<table>
+<thead>
+<tr>
+<th>You use</th>
+<th>Do this</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>macOS</strong></td>
+<td>download the <code>.pkg</code> of the <a href="https://github.com/ChristianAhrens/Diorascii/releases/latest">latest release</a> and open it</td>
+</tr>
+<tr>
+<td><strong>Windows</strong></td>
+<td>download the <code>-Windows-Setup.exe</code> (or the portable <code>.zip</code>) and run it</td>
+</tr>
+<tr>
+<td><strong>Debian, Ubuntu, Raspberry Pi OS</strong></td>
+<td><code>sudo apt install ./Diorascii-1.4.0-Linux-x64.deb</code> (or <code>-arm64.deb</code>)</td>
+</tr>
+<tr>
+<td><strong>Fedora, openSUSE</strong></td>
+<td><code>sudo dnf install ./Diorascii-1.4.0-Linux-x64.rpm</code> (or <code>zypper install</code>)</td>
+</tr>
+<tr>
+<td><strong>Any other Linux</strong></td>
+<td>unpack the <code>.tar.gz</code> and run <code>bin/diorascii</code></td>
+</tr>
+</tbody>
+</table>
+<p>Then open a <em>new</em> terminal and run <code>diorascii</code>; <code>q</code> quits. All the downloads, with direct links, upgrading, uninstalling and the terminal to use are on the <a href="install.html">Installation page</a>. <strong>Apple TV</strong> (tvOS) is built from the source, see <a href="install.html#apple-tv-tvos-and-ios">Installation</a>.</p>
+<p><img src="img/Diorascii_Sea_Day.png" alt="The aquarium by day" /></p>
+<h2 id="what-you-get">What you get</h2>
+<ul>
+<li><strong>Six scenes</strong>: an aquarium, a forest with a river, a desert with an oasis, a mountain range from the meadow up to the snow, a city and the surface of the moon. Each is full of animals or vehicles that live their own lives.</li>
+<li><strong>A day and night cycle</strong>: sun, moon and stars cross the sky, the colors turn, most animals go to sleep, and you can pin the time of day or let it follow your computer's clock.</li>
+<li><strong>A mode that runs itself</strong>: by default Diorascii goes through all the scenes by itself, each for one full day and night with a rare event and regular events along the way, so it can be left running as a screensaver; the <em>user mode</em> (<code>--user</code>, or the <code>o</code> key) gives you the control instead.</li>
+<li><strong>Things to do</strong>: every scene has an <em>action</em> (feed the fish, make it rain, call an ambulance, strike the moon with a meteor...) and two rare <em>catastrophes</em> (a kraken, a flood, a yeti, monsters fighting in the city...).</li>
+<li><strong>Sound, stereo or immersive</strong>: ambient sound for every scene, synthesized while it runs, which follows what happens on screen. <em>Immersive</em> (the default) plays on all the speakers of a surround system, up to 9.1.6 with height speakers, and gives AirPods their 3D audio on macOS and Apple TV; <em>stereo</em> is a plain pair. See <a href="usage.html#sound">Sound</a>.</li>
+<li><strong>Your look</strong>: truecolor with an automatic 256-color fallback, or a style that follows your own terminal colors, or no color at all.</li>
+<li><strong>No dependencies, no network, no settings files</strong>: it does not read or write anything of yours.</li>
+</ul>
+<h2 id="a-first-look">A first look</h2>
+<p>Every scene, by day and by night (on the moon: by lunar day and by earthrise):</p>
+<table>
+  <tr><th></th><th>Day</th><th>Night</th></tr>
+  <tr>
+    <th>Aquarium</th>
+    <td align="center"><img src="img/Diorascii_Sea_Day.png" alt="Aquarium by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_Sea_Night.png" alt="Aquarium by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Forest</th>
+    <td align="center"><img src="img/Diorascii_Forest_Day.png" alt="Forest by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_Forest_Night.png" alt="Forest by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Desert</th>
+    <td align="center"><img src="img/Diorascii_Desert_Day.png" alt="Desert by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_Desert_Night.png" alt="Desert by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Mountains</th>
+    <td align="center"><img src="img/Diorascii_Mountains_Day.png" alt="Mountains by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_Mountains_Night.png" alt="Mountains by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>City</th>
+    <td align="center"><img src="img/Diorascii_City_Day.png" alt="City by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_City_Night.png" alt="City by night" width="400"></td>
+  </tr>
+  <tr>
+    <th>Moon</th>
+    <td align="center"><img src="img/Diorascii_Moon_Day.png" alt="The moon by day" width="400"></td>
+    <td align="center"><img src="img/Diorascii_Moon_Night.png" alt="The moon by night" width="400"></td>
+  </tr>
+</table>
+
+<h2 id="where-to-go-from-here">Where to go from here</h2>
+<ol type="1">
+<li><a href="install.html">Installation</a>: get Diorascii onto macOS, Windows or Linux (and Apple TV), with direct download links.</li>
+<li><a href="usage.html">Using Diorascii</a>: start it, the keys, the menu, styles, time of day, sound (stereo and immersive, per platform) and the command line.</li>
+<li><a href="scenes.html">The scenes</a>: what lives in each scene, what its action does, and what the catastrophes are.</li>
+<li><a href="faq.html">Troubleshooting</a>: wrong colors, no sound, garbled characters, and other questions.</li>
+</ol>
+<p>Diorascii is free software under the MIT license. The source code is on <a href="https://github.com/ChristianAhrens/Diorascii">GitHub</a>; bug reports and ideas are welcome there as issues.</p>
+<div class="pager"><span></span><span><a href="install.html">Installation &rarr;</a></span></div>
+      <footer>Diorascii 1.4.0 &middot; MIT licensed &middot; <a href="https://github.com/ChristianAhrens/Diorascii/tree/main/docs/manual">edit this page on GitHub</a></footer>
+    </article>
+  </main>
+</div>
+</body>
+</html>

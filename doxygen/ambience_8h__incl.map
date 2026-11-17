@@ -1,0 +1,19 @@
+<map id="src/core/ambience.h" name="src/core/ambience.h">
+<area shape="rect" id="Node000001" title="Procedurally synthesized ambient sound for a scene." alt="" coords="118,5,270,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="224,232,289,260"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="270,21,303,28,334,39,363,56,387,79,396,100,396,122,388,143,374,162,336,198,295,227,293,222,333,194,370,159,384,140,391,121,391,102,382,83,360,60,332,44,301,33,271,27"/>
+<area shape="rect" id="Node000003" href="$layout_8h.html" title="Speaker layouts: which channels an output has and where they stand around the listener." alt="" coords="37,157,143,184"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="115,27,89,35,60,46,34,61,14,82,9,99,16,116,32,132,53,147,48,150,28,136,12,119,3,100,9,80,31,57,58,41,87,30,119,24"/>
+<area shape="rect" id="Node000005" href="$rng_8h.html" title="Small deterministic random number generator." alt="" coords="172,157,258,184"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="197,31,214,142,209,141,194,35"/>
+<area shape="rect" id="Node000006" href="$spatializer_8h.html" title="Places a mono sound in a speaker layout: panning gains, spread, bass send, smoothing." alt="" coords="24,81,156,109"/>
+<area shape="poly" id="edge7_Node000001_Node000006" title=" " alt="" coords="174,36,122,74,119,70,177,31"/>
+<area shape="rect" id="Node000007" href="$soundstage_8h.html" title="Where a sound comes from on the stage: emitters (continuous sources) and events (one&#45;offs)." alt="" coords="232,81,372,109"/>
+<area shape="poly" id="edge9_Node000001_Node000007" title=" " alt="" coords="213,31,273,71,268,73,213,36"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="120,182,215,224,211,227,119,187"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="42,232,138,260"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="92,183,92,218,87,216,88,187"/>
+<area shape="poly" id="edge6_Node000005_Node000002" title=" " alt="" coords="224,183,244,219,239,218,221,187"/>
+<area shape="poly" id="edge8_Node000006_Node000003" title=" " alt="" coords="91,107,93,142,87,140,89,112"/>
+<area shape="poly" id="edge10_Node000007_Node000002" title=" " alt="" coords="300,108,267,219,263,216,296,110"/>
+</map>

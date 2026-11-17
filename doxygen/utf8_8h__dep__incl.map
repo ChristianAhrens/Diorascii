@@ -1,0 +1,19 @@
+<map id="src/core/utf8.h" name="src/core/utf8.h">
+<area shape="rect" id="Node000001" title="UTF&#45;8 encoding and decoding." alt="" coords="596,5,710,33"/>
+<area shape="rect" id="Node000002" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="5,81,138,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="578,29,386,53,149,84,139,85,138,80,148,78,385,48,583,28"/>
+<area shape="rect" id="Node000003" href="$session_8cpp.html" title="The interactive application state shared by every frontend." alt="" coords="161,81,310,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="583,34,311,83,310,78,578,33"/>
+<area shape="rect" id="Node000004" href="$frame_8cpp.html" title="Frame buffer and text drawing helpers." alt="" coords="334,81,476,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="597,37,450,83,449,78,591,38"/>
+<area shape="rect" id="Node000005" href="$menu_8cpp.html" title="Menu navigation and rendering." alt="" coords="500,81,640,109"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="629,43,586,83,584,78,624,44"/>
+<area shape="rect" id="Node000006" href="$scene_8cpp.html" title="Scene file parsing." alt="" coords="665,81,806,109"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="680,41,723,81,718,80,678,46"/>
+<area shape="rect" id="Node000007" href="$sprite_8cpp.html" title="Sprite file parsing and mirroring." alt="" coords="831,81,971,109"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="712,35,859,81,854,80,711,40"/>
+<area shape="rect" id="Node000008" href="$utf8_8cpp.html" title="UTF&#45;8 encoding and decoding." alt="" coords="995,81,1124,109"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="725,31,997,82,992,82,725,36"/>
+<area shape="rect" id="Node000009" href="$vt_8cpp.html" title="VT/ANSI frame encoder and color quantization." alt="" coords="1148,81,1267,109"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="726,26,912,48,1137,78,1150,83,1145,82,1136,84,912,53,725,31"/>
+</map>

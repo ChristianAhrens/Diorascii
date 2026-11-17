@@ -1,0 +1,7 @@
+<map id="src/audio/audio.h" name="src/audio/audio.h">
+<area shape="rect" id="Node000001" title="Plays the synthesized ambience on the default sound device." alt="" coords="87,5,219,33"/>
+<area shape="rect" id="Node000002" href="$main_8cpp.html" title="Command line and the terminal main loop around a Session." alt="" coords="5,81,138,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="130,43,88,83,84,78,125,44"/>
+<area shape="rect" id="Node000003" href="$audio_8cpp.html" title="Playback device wrapper around miniaudio." alt="" coords="162,81,309,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="180,41,224,81,218,80,178,46"/>
+</map>

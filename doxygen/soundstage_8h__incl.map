@@ -1,0 +1,5 @@
+<map id="src/core/soundstage.h" name="src/core/soundstage.h">
+<area shape="rect" id="Node000001" title="Where a sound comes from on the stage: emitters (continuous sources) and events (one&#45;offs)." alt="" coords="5,5,169,33"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="54,81,120,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="89,32,90,66,84,64,85,36"/>
+</map>
